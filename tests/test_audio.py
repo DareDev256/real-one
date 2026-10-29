@@ -78,3 +78,14 @@ def test_pick_section_refuses_what_is_not_there(timeline):
         audio.pick_section(timeline, "hook:3")
     with pytest.raises(Refuse):
         audio.pick_section(timeline, "bars:30-99")
+
+
+def test_short_fragments_fold_into_the_neighbour_they_sound_like():
+    """A 2-bar fill between two 8-bar sections joins the one it resembles; nothing under 4 bars survives."""
+    F = np.r_[np.zeros((8, 3)), np.full((2, 3), 0.9), np.ones((8, 3))]
+    segs = audio._absorb_short(F, [[0, 8, 0], [8, 10, 1], [10, 18, 2]])
+    assert segs == [[0, 8, 0], [8, 18, 2]]
+    assert all(e - a >= audio.MIN_SECTION_BARS for a, e, _ in segs)
+    # a song shorter than the minimum keeps its one section
+    tiny = audio._absorb_short(F[:3], [[0, 1, 0], [1, 3, 1]])
+    assert len(tiny) == 1 and tiny[0][:2] == [0, 3]

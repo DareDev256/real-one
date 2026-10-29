@@ -4,6 +4,10 @@
 - `scripts/first_keyed_run.sh`: the first keyed runs in two capped stages, `probe` (synthetic take, US$0.50) and
   `real CLIP SONG` (US$1). Reads the key from `~/.secrets/meta-model-api` without printing it; refuses the gym
   clip by real path, symlinks included (guard mutation-checked).
+- Sections under 4 bars fold into the neighbour they sound most like (`MIN_SECTION_BARS`). On three real songs
+  (analysed locally, nothing sent anywhere): 14 -> 12, 12 -> 10 and 17 -> 15 sections, none under 4 bars, the hook
+  label unchanged on each; the synthetic test song is unchanged. Labels that never repeat remain (not tuned: no
+  ground truth yet).
 - `pytest.ini`: a bare `pytest` at the root collects `tests/` only (two files shared a basename).
 
 ## 0.2.0 (2026-10-29): the engine

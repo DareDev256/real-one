@@ -210,6 +210,26 @@ def _refine(F, segs):
     return segs
 
 
+MIN_SECTION_BARS = 4  # a section shorter than this is one or two shots; its world would flicker past
+
+
+def _absorb_short(F, segs, min_bars=MIN_SECTION_BARS):
+    """Fold every section under min_bars into the neighbour it sounds most like, shortest first, until none is left
+    or one section remains. Real songs came out with 2 and 3 bar fragments (a pickup, a fill read as a change)."""
+    segs = [list(s) for s in segs]
+    while len(segs) > 1:
+        i = min(range(len(segs)), key=lambda k: (segs[k][1] - segs[k][0], k))
+        a, e, _ = segs[i]
+        if e - a >= min_bars:
+            break
+        m = F[a:e].mean(0)
+        j = min((j for j in (i - 1, i + 1) if 0 <= j < len(segs)),
+                key=lambda j: np.linalg.norm(F[segs[j][0]:segs[j][1]].mean(0) - m))
+        segs[i][2] = segs[j][2]
+        segs = _merge(segs)
+    return segs
+
+
 def segment(y, downbeats, end_s):
     """-> (list of section dicts, novelty). Bars are indices into `downbeats`."""
     F, energy = bar_features(y, downbeats, end_s)
@@ -217,7 +237,7 @@ def segment(y, downbeats, end_s):
     b = candidate_bounds(nov)
     labs = label_segments(F, b)
     segs = _merge([[a, e, lab] for (a, e), lab in zip(zip(b[:-1], b[1:]), labs)])
-    segs = _merge(_refine(F, segs))
+    segs = _absorb_short(F, _merge(_refine(F, segs)))
     count = {}
     for _, _, lab in segs:
         count[lab] = count.get(lab, 0) + 1
