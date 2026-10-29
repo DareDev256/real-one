@@ -58,10 +58,14 @@ def verify_output(path, want_s):
 
 def detect_cuts(path, min_ratio=6.0):
     """Find hard cuts in the rendered video itself: frames whose difference from the previous frame stands far
-    above the clip's typical frame-to-frame change. Returns frame indices (the first frame of each new shot)."""
+    above the clip's typical frame-to-frame change. Returns frame indices (the first frame of each new shot).
+    Each 135x240 thumbnail is median-filtered (5 px) first: that removes particle streaks and dots, which change
+    every frame and, once the Hook Freeze v2 rain landed, raised the baseline until a real world swap measured 5.7x
+    (refused); a cut changes whole regions and survives the filter (measured: cuts 9.2x+, other frames 3x or less)."""
+    import cv2
     prev, diffs = None, []
     for fr in read_frames(path, size=(135, 240)):
-        f = fr.astype(np.float32)
+        f = cv2.medianBlur(fr, 5).astype(np.float32)
         diffs.append(0.0 if prev is None else float(np.abs(f - prev).mean()))
         prev = f
     d = np.array(diffs)

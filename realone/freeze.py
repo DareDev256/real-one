@@ -9,6 +9,7 @@ Everything the world draws is a pure function of the world clock, so the freeze 
 the world layer (plate + particles) is hashed every frame, and `checks()` fails the render when the hashes say
 the world moved inside a freeze, stood still outside one, or jumped on the release.
 """
+import cv2
 import numpy as np
 
 from realone.audio import pick_section
@@ -163,6 +164,174 @@ def checks(keys, plate_steps, wf, freezes, shot_of, artist_moved, control_moved)
         r["artist_moves"] = bool(artist_moved[k])
         r["control_world_would_move"] = bool(control_moved[k])
         r["ok"] = bool(r["frozen_identical"] and r["artist_moves"] and r["control_world_would_move"]
+                       and r["moves_before"] is not False and r["resumes"] is not False
+                       and r["no_jump"] is not False)
+        ok &= r["ok"]
+        rep["freezes"].append(r)
+    rep["ok"] = bool(ok)
+    return rep, bool(ok)
+
+
+# --------------------------------------------------------------------------- Hook Freeze v2: `bullet`
+#
+# `still` (0.2.0) stops everything in the world, the camera included: on a phone that reads as a still photo behind
+# a moving person (green screen), because nothing in the frame proves that time stopped. `bullet` keeps the camera
+# moving through the freeze: the particles hang mid-air on three depth layers and slide past each other at
+# different rates (near most, the plate least) while the artist keeps performing. The freeze lands with a hit
+# (a 3-frame punch-in and white flash, the world grading cool and desaturated) and releases on the next downbeat
+# (colour snaps back, the particles fall again with a short streak burst, the camera carries on).
+# Everything stays a pure function of the world clock and the frame index, so units render in parallel.
+
+STYLES = ("bullet", "still")
+CAM_TRAVEL = 0.035   # the plate slides this share of the frame width over a freeze (near particles 9x that)
+PUNCH = (1.04, 1.022, 1.008)      # scale on the freeze downbeat and the 2 frames after, then 1.0
+FLASH = (0.30, 0.15, 0.05)        # white flash, decays in 3 frames
+GRADE_IN = (0.45, 0.8)            # the world's cool/desaturated grade ramps in over 3 frames (then 1.0)
+BURST = (1.8, 1.4, 1.15)          # streak length (clock rate the motion blur is drawn at) for 3 frames after release
+
+
+def bullet_camera(n, plan, freezes, shot_of, drift_px=16.0):
+    """-> (dx px, zoom) per frame. Each shot that holds a freeze gets a constant-speed sideways truck on the REAL
+    frame clock (it never stops, so the release cannot jump), centred on the shot so the slide is +-half its travel,
+    and a constant zoom margin so neither the slide nor the world drift ever shows the plate's edge. Other shots: 0, 1."""
+    dx, zoom = np.zeros(n), np.ones(n)
+    for f in freezes:
+        sh = plan["shots"][shot_of[f["start_frame"]]]
+        s0, s1 = sh["start_frame"], sh["end_frame"]
+        v = CAM_TRAVEL * 1080 / max(1, f["end_frame"] - f["start_frame"])
+        mid = (s0 + s1 - 1) / 2
+        dx[s0:s1] = v * (np.arange(s0, s1) - mid)
+        zoom[s0:s1] = 1 + 2 * (np.abs(dx[s0:s1]).max() + drift_px + 4) / 1080
+    return dx, zoom
+
+
+def clock_rate(n, freezes, shot_of):
+    """-> per frame, the rate the world clock runs at for the motion blur: 0 on every frozen frame (crisp, hanging),
+    a short burst just after the release (longer streaks: the world lurches back into motion), 1 elsewhere."""
+    vel = np.ones(n)
+    for f in freezes:
+        f0, f1 = f["start_frame"], f["end_frame"]
+        vel[f0:f1] = 0.0
+        for j, b in enumerate(BURST):
+            i = f1 + j
+            if i < n and shot_of[i] == shot_of[f1 - 1]:
+                vel[i] = b
+    return vel
+
+
+def hit_profile(n, freezes):
+    """-> (grade 0..1, punch scale, flash 0..1) per frame. The punch and flash land on the freeze downbeat and
+    decay over 3 frames; the grade ramps in over 3 frames, holds, and snaps off on the release downbeat."""
+    grade, punch, flash = np.zeros(n), np.ones(n), np.zeros(n)
+    for f in freezes:
+        f0, f1 = f["start_frame"], f["end_frame"]
+        grade[f0:f1] = 1.0
+        for j, g in enumerate(GRADE_IN):
+            if f0 + j < f1:
+                grade[f0 + j] = g
+        for j, (p, w) in enumerate(zip(PUNCH, FLASH)):
+            if f0 + j < min(n, f1):
+                punch[f0 + j], flash[f0 + j] = p, w
+    return grade, punch, flash
+
+
+def apply_hit(frame, punch, flash):
+    """The punch (scale about the frame centre) and the white flash, on a finished uint8 frame."""
+    if punch == 1.0 and flash == 0.0:
+        return frame
+    out = frame
+    if punch != 1.0:
+        h, w = frame.shape[:2]
+        M = np.float32([[punch, 0, (1 - punch) * w / 2], [0, punch, (1 - punch) * h / 2]])
+        out = cv2.warpAffine(frame, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    if flash > 0:
+        out = (out.astype(np.float32) + (255 - out.astype(np.float32)) * flash).clip(0, 255).astype(np.uint8)
+    return out
+
+
+def particle_steps(states):
+    """Mean wrapped displacement of the particles between consecutive frames (world space), NaN at frame 0."""
+    from realone.worlds import WRAP_PAD
+    span = np.array([1080 + 2 * WRAP_PAD, 1920 + 2 * WRAP_PAD], np.float64)
+    out = np.full(len(states), np.nan)
+    for i in range(1, len(states)):
+        a, b = states[i - 1], states[i]
+        if a is None or b is None or len(a) == 0 or a.shape != b.shape:
+            continue
+        d = np.abs(b - a)
+        d = np.minimum(d, span - d)
+        out[i] = float(np.hypot(d[:, 0], d[:, 1]).mean())
+    return out
+
+
+def checks_bullet(keys, state_keys, pstep, cam, plate_steps, wf, freezes, shot_of, artist_moved, control_moved):
+    """The `bullet` proof, per freeze, on what the render units actually fed and drew.
+
+    keys          per-frame hash of the rendered world layer (graded plate + particles): with the camera moving it
+                  must CHANGE on every frozen frame (the camera's move is in the pixels)
+    state_keys    per-frame hash of the world-space state the units drew from: every particle position, the world
+                  clock fed to the plate and the push fraction: IDENTICAL on every frozen frame
+    pstep         per-frame mean particle displacement in world space (particle_steps)
+    cam           per-frame camera dx the units used (px)
+    plate_steps, artist_moved, control_moved: as in `checks` (control: the state one clock step on differs)
+    -> (report dict, ok)."""
+    n = len(keys)
+    moving_bad = [i for i in range(1, n) if shot_of[i] == shot_of[i - 1] and wf[i] != wf[i - 1]
+                  and (state_keys[i] == state_keys[i - 1] or keys[i] == keys[i - 1])]
+    rep = {"style": "bullet", "world_moves_outside_freezes": not moving_bad,
+           "frames_that_should_move_but_did_not": moving_bad[:20], "freezes": []}
+    ok = not moving_bad
+    for k, f in enumerate(freezes):
+        f0, f1 = f["start_frame"], f["end_frame"]
+        r = {"frames": f"{f0}-{f1 - 1}", "n_frames": f1 - f0, "bars": f"{f['start_bar']}-{f['end_bar']}",
+             "role": f["role"]}
+        r["state_frozen_identical"] = f1 - f0 >= 2 and len(set(state_keys[f0:f1])) == 1
+        r["frozen_identical"] = r["state_frozen_identical"]  # the name the director and the summary read
+        csteps = np.diff(np.asarray(cam[f0:f1], np.float64))
+        travel = float(cam[f1 - 1] - cam[f0])
+        r["camera_travel_px"] = round(travel, 1)
+        r["camera_moves"] = bool(len(csteps) and np.all(np.abs(csteps) > 1e-6) and abs(travel) >= 0.01 * 1080)
+        r["rendered_world_moves_in_freeze"] = all(keys[i] != keys[i - 1] for i in range(f0 + 1, f1))
+        before = [i for i in range(max(1, f0 - 30), f0 + 1) if shot_of[i] == shot_of[i - 1]]
+        r["moves_before"] = all(state_keys[i] != state_keys[i - 1] for i in before) if before else None
+        if not before:
+            r["moves_before_note"] = "n/a: the freeze starts on a cut (the frames before are another shot)"
+        if f1 >= n:
+            r["resumes"], r["no_jump"] = None, None
+            r["resume_note"] = "n/a: the freeze runs to the end of the render"
+        elif shot_of[f1] != shot_of[f1 - 1]:
+            r["resumes"], r["no_jump"] = None, None
+            r["resume_note"] = "n/a: the release is a section cut (a new world)"
+        else:
+            nxt = [i for i in range(f1, min(n, f1 + 4)) if shot_of[i] == shot_of[f1]]
+            r["resumes"] = all(state_keys[i] != state_keys[i - 1] and keys[i] != keys[i - 1] for i in nxt)
+            after = [i for i in range(f1 + 1, min(n, f1 + 61)) if shot_of[i] == shot_of[f1]]
+            pb = [pstep[i] for i in after if np.isfinite(pstep[i])]
+            pmed = float(np.median(pb)) if pb else float("nan")
+            cb = [abs(cam[i] - cam[i - 1]) for i in after]
+            cmed = float(np.median(cb)) if cb else float("nan")
+            cin = float(np.median(np.abs(csteps))) if len(csteps) else float("nan")
+            cstep = abs(float(cam[f1] - cam[f1 - 1]))
+            r["release_particle_step_px"] = round(float(pstep[f1]), 2) if np.isfinite(pstep[f1]) else None
+            r["particle_step_median_after_px"] = round(pmed, 2) if pb else None
+            r["release_camera_step_px"] = round(cstep, 3)
+            r["camera_step_median_px"] = {"in_freeze": round(cin, 3), "after": round(cmed, 3) if cb else None}
+            r["clock_step_at_release"] = float(wf[f1] - wf[f1 - 1])
+            pstep_ok = bool(np.isfinite(pstep[f1]) and pb and pstep[f1] <= 3 * pmed + 0.5)
+            cam_ok = bool(cb and cstep <= 3 * max(cmed, cin) + 0.5)
+            step = plate_steps[f1]
+            base = [plate_steps[i] for i in after if np.isfinite(plate_steps[i])]
+            med = float(np.median(base)) if base else float("nan")
+            plate_ok = bool(np.isfinite(step) and base and step <= 3 * med + 0.05)
+            r["release_plate_step"] = round(float(step), 4) if np.isfinite(step) else None
+            r["plate_step_median_after"] = round(med, 4) if base else None
+            r["no_jump"] = bool(wf[f1] - wf[f1 - 1] == 1 and pstep_ok and cam_ok and plate_ok)
+            r["no_jump_parts"] = {"clock": bool(wf[f1] - wf[f1 - 1] == 1), "particles": pstep_ok, "camera": cam_ok,
+                                  "plate": plate_ok}
+        r["artist_moves"] = bool(artist_moved[k])
+        r["control_world_would_move"] = bool(control_moved[k])
+        r["ok"] = bool(r["state_frozen_identical"] and r["camera_moves"] and r["rendered_world_moves_in_freeze"]
+                       and r["artist_moves"] and r["control_world_would_move"]
                        and r["moves_before"] is not False and r["resumes"] is not False
                        and r["no_jump"] is not False)
         ok &= r["ok"]

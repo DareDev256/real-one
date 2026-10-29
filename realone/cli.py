@@ -50,6 +50,10 @@ def build_parser():
                         "--freeze-bars while the artist keeps moving. Bare --freeze = the rendered section; or name "
                         "one: hook (every hook in range), hook:2, #3, bars:A-B. Repeatable.")
     r.add_argument("--freeze-bars", type=int, default=2, metavar="N", help="length of each freeze in bars (default 2)")
+    r.add_argument("--freeze-style", choices=["bullet", "still"], default="bullet",
+                   help="bullet (default): the particles hang mid-air on 3 depth layers while the camera keeps moving "
+                        "(parallax), with a hit and a cool grade on the freeze downbeat; still: the 0.2.0 freeze, "
+                        "everything in the world stops including the camera (A/B)")
     r.add_argument("--workers", type=int, default=None, metavar="N",
                    help="render processes (default: CPU cores minus 2); 1 renders in this process")
     r.add_argument("--worlds-json", metavar="FILE",

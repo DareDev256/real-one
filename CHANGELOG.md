@@ -1,6 +1,34 @@
 # Changelog
 
 ## Unreleased
+- **Hook Freeze v2, `--freeze-style bullet` (the new default; `still` keeps the 0.2.0 freeze for A/B).** The owner
+  watched the 0.2.0 freeze on his phone and called it "pretty meh": with the camera stopped too, the world is a still
+  image behind a moving person (green screen), and nothing in the frame proves time stopped. Now, in a render with a
+  freeze: the particles sit on three depth layers (far, mid, near; size, blur, brightness, fall speed and parallax all
+  rise with nearness; near drawn over the artist) and fall as motion-blur streaks; on the freeze downbeat they stop
+  dead in world space and redraw as short crisp marks, brighter (the streak's light collapses into a point), while a
+  sideways camera truck on the real frame clock keeps moving (the plate 3.5% of the frame width over the freeze,
+  far 2.5x that, mid 4.5x, near 9x), so the hanging layers slide past each other. The hit: a 3-frame punch
+  (1.04 -> 1.0) and a white flash (30%, 15%, 5%); the world (not the artist) grades to saturation x0.45 and cooler
+  over 3 frames. The release: the grade snaps off, the particles fall again with a 3-frame streak burst, the camera
+  carries on at the same speed. Pure functions of the world clock and the frame index, as before. A render with no
+  freeze, and `still`, are unchanged (still: same sheet, same checks).
+- Bullet checks (exit 2 and `freeze` in the run json on a failure, as before): the world-space state the units drew
+  from (every particle position, the plate's world clock, the push) is identical on every frozen frame; the camera
+  path moves (every step, at least 1% of the width) and the rendered world layer changes on every frozen frame (the
+  move is in the pixels); the artist moves; the unfrozen control's particles move; the state changes outside a
+  freeze; no jump on the release: clock step 1, particle step, camera step and plate step each within 3x the
+  median after. Measured on the hook (collage, local plates): state identical on 147/147 frozen frames, camera
+  37.5 px, all checks OK; `still` on the same hook: unchanged checks OK.
+- Cut detection median-filters its thumbnails (5 px): the denser rain raised the frame-to-frame baseline until a
+  real world swap measured 5.7x and was refused; filtered, cuts measure 9.2x and up and other frames 3x or less.
+  A detection on the 3 frames after a bullet freeze's downbeat is the hit (punch + flash), reported as
+  `detections_on_the_freeze_hit`, not as a cut off the grid.
+- 13 tests (`tests/test_freeze_bullet.py`); mutation checks M17 to M28 on a scratch copy of the repo, each red,
+  each file restored byte-identical by sha256 (see docs/implementation-notes.md).
+- Not solved: a freeze still starts on a cut, so across a section boundary the world swaps on the freeze downbeat
+  and the particles that hang are not the ones the viewer saw falling (visible in a `bars:11-20` lead-in render).
+  Everything is still on the drawn test figure and code-drawn plates.
 - `scripts/first_keyed_run.sh`: the first keyed runs in two capped stages, `probe` (synthetic take, US$0.50) and
   `real CLIP SONG` (US$1). Reads the key from `~/.secrets/meta-model-api` without printing it; refuses the gym
   clip by real path, symlinks included (guard mutation-checked).

@@ -168,18 +168,24 @@ def world_view(plate, zoom, center, dx=0.0, dy=0.0):
 PARALLAX = 0.25  # the world zooms a quarter as much as the artist: the artist feels closer than the world
 
 
-def world_layer(plate, parts, crop, push_frac, push, wt):
+def world_layer(plate, parts, crop, push_frac, push, wt, cam=None):
     """The world for one frame, a pure function of the WORLD clock `wt` (seconds) and the camera `crop`:
     -> (world float32 0..255 with the back particles, front particles float32 0..255, plate-only float32).
     The world zooms a quarter as much as the artist (cheap parallax) toward the same point, plus `push` over
-    the shot (`push_frac` 0..1, measured on the world clock) and a slow sideways drift."""
+    the shot (`push_frac` 0..1, measured on the world clock) and a slow sideways drift.
+    cam (Hook Freeze v2, `bullet`): (dx, vel, zoom) on the REAL frame clock: the plate slides dx px sideways (the
+    particle layers slide further, by depth), `vel` is the world clock's rate (0 frozen: crisp hanging marks),
+    `zoom` a margin so the slide never shows the plate's edge. None: the 0.2.0 maths, byte for byte."""
     x0, y0, cw, ch = crop
     z = W / cw
     ccx, ccy = x0 + cw / 2, y0 + ch / 2
+    cdx, vel, czoom = cam if cam is not None else (0.0, 1.0, 1.0)
     zw = (1 + PARALLAX * (z - 1)) * (1 + push * push_frac)
+    if cam is not None:
+        zw *= czoom
     centre = (W / 2 + (ccx - W / 2) * PARALLAX, H / 2 + (ccy - H / 2) * PARALLAX)
-    wbase = world_view(plate, zw, centre, dx=16 * np.sin(0.55 * wt)).astype(np.float32)
-    back, front = parts.layers(wt)
+    wbase = world_view(plate, zw, centre, dx=16 * np.sin(0.55 * wt) + cdx).astype(np.float32)
+    back, front = parts.layers(wt) if cam is None else parts.layers(wt, cam=cdx, vel=vel)
     return np.clip(wbase + back * 255, 0, 255), front * 255, wbase
 
 
@@ -240,3 +246,137 @@ class Particles:
             back += cv2.GaussianBlur(back, (0, 0), 9) * 1.5
         return back, front
 
+
+
+# --------------------------------------------------------------------------- Hook Freeze v2 (bullet): depth particles
+
+# Three depth layers, far -> near. Everything that sells depth scales with nearness: count falls, size, blur,
+# brightness and fall speed rise, and the camera parallax (how far a layer slides per pixel the PLATE slides) rises.
+# `front`: drawn over the artist. Speeds are px/s at a world clock rate of 1.
+DEPTH_LAYERS = (
+    {"name": "far", "count": 1.0, "size": 1.6, "blur": 0.8, "bright": 0.42, "speed": 0.55, "parallax": 2.5, "front": False},
+    {"name": "mid", "count": 0.5, "size": 2.8, "blur": 1.1, "bright": 0.75, "speed": 1.0, "parallax": 4.5, "front": False},
+    {"name": "near", "count": 0.14, "size": 5.5, "blur": 3.2, "bright": 1.0, "speed": 1.7, "parallax": 9.0, "front": True},
+)
+DEPTH_KINDS = {  # base count (far layer), base fall speed px/s (+ down, - up), sideways px/s, motion-blur shutter
+    "rain": {"n": 300, "fall": 1500.0, "side": -260.0, "shutter": 0.9},
+    "dust": {"n": 260, "fall": -150.0, "side": 120.0, "shutter": 0.9},
+    "embers": {"n": 200, "fall": -420.0, "side": 60.0, "shutter": 0.8},
+    "none": {"n": 0, "fall": 0.0, "side": 0.0, "shutter": 0.0},
+}
+FROZEN_GAIN = 1.6  # brightness of a frozen particle relative to a moving one
+WRAP_PAD = 160  # particles live on a canvas this much larger than the frame each side, so a wrap is never seen
+
+
+class DepthParticles:
+    """Hook Freeze v2 particles on three depth layers (far, mid, near).
+
+    World-space positions are a pure function of the WORLD clock `wt` (`state(wt)`): a frozen clock is frozen
+    particles. How they are drawn also takes the camera `cam` (px the plate has slid sideways; each layer slides
+    `parallax` times as far, so frozen layers slide past each other) and `vel`, the world clock's rate this frame
+    (0 inside a freeze): a moving particle is a motion-blur streak `speed * shutter / FPS` long, a frozen one a crisp
+    short mark that visibly hangs."""
+
+    depth_layers = DEPTH_LAYERS
+
+    def __init__(self, kind, seed=7):
+        self.kind = kind
+        k = DEPTH_KINDS[kind]
+        self.k = k
+        r = np.random.default_rng(seed)
+        self.layers_ = []
+        for li, L in enumerate(DEPTH_LAYERS):
+            n = int(round(k["n"] * L["count"]))
+            self.layers_.append({**L, "n": n, "x0": r.uniform(0, W + 2 * WRAP_PAD, n),
+                                 "y0": r.uniform(0, H + 2 * WRAP_PAD, n), "ph": r.uniform(0, 6.28, n),
+                                 "jit": r.uniform(0.8, 1.2, n)})
+        self.n = sum(L["n"] for L in self.layers_)
+
+    def _vel(self, L):
+        """px/s of each particle in the layer at clock rate 1 (x, y)."""
+        return self.k["side"] * L["speed"] * L["jit"], self.k["fall"] * L["speed"] * L["jit"]
+
+    def _pos(self, L, wt):
+        vx, vy = self._vel(L)
+        wob = 0.0
+        if self.kind == "dust":
+            wob = 22 * np.sin(0.5 * wt + L["ph"])
+        elif self.kind == "embers":
+            wob = 28 * np.sin(0.8 * wt + L["ph"])
+        x = (L["x0"] + vx * wt + wob) % (W + 2 * WRAP_PAD)
+        y = (L["y0"] + vy * wt) % (H + 2 * WRAP_PAD)
+        return x, y
+
+    def state(self, wt):
+        """World-space positions of every particle, (N, 2) float64, a pure function of the world clock."""
+        if self.n == 0:
+            return np.zeros((0, 2))
+        return np.concatenate([np.stack(self._pos(L, wt), 1) for L in self.layers_])
+
+    def layers(self, wt, cam=0.0, vel=1.0):
+        back = np.zeros((H, W, 3), np.float32)
+        front = np.zeros((H, W, 3), np.float32)
+        if self.n == 0:
+            return back, front
+        sh = self.k["shutter"]
+        colour = {"rain": (0.95, 0.88, 0.80), "dust": (0.80, 0.92, 1.0), "embers": (0.16, 0.55, 1.0)}[self.kind]
+        for L in self.layers_:
+            x, y = self._pos(L, wt)
+            sx = (x + L["parallax"] * cam) % (W + 2 * WRAP_PAD) - WRAP_PAD
+            sy = y - WRAP_PAD
+            vx, vy = self._vel(L)
+            # motion blur: the distance travelled while the shutter is open (none when the clock stands still)
+            bx, by = vx * vel * sh / 30.0, vy * vel * sh / 30.0
+            size = L["size"]
+            a = L["bright"]
+            if self.kind == "embers":
+                a = a * (0.6 + 0.4 * np.sin(wt * 6 + L["ph"]))
+            elif self.kind == "dust":
+                a = a * (0.7 + 0.3 * np.sin(wt * 1.7 + L["ph"]))
+            if vel == 0:  # a frozen particle's light is no longer smeared along a streak: it reads as a bright point
+                a = a * FROZEN_GAIN
+            a = np.broadcast_to(a, x.shape)
+            canvas = np.zeros((H, W, 3), np.float32)
+            th = max(1, int(round(size)))
+            for i in range(L["n"]):
+                c = (a[i] * colour[0], a[i] * colour[1], a[i] * colour[2])
+                x1, y1 = sx[i], sy[i]
+                if self.kind == "rain":
+                    # frozen: a short crisp drop (its length a fixed 5 sizes, along the fall direction)
+                    hx, hy = (bx[i], by[i]) if vel > 0 else (0.0, 0.0)
+                    if abs(hx) + abs(hy) < 5.0 * size:
+                        nrm = np.hypot(vx[i], vy[i]) + 1e-6
+                        hx, hy = vx[i] / nrm * 5.0 * size, vy[i] / nrm * 5.0 * size
+                    cv2.line(canvas, (int(x1), int(y1)), (int(x1 - hx), int(y1 - hy)), c, th, cv2.LINE_AA)
+                else:
+                    rad = max(1, int(round(0.9 * size)))
+                    if vel > 0 and abs(by[i]) + abs(bx[i]) > 2:
+                        cv2.line(canvas, (int(x1), int(y1)), (int(x1 - bx[i]), int(y1 - by[i])), c, 2 * rad,
+                                 cv2.LINE_AA)
+                    else:
+                        cv2.circle(canvas, (int(x1), int(y1)), rad, c, -1, cv2.LINE_AA)
+            canvas = cv2.GaussianBlur(canvas, (0, 0), L["blur"])
+            if self.kind == "embers":
+                canvas += cv2.GaussianBlur(canvas, (0, 0), 3 + 3 * L["size"]) * 1.2
+            if L["front"]:
+                front += canvas * 1.5
+            else:
+                back += canvas
+        return back, front
+
+
+def make_particles(kind, style="still"):
+    """The particle layer for a world: the 0.2.0 `Particles` for `still` (and every render without a freeze, so
+    those stay byte-identical), the depth particles for the Hook Freeze v2 `bullet` style."""
+    return DepthParticles(kind) if style == "bullet" else Particles(kind)
+
+
+def grade_world(img, g):
+    """The frozen-world grade at strength g (0..1): saturation x0.45 and a slight cool shift at g=1. BGR 0..255."""
+    if g <= 0:
+        return img
+    luma = img[..., 0:1] * 0.114 + img[..., 1:2] * 0.587 + img[..., 2:3] * 0.299
+    sat = 1 - 0.55 * g
+    out = luma + (img - luma) * sat
+    cool = np.array([1 + 0.10 * g, 1 + 0.02 * g, 1 - 0.08 * g], np.float32)  # B up, R down
+    return np.clip(out * cool, 0, 255)

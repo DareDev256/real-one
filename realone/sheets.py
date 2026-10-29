@@ -92,7 +92,7 @@ def looks_sheet(videos, plan, path, title):
     return path
 
 
-def freeze_sheet(video, plan, freeze, wf, path, title):
+def freeze_sheet(video, plan, freeze, wf, path, title, style="still"):
     """One freeze, read back from the encoded file: frames before / inside / after it, each labelled with its
     world clock, plus a tile of what changed between two frozen frames (grain ignored): only the artist."""
     f0, f1, n = freeze["start_frame"], freeze["end_frame"], plan["n_frames"]
@@ -115,7 +115,8 @@ def freeze_sheet(video, plan, freeze, wf, path, title):
     moved = (d > 28).astype(np.uint8) * 255
     moved = cv2.cvtColor(cv2.resize(moved, (tw, th), interpolation=cv2.INTER_AREA), cv2.COLOR_GRAY2BGR)
     lab = text_bar(tw, [(f"changed: frame {a_in} vs {b_in}", VERMILION, 0.45),
-                        ("white = moved (the artist); black = held", DIM, 0.45)])
+                        ("white = moved (the artist); black = held" if style == "still" else
+                         "bullet: the camera moves, so the world shifts too", DIM, 0.45)])
     tiles.append(np.vstack([moved, lab]))
     gut = np.full((tiles[0].shape[0], 8, 3), BG, np.uint8)
     body = np.hstack([gut] + [x for t in tiles for x in (t, gut)])

@@ -74,6 +74,73 @@ Mutation checks (2026-10-29, run on a scratch copy of the repo so the director's
 mutated file; each restored byte-identical by sha256): M9 the freeze hold removed from `world_clock` (2 tests
 red); M10 the clock snapping back to real time after the release (2 tests red).
 
+### 1b. Hook Freeze v2: `--freeze-style bullet` (2026-10-29, after the owner's "pretty meh")
+
+Diagnosis: with everything in the world stopped, the camera included, the background is a still image behind a
+moving person. That reads as green screen; nothing in the frame proves that time stopped. `bullet` (the default;
+`--freeze-style still` is the 0.2.0 freeze, unchanged) makes the frozen world visibly 3D and visibly stopped:
+
+- `worlds.DepthParticles`: three layers (`DEPTH_LAYERS`: far, mid, near). Count falls and size, blur, brightness,
+  fall speed and parallax rise with nearness; near is drawn over the artist. World-space positions (`state(wt)`)
+  are a pure function of the world clock on a canvas 160 px larger than the frame each side (a wrap is never seen).
+  Drawing also takes the camera dx (each layer slides `parallax` times the plate) and the clock rate `vel`: moving,
+  a particle is a streak `speed * 0.9 / 30` long (rain 25 to 85 px); frozen, a crisp mark (rain: 5 sizes long along
+  its fall direction) 1.6x brighter, since its light no longer smears along a streak.
+- `freeze.bullet_camera`: each shot that holds a freeze gets a constant-speed sideways truck on the REAL frame
+  clock, centred on the shot; the plate slides `CAM_TRAVEL` = 3.5% of the width over the freeze (37.5 px on the hook)
+  and a constant zoom margin (1.08 on the hook) covers the slide plus the 16 px world drift. Constant speed means
+  the release cannot jump. Shots without a freeze: no truck.
+- `freeze.clock_rate`: 0 on frozen frames, a 1.8 / 1.4 / 1.15 streak burst on the 3 frames after the release.
+- `freeze.hit_profile` + `apply_hit`: punch 1.04 / 1.022 / 1.008 and white flash 0.30 / 0.15 / 0.05 on the freeze
+  downbeat and the 2 frames after, applied to each finished look once. `worlds.grade_world`: on the world and the
+  front particles only (the artist is composited from the ungraded colour match, so stays in full colour):
+  saturation x0.45 and B x1.10, R x0.92 at full strength, ramping 0.45 / 0.8 / 1.0, off on the release frame.
+- A render without a freeze, and `still`, use the 0.2.0 particles and `world_layer(cam=None)`: byte-identical maths.
+
+Proof (`freeze.checks_bullet`, exit 2 + run json on failure): the render units record, per frame, the md5 of the
+world-space state they drew from (every particle position, the world clock fed to the plate, the push fraction, the
+world id), the positions themselves and the camera dx they used. Per freeze: state identical on every frozen frame;
+camera moves (every step non-zero, travel at least 1% of the width); the rendered world layer's md5 changes on every
+frozen frame (the camera move reached the pixels; a camera array the drawing ignored fails here); state moves
+before and resumes after; no jump: clock step 1, particle step (mean wrapped world-space displacement) at most 3x
+the median of the next 2 s + 0.5 px, camera step at most 3x its median + 0.5 px, plate step as in `still`; the
+artist moves; the control (particle positions one clock step on) differs. Outside freezes every frame whose clock
+advanced must change both the state and the rendered world.
+
+Cut detection: the denser rain raised `detect_cuts`' median frame difference (6.4 -> 9.2 on a lead-in render), so a
+real world swap measured 5.7x and the run was refused. Thumbnails are now median-filtered (5 px) before differencing:
+particle streaks and dots vanish, world swaps survive (cuts 9.2x to 24x, other frames at most 3x on the four renders
+measured). The hit's own flash decay then measured 6.3x to 7.7x on f0+1: detections on the 3 frames after a bullet
+freeze's downbeat (itself a planned cut) are attributed to the hit (`detections_on_the_freeze_hit`), not counted off
+the grid.
+
+Measured (2026-10-29, hook bars 12-20, collage, local plates, 4 workers, load 7 to 10):
+- `--freeze-style still --tag freeze_v1_still`: unchanged checks all OK, sheet identical in content to 0.2.0's.
+- `--freeze-style bullet --tag freeze_v2_bullet`: state identical on 147/147 frozen frames, camera 37.5 px, rendered
+  world moves on every frozen frame, resumes, no jump, artist moves, control moves; cuts 2/2; 588 frames in ~90 s.
+- Lead-in (`--section bars:11-20 --freeze hook`, both styles): the same checks with "moves before" now measurable
+  (True). Its 6-frame strip around the downbeat showed what is not solved (below).
+Particles chosen: rain. In the stills, rain is the only kind whose moving and frozen states differ at phone size
+(long slanted streaks become hanging dashes). Embers lose their orange under the grade and read as grey stars, and
+dust is nearly invisible on the light acid stage. (`--particles` only applies to `--world`/`--world-image` worlds;
+the local plates carry rain, embers and dust in turn.)
+
+Not solved:
+- A freeze starts on a cut (0.2.0 rule, which the director relies on). Across a section boundary the world swaps on
+  the freeze downbeat (lead-in strip: neon-alley rain falling on frames 70-72, the sunset roof frozen from 73), so
+  the particles that hang are not the ones the viewer watched falling. On `--section hook` the render opens frozen,
+  so the hit lands on frame 0 with nothing before it. Next step: in `bullet`, carry the previous shot's world
+  through the freeze downbeat and cut on the release instead.
+- The parallax is a 2D slide per layer, not a true arc; the plate is one flat layer.
+- Everything is on the drawn test figure and code-drawn plates; Muse Image worlds and SAM masks need the key.
+
+Tests (`tests/test_freeze_bullet.py`, 13). Mutation checks on a scratch copy of the repo (renders were running on
+the live tree), each red, each file restored byte-identical by sha256:
+M17 camera truck removed; M18 `camera_moves` forced true; M19 `rendered_world_moves_in_freeze` forced true;
+M20 `state_frozen_identical` forced true; M21 particle no-jump forced true; M22 camera no-jump forced true;
+M23 clock rate not zeroed in the freeze; M24 frozen drops keep their streak; M25 flash removed; M26 grade without
+desaturation; M27 `still` given the depth particles; M28 the outside-freeze state check dropped.
+
 ### 2. Native-resolution punch-ins and the phone-clip routes (`realone/native.py`)
 
 ```

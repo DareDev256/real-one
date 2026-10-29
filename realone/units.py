@@ -11,6 +11,7 @@ Why it is deterministic whatever the worker count: everything a frame needs is a
 clock, camera crop, grain, collage boil step) except the colour-match EMA, which restarts at every unit; a cut
 changes the world anyway, and a split unit warms the EMA on the frames before it.
 """
+import hashlib
 import os
 import re
 import resource
@@ -26,7 +27,8 @@ import numpy as np
 from realone.common import FPS, H, W, unpack_mask
 from realone.composite import INK, Compositor, lab_stats
 from realone.media import read_frames
-from realone.worlds import Particles, load_plate, plate_thumb, world_key, world_layer
+from realone.freeze import apply_hit
+from realone.worlds import grade_world, load_plate, make_particles, plate_thumb, world_key, world_layer
 
 WARM = 10          # frames of colour-match warm-up before a split unit
 SEG_THREADS = 2    # x264 threads per segment encoder (the compositor, not the encoder, is the bottleneck)
@@ -128,7 +130,8 @@ class Ctx:
         self.comp = Compositor(self.args)
         self.masks = np.load(d["masks"], mmap_mode="r")
         self.plates = [load_plate(p) for p in d["plates"]]
-        self.parts = [Particles(k) for k in d["particles"]]
+        self.style = d.get("freeze_style", "still")
+        self.parts = [make_particles(k, self.style) for k in d["particles"]]
         self.wstats = []
         for pl in self.plates:
             small = cv2.resize(pl, (270, 480), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
@@ -142,6 +145,11 @@ class Ctx:
         self.native_frames = arr["native_frames"]  # per frame: 1 if the punch-in uses the native file
         self.counter = arr["counter"] if "counter" in arr.files else np.zeros(len(self.wf), np.uint8)
         self.shot_ink = arr["shot_ink"] if "shot_ink" in arr.files else np.zeros(len(self.shot_world), np.uint8)
+        # Hook Freeze v2 (`bullet`): the camera truck, the motion-blur clock rate and the hit, per frame
+        self.bullet = "cam_dx" in arr.files
+        if self.bullet:
+            self.cam_dx, self.cam_zoom, self.vel = arr["cam_dx"], arr["cam_zoom"], arr["vel"]
+            self.grade, self.punch, self.flash = arr["grade"], arr["punch"], arr["flash"]
 
 
 def init_worker(d):
@@ -172,7 +180,7 @@ def render_unit(u):
     n = f1 - f0
     rec = {"f0": f0, "f1": f1, "keys": [], "plate_steps": np.full(n, np.nan), "bbox": np.zeros((n, 4)),
            "pocket": np.zeros(n, int), "filmed": {out: np.zeros(n) for out in d["outputs"]}, "sources": {},
-           "segments": {k: str(v) for k, v in segs.items()}}
+           "segments": {k: str(v) for k, v in segs.items()}, "state_keys": [], "states": [], "cam": np.zeros(n)}
     prev_thumb, wcache = None, None
     try:
         for i in range(start, f1):
@@ -181,11 +189,14 @@ def render_unit(u):
             sh_world = int(c.shot_world[c.shot_of[i]])
             wt = s0 + c.wf[i] / FPS
             crop = c.crops[i]
-            wkey = (sh_world, float(wt), float(c.pushf[i]), tuple(crop))  # exactly world_layer's inputs
+            cam = (float(c.cam_dx[i]), float(c.vel[i]), float(c.cam_zoom[i])) if c.bullet else None
+            wkey = (sh_world, float(wt), float(c.pushf[i]), tuple(crop), cam)  # exactly world_layer's inputs
             if wcache is None or wcache[0] != wkey:
                 wcache = (wkey,) + world_layer(c.plates[sh_world], c.parts[sh_world], crop, c.pushf[i],
-                                               c.args.push, wt)
+                                               c.args.push, wt, cam=cam)
             _, world, front, wbase = wcache
+            if c.bullet and c.grade[i] > 0:  # the frozen world grades cool; the artist is composited in colour
+                world, front = grade_world(world, float(c.grade[i])), grade_world(front, float(c.grade[i]))
             m = unpack_mask(c.masks[i])
             per_out = _looks_for(c, i)
             looks = sorted(set(per_out.values()))
@@ -197,10 +208,18 @@ def render_unit(u):
                 continue  # warm-up: the colour-match EMA only
             j = i - f0
             rec["keys"].append(world_key(world, front))
+            if c.bullet:  # the world-space state this frame was drawn from: particle positions, plate clock, push
+                st = c.parts[sh_world].state(wt)
+                rec["states"].append(st.astype(np.float32))
+                rec["state_keys"].append(hashlib.md5(st.tobytes() + np.float64([sh_world, wt, c.pushf[i]]).tobytes())
+                                         .hexdigest())
+                rec["cam"][j] = cam[0]
             th = plate_thumb(wbase)
             if prev_thumb is not None:
                 rec["plate_steps"][j] = float(np.abs(th - prev_thumb).mean())
             prev_thumb = th
+            if c.bullet:  # the punch and the flash on the freeze downbeat, once per look
+                frames = {lk: apply_hit(fr_, float(c.punch[i]), float(c.flash[i])) for lk, fr_ in frames.items()}
             for out, look in per_out.items():
                 encs[out].stdin.write(frames[look].tobytes())
                 rec["filmed"][out][j] = inf[look].get("filmed", np.nan)

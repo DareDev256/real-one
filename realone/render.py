@@ -27,7 +27,7 @@ from realone.plan import bboxes, camera_tracks, plan_range, shot_index
 from realone.sheets import contact_sheet, freeze_sheet, looks_sheet, song_sheet
 from realone.sync import SR as SYNC_SR
 from realone.sync import measure_offset, sync_clip
-from realone.worlds import Particles, gen_world, load_plate, local_plates, muse_world_cached, world_key, world_layer
+from realone.worlds import gen_world, load_plate, local_plates, make_particles, muse_world_cached, world_key, world_layer
 
 
 def parse_looks(spec):
@@ -115,7 +115,7 @@ def _progress(r, done, n, t0, k, total):
           f"{done}/{n} frames, {el:.0f}s, {done / max(el, 1e-6):.1f} fps overall", flush=True)
 
 
-def collage_inks(plan, worlds, masks, crops, wf, pushf, s0, push):
+def collage_inks(plan, worlds, masks, crops, wf, pushf, s0, push, style="still"):
     """Collage legibility, decided once per shot (so the border never flickers): on the shot's first, middle and
     last frame, the share of the band under the paper border that is brighter than LIGHT_LUMA; over LIGHT_SHARE on
     average -> a dark outline for the whole shot. -> uint8 per shot (1 = dark), and the shots get
@@ -127,7 +127,7 @@ def collage_inks(plan, worlds, masks, crops, wf, pushf, s0, push):
         f0, f1 = sh["start_frame"], sh["end_frame"]
         wid = sh["world"]
         if wid not in plates:
-            plates[wid] = (load_plate(worlds[wid][1]), Particles(worlds[wid][2]))
+            plates[wid] = (load_plate(worlds[wid][1]), make_particles(worlds[wid][2], style))
         plate, parts = plates[wid]
         shares = []
         for i in sorted({f0, (f0 + f1) // 2, f1 - 1}):
@@ -193,9 +193,13 @@ def render(a):
     reveal_bars = sorted({(max(lo, x["start_bar"]), min(hi, x["end_bar"])) for x in reveal_secs})
     plan = plan_range(tl, secs, a.cut_bars, per_section, freezes=freezes,
                       force_cuts=[b for pair in reveal_bars for b in pair])
+    style = getattr(a, "freeze_style", "bullet") if plan["freezes"] else "still"  # no freeze: 0.2.0 unchanged
+    plan["freeze_style"] = style if plan["freezes"] else None
     for f in plan["freezes"]:
         print(f"freeze: {f['role']} bars {f['start_bar']}-{f['end_bar']} = frames {f['start_frame']}-"
-              f"{f['end_frame'] - 1} ({f['frames'] / FPS:.2f}s): the world holds, the artist keeps moving")
+              f"{f['end_frame'] - 1} ({f['frames'] / FPS:.2f}s): the world holds, the artist keeps moving"
+              + ("; bullet: the camera keeps moving, the particles hang on 3 depth layers, hit + grade"
+                 if style == "bullet" else "; still: the camera holds too"))
     s0, n = plan["start_s"], plan["n_frames"]
     dur = n / FPS
 
@@ -331,8 +335,12 @@ def render(a):
     arrays["counter"] = counter
     shot_ink = np.zeros(len(plan["shots"]), np.uint8)
     if any(LOOKS[int(v)] == "collage" for look in looks for v in np.unique(arrays[f"look_{look}"])):
-        shot_ink = collage_inks(plan, worlds, masks, crops, wf, pushf, s0, a.push)
+        shot_ink = collage_inks(plan, worlds, masks, crops, wf, pushf, s0, a.push, style)
     arrays["shot_ink"] = shot_ink
+    if style == "bullet":  # Hook Freeze v2: camera truck, motion-blur clock rate, the hit and the grade
+        arrays["cam_dx"], arrays["cam_zoom"] = FZ.bullet_camera(n, plan, plan["freezes"], shot_of)
+        arrays["vel"] = FZ.clock_rate(n, plan["freezes"], shot_of)
+        arrays["grade"], arrays["punch"], arrays["flash"] = FZ.hit_profile(n, plan["freezes"])
     write_json(shots_path, plan)  # again: now with each shot's counter place and collage ink
     np.savez(seg_dir / "arrays.npz", **arrays)
     units = U.make_units(plan, workers, avoid=[f["end_frame"] for f in plan["freezes"]])
@@ -340,7 +348,7 @@ def render(a):
     ctx = {"args": {k: getattr(a, k) for k in ("erode", "feather", "wrap", "match", "grain", "despill", "push")},
            "proxy": str(norm), "native": str(take["native"]) if take["native"] else None,
            "native_size": take["native_size"], "ns": list(take["ns"]), "masks": str(mpath),
-           "plates": [str(p) for _, p, _ in worlds], "particles": [k for _, _, k in worlds],
+           "plates": [str(p) for _, p, _ in worlds], "particles": [k for _, _, k in worlds], "freeze_style": style,
            "arrays": str(seg_dir / "arrays.npz"), "look_names": list(LOOKS), "outputs": looks,
            "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
            "cv_threads": max(1, (os.cpu_count() or 4) // workers)}
@@ -355,10 +363,14 @@ def render(a):
     stages["render_s"] = round(render_s, 1)
     stages["concat_s"] = round(time.time() - t, 1)
     keys, plate_steps = [], np.full(n, np.nan)
+    state_keys, states, cam_used = [], [], np.zeros(n)
     bbox_out, pocket = np.zeros((n, 4)), np.zeros(n, int)
     sources = {}
     for r in recs:
         keys += r["keys"]
+        state_keys += r["state_keys"]
+        states += r["states"]
+        cam_used[r["f0"]:r["f1"]] = r["cam"]
         plate_steps[r["f0"]:r["f1"]] = r["plate_steps"]
         bbox_out[r["f0"]:r["f1"]] = r["bbox"]
         pocket[r["f0"]:r["f1"]] = r["pocket"]
@@ -396,7 +408,12 @@ def render(a):
         frames_out = count_frames(outs[look])
         cuts, _ = detect_cuts(outs[look])
         matched = [p for p in planned if any(abs(c - p) <= 1 for c in cuts)]
-        extra = [c for c in cuts if not any(abs(c - p) <= 1 for p in planned)]  # a cut off the beat grid
+        # the bullet freeze's hit (punch + flash decaying over the 3 frames after its downbeat, which is a planned
+        # cut) changes the whole frame like a cut does: a detection there is the hit, not a cut off the grid
+        hit = {f["start_frame"] + j for f in plan["freezes"] for j in range(1, len(FZ.FLASH) + 1)} \
+            if style == "bullet" else set()
+        extra = [c for c in cuts if not any(abs(c - p) <= 1 for p in planned)
+                 and c not in hit]  # a cut off the beat grid
         out_audio = load_audio(outs[look], SYNC_SR)
         av = measure_offset(master22, out_audio, near_s=s0)
         av_err_ms = (av["offset_s"] - s0) * 1000
@@ -406,6 +423,7 @@ def render(a):
         report["looks"][look] = {"video": str(outs[look]), "spec": rep, "spec_ok": good, "frames": frames_out,
                                  "frames_planned": n, "cuts_detected": cuts, "cuts_planned": planned,
                                  "cuts_on_plan": f"{len(matched)}/{len(planned)}", "cuts_off_plan": extra,
+                                 "detections_on_the_freeze_hit": sorted(c for c in cuts if c in hit),
                                  "audio_vs_master_error_ms": round(av_err_ms, 2), "ok": ok}
     # 10b. the freeze, proven on the world layer of every rendered frame
     if plan["freezes"]:
@@ -415,11 +433,20 @@ def render(a):
             art.append(not np.array_equal(masks[f0], masks[f1 - 1]))
             sh = plan["shots"][shot_of[f0]]
             span = max(1.0, wf[sh["end_frame"] - 1] - wf[sh["start_frame"]] + 1)
-            plate, parts = load_plate(worlds[sh["world"]][1]), Particles(worlds[sh["world"]][2])
+            plate, parts = load_plate(worlds[sh["world"]][1]), make_particles(worlds[sh["world"]][2], style)
+            if style == "bullet" and parts.n:  # the particles one clock step on (what the freeze holds back)
+                ctl.append(not np.array_equal(parts.state(s0 + wf[f0] / FPS), parts.state(s0 + (wf[f0] + 1) / FPS)))
+                continue
             held = world_layer(plate, parts, crops[f0], pushf[f0], a.push, s0 + wf[f0] / FPS)
             free = world_layer(plate, parts, crops[f0], pushf[f0] + 1 / span, a.push, s0 + (wf[f0] + 1) / FPS)
             ctl.append(world_key(*held[:2]) != world_key(*free[:2]))
-        frep, fok = FZ.checks(keys, plate_steps, wf, plan["freezes"], shot_of, art, ctl)
+        if style == "bullet":
+            if len(state_keys) != n:
+                raise Refuse(f"the units recorded {len(state_keys)} world states, the plan has {n}")
+            frep, fok = FZ.checks_bullet(keys, state_keys, FZ.particle_steps(states), cam_used, plate_steps, wf,
+                                         plan["freezes"], shot_of, art, ctl)
+        else:
+            frep, fok = FZ.checks(keys, plate_steps, wf, plan["freezes"], shot_of, art, ctl)
         report["freeze"] = frep
         all_good &= fok
     stages["checks_s"] = round(time.time() - t, 1)
@@ -438,7 +465,7 @@ def render(a):
         report["looks"][look]["contact_sheet"] = str(cs)
         for k, f in enumerate(plan["freezes"]):
             fs = OUT / f"{tag}_{look}_freeze{k + 1}.jpg"
-            freeze_sheet(outs[look], plan, f, wf, fs, title + f"   look: {look}")
+            freeze_sheet(outs[look], plan, f, wf, fs, title + f"   look: {look}   freeze: {style}", style=style)
             report["looks"][look].setdefault("freeze_sheets", []).append(str(fs))
     if len(looks) > 1 and len(plan["shots"]) <= 12:
         ls = OUT / f"{prefix}looks.jpg"
@@ -466,10 +493,14 @@ def render(a):
     if "looks_sheet" in report:
         print(f"looks    {report['looks_sheet']}")
     for k, fr_ in enumerate(report.get("freeze", {}).get("freezes", [])):
-        print(f"freeze   {fr_['role']} frames {fr_['frames']}: world identical on all {fr_['n_frames']} frozen frames: "
+        print(f"freeze   {fr_['role']} frames {fr_['frames']}: world {'state ' if 'camera_moves' in fr_ else ''}"
+              f"identical on all {fr_['n_frames']} frozen frames: "
               f"{fr_['frozen_identical']}; moves before: {fr_['moves_before']}; resumes: {fr_['resumes']}; "
               f"no jump: {fr_['no_jump']}; artist moves: {fr_['artist_moves']}; "
-              f"world would move unfrozen: {fr_['control_world_would_move']}  -> {'OK' if fr_['ok'] else 'FAILED'}")
+              f"world would move unfrozen: {fr_['control_world_would_move']}"
+              + (f"; camera moves {fr_['camera_moves']} ({fr_['camera_travel_px']} px), rendered world moves in the "
+                 f"freeze {fr_['rendered_world_moves_in_freeze']}" if "camera_moves" in fr_ else "")
+              + f"  -> {'OK' if fr_['ok'] else 'FAILED'}")
         for look in looks:
             print(f"         sheet {report['looks'][look].get('freeze_sheets', [''])[k]}")
     if "freeze" in report and not report["freeze"]["world_moves_outside_freezes"]:
