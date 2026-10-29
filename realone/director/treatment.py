@@ -23,7 +23,7 @@ The artist is filmed and stays real: SAM 3.1 cuts them out of their own footage,
 world behind them, one world per section of the song, which Muse Image will build. Cuts already land on the beat.
 
 Your rule is the Subtext Cut: direct from what the song MEANS, not from what its words SAY. AI music videos get
-mocked for illustrating lyrics literally ("don't believe me just watch" becoming a wristwatch). Read the situation
+mocked for illustrating lyrics literally (a line like "watch me move" becoming a wristwatch). Read the situation
 under the words: who is pretending, what is being avoided, what changes between the first hook and the last.
 
 For every section of the timeline (same index, same order) return:

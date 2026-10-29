@@ -151,7 +151,7 @@ quote). A 3-minute song with 8 sections all covered by the take: ceiling US$3.49
 ## Tests (`pytest -q tests/test_director*.py`, 72 tests, no network, no key)
 
 - `test_director_guard.py`: literal prompts rejected on lyric lines written for the tests (wristwatch for
-  "just watch", keys and hands, a convertible for "whip", cash for "money", rain), subtext prompts passed (including
+  "watch me move", keys and hands, a convertible for "whip", cash for "money", rain), subtext prompts passed (including
   `train`/`terrain`/`hearth` near misses), the score and threshold, the re-ask naming its words; the schema and the
   semantic rules, every error reported at once, the structure-only wire schema.
 - `test_director_lyrics.py`: turns placed by overlap (a straddling turn goes where most of it is), chunk offsets

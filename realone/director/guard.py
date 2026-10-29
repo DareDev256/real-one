@@ -1,7 +1,7 @@
 """The literal-lyrics guard: deterministic, no model, no network.
 
 AI music videos get called "too literal" (HN 48940066: "far too much a literal direct copy of the lyrics"; the
-classic failure is "don't believe me just watch" becoming a wristwatch). This guard rejects a world_prompt that
+classic failure is a line like "watch me move" becoming a wristwatch). This guard rejects a world_prompt that
 illustrates its own section's lyric. Two tests, either one rejects:
 
 1. Overlap score: the share of the prompt's content words (stopwords out, simple stemming) that also appear in the

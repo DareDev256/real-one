@@ -8,6 +8,10 @@
   (analysed locally, nothing sent anywhere): 14 -> 12, 12 -> 10 and 17 -> 15 sections, none under 4 bars, the hook
   label unchanged on each; the synthetic test song is unchanged. Labels that never repeat remain (not tuned: no
   ground truth yet).
+- Rights: the commercial lyric used as the "too literal" example (in the guard, the treatment prompt sent to Muse
+  Wonder, a test and the director doc) is replaced with an original line, "watch me move".
+- README: "with depth layers" and "one tap" were wrong (only the particles have depth; the reveal is the
+  `--receipt-reveal` flag); Subtext Cut status now matches the director's.
 - `pytest.ini`: a bare `pytest` at the root collects `tests/` only (two files shared a basename).
 
 ## 0.2.0 (2026-10-29): the engine

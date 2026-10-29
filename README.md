@@ -8,9 +8,10 @@ Built for the Meta Global AI Developer Hackathon (Cerebral Valley), Oct 27 to No
 
 1. **SAM 3.1** cuts the artist out of every frame of the phone video, real pixels, no generated face.
 2. **Muse Wonder** reads the lyrics, the audio and the footage and writes a treatment from what the song means, not what the words say.
-3. **Muse Image** builds a world for each section of the song, with depth layers.
+3. **Muse Image** builds a world for each section of the song; a code-drawn particle layer and camera move sit on top.
 4. The cut lands on the beat. On the hook, the world stops and the artist keeps moving (Hook Freeze).
-5. **Real Receipt**: one tap greys out every generated pixel and keeps the filmed artist in colour.
+5. **Real Receipt**: a section of your choice (`--receipt-reveal hook:last`) turns every generated pixel grey and keeps
+   the filmed artist in colour, with a counter of how much of each frame was filmed.
 
 ## Status
 
@@ -27,7 +28,8 @@ Built for the Meta Global AI Developer Hackathon (Cerebral Valley), Oct 27 to No
   turned upright, collage border that turns dark on a light world
 - [~] Director (0.2.0, `python -m realone.director plan|direct|review`): lyrics, a Muse Wonder treatment per
   section and a tool loop that renders and watches the result; dry run proven on fixtures, see `docs/director.md`
-- [ ] Subtext Cut
+- [~] Subtext Cut: the director's rule (direct from what the song means, not what it says) and the literal-lyrics
+  guard are built and tested on fixtures; the first keyed treatment on a real song is next
 - [ ] 3-minute demo video
 
 ## Run it

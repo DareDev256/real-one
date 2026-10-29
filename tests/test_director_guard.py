@@ -34,7 +34,7 @@ def fixture_treatment(name="treatment_2_literal.json"):
 # ------------------------------------------------------------------------------------------------- guard
 
 @pytest.mark.parametrize("prompt, lyric, hit", [
-    ("a close-up of a wristwatch ticking on a busy street", "Don't believe me, just watch", "watch->wristwatch"),
+    ("a close-up of a wristwatch ticking on a busy street", "Eyes on me, watch me move", "watch->wristwatch"),
     ("a hand gripping car keys under bright kitchen lights at four in the morning", HOOK, "key"),
     ("a red convertible with the roof down cruising a coastal road at dusk", WHIP, "whip->convertible"),
     ("stacks of cash on a glass table in a penthouse", WHIP, "money->cash"),
