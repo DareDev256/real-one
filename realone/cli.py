@@ -15,7 +15,8 @@ def build_parser():
     r.add_argument("--clip", required=True, help="the artist's own phone take (its mic audio is used only to sync)")
     r.add_argument("--song", required=True, help="the master track (this is the audio in the output)")
     r.add_argument("--section", default="hook",
-                   help="hook | verse | intro | outro | bridge, ':n' for the n-th (hook:2), bars:A-B, or #index")
+                   help="hook | verse | intro | outro | bridge, ':n' for the n-th (hook:2), bars:A-B, #index, "
+                        "or all (the whole song, every section with its own worlds)")
     r.add_argument("--look", default="collage", help="clean | collage | receipt | all | a comma list")
     r.add_argument("--mask", choices=["sam", "local"], default="sam",
                    help="sam = Meta SAM 3.1 (default, needs MODEL_API_KEY); local = Apple Vision, TEST ONLY")
@@ -46,6 +47,13 @@ def build_parser():
                         "--freeze-bars while the artist keeps moving. Bare --freeze = the rendered section; or name "
                         "one: hook (every hook in range), hook:2, #3, bars:A-B. Repeatable.")
     r.add_argument("--freeze-bars", type=int, default=2, metavar="N", help="length of each freeze in bars (default 2)")
+    r.add_argument("--workers", type=int, default=None, metavar="N",
+                   help="render processes (default: CPU cores minus 2); 1 renders in this process")
+    r.add_argument("--worlds-json", metavar="FILE",
+                   help='worlds per section: {"hook": ["prompt", {"image": "path"}], "hook:2": [...], "#3": [...], '
+                        '"verse": [...], "default": [...]}')
+    r.add_argument("--section-world", action="append", metavar="KEY=PROMPT",
+                   help='a Muse Image world for one section key (hook, hook:2, #3, verse, default); repeatable')
     r.add_argument("--no-native", action="store_true",
                    help="A/B only: punch-ins upscale the 1080 proxy (the 0.1.0 path) even when the take is bigger")
 

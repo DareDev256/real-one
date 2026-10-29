@@ -78,3 +78,28 @@ def test_sync_near_resolves_a_short_ambiguous_take(master22, song, live_vocal):
         S.measure_offset(master22, mic)
     r = S.measure_offset(master22, mic, near_s=26.0)
     assert abs(r["offset_s"] - 27.0) < FRAME, r
+
+
+def test_a_whole_song_take_syncs(master22, song, live_vocal):
+    """A take of the whole song from its first second: ~59 windows, and sections that loop every 4 bars fit a
+    4-bar shift almost as well, so 2 to 9 windows lose to it by more than 0.04 even at the true lag. 0.1.0 refused
+    every such take as ambiguous; 0.2.0 judges a long take on all of its windows (sync.WIN_LONG_N). Seed 2 is the
+    hardest measured (9 windows lost)."""
+    for seed in (1, 2, 5):
+        mic = to22(mts.phone_mic(song[1], 0.0, 90.0, seed=seed, live_vocal=live_vocal))
+        r = S.measure_offset(master22, mic)
+        assert abs(r["offset_s"] - 0.0) < FRAME, r
+
+
+def test_the_long_take_rule_still_refuses_what_it_should():
+    """Each condition of the long-take rule, on its own (window advantages, best lag minus competitor)."""
+    rng = np.random.default_rng(0)
+    good = np.r_[np.full(20, 0.25), rng.normal(0.03, 0.03, 30), np.full(6, -0.06)]  # 6/56 lost, clear wins
+    assert S._beaten(good)
+    assert not S._beaten(np.r_[good[:-6], np.full(6, -0.13)])           # the competitor clearly wins somewhere
+    assert not S._beaten(np.r_[np.full(20, 0.25), np.full(24, -0.06)])  # loses 55% of its windows
+    flat = np.r_[0.13, rng.normal(0.0, 0.05, 40)]
+    flat[flat < -0.04] = -0.041
+    assert not S._beaten(flat)                                         # no consistent advantage: t too low
+    assert not S._beaten(np.r_[np.full(8, 0.25), np.full(2, -0.05)])    # a short take keeps the 0.1.0 rule
+    assert not S._beaten(np.full(40, 0.11))                             # never a clear win

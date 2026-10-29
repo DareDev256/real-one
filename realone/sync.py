@@ -34,6 +34,15 @@ COMPETE_R = 0.12          # peaks within this of the best are competitors that m
 WIN_S = 3.0
 WIN_CLEAR = 0.12          # the best lag must beat each competitor by this in at least one window
 WIN_LOSS = 0.04           # ... and never lose a window by more than this
+# 0.2.0, long takes (a whole song): sections that loop every 4 bars fit a 4-bar-shifted lag almost as well, so a
+# 90 s take loses a handful of its ~59 windows to that shift by more than WIN_LOSS even at the true lag (measured:
+# 2 to 9 windows, worst -0.092, while winning 20+ windows by 0.28 to 0.64). A take with WIN_LONG_N windows or more
+# is judged on all of its evidence instead: it still needs a clear win, may lose at most WIN_LONG_LOST of its
+# windows, the competitor may never clearly win one, and the mean advantage must stand WIN_LONG_T standard errors
+# clear (windows overlap by half, so n/2 of them count). Shorter takes keep the 0.1.0 rule unchanged.
+WIN_LONG_N = 24
+WIN_LONG_LOST = 0.20
+WIN_LONG_T = 2.5
 NEAR_WINDOW_S = 6.0
 SILENT_DBFS = -55.0
 
@@ -110,6 +119,22 @@ def _window_advantage(me, ce, lag_a, lag_b):
     return np.array(d)
 
 
+def _t(d):
+    """Mean window advantage in standard errors; 3 s windows at a 1.5 s step overlap by half, so n/2 count."""
+    return float(d.mean() / (d.std() / np.sqrt(max(1.0, len(d) / 2)) + 1e-9))
+
+
+def _beaten(d):
+    """Does the best lag beat this competitor? A clear win somewhere, always; then either the 0.1.0 rule (lose no
+    window by more than WIN_LOSS) or, for a long take, the whole-take rule (see WIN_LONG_N)."""
+    if d.max() < WIN_CLEAR:
+        return False
+    if d.min() >= -WIN_LOSS:
+        return True
+    return bool(len(d) >= WIN_LONG_N and (d < -WIN_LOSS).mean() <= WIN_LONG_LOST and d.min() > -WIN_CLEAR
+                and _t(d) >= WIN_LONG_T)
+
+
 def measure_offset(master, clip, near_s=None):
     """Arrays at SR -> dict(offset_s, r_peak, ...). Raises SyncRefused."""
     clip_s = len(clip) / SR
@@ -144,7 +169,8 @@ def measure_offset(master, clip, near_s=None):
            "second_offset_s": round((k2 - L) * HOP / SR, 3), "clip_audio_s": round(clip_s, 3),
            "clip_level_dbfs": round(level, 1), "near_s": near_s, "resolved_by": "margin",
            "thresholds": {"r_min": R_MIN, "margin_min": MARGIN_MIN, "compete_r": COMPETE_R,
-                          "win_clear": WIN_CLEAR, "win_loss": WIN_LOSS}}
+                          "win_clear": WIN_CLEAR, "win_loss": WIN_LOSS, "win_long_n": WIN_LONG_N,
+                          "win_long_lost": WIN_LONG_LOST, "win_long_t": WIN_LONG_T}}
     if rp < R_MIN:
         raise SyncRefused(f"the clip's audio does not match the song (best r={rp:.2f} < {R_MIN}). Is this the "
                           f"right song, and was it playing out loud while filming?")
@@ -155,7 +181,8 @@ def measure_offset(master, clip, near_s=None):
             d = _window_advantage(me, ce, kp - L, k - L)
             verdicts.append({"offset_s": round((k - L) * HOP / SR, 3), "r": round(float(r[k]), 4),
                              "best_window_win": round(float(d.max()), 3), "worst_window_loss": round(float(d.min()), 3),
-                             "beaten": bool(d.max() >= WIN_CLEAR and d.min() >= -WIN_LOSS)})
+                             "windows": len(d), "windows_lost": int((d < -WIN_LOSS).sum()),
+                             "t": round(_t(d), 2), "beaten": _beaten(d)})
         res["competitors"] = verdicts
         if not all(v["beaten"] for v in verdicts):
             alt = next(v for v in verdicts if not v["beaten"])

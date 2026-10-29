@@ -145,6 +145,101 @@ rotation -90 comes out upright (a red block in the coded bottom-left ends top-le
 frame k, not its neighbour; a 1080x1920 take keeps the 0.1.0 route.
 Mutation M11 (2026-10-29, scratch copy): the compositor ignores the native frame: 2 tests red; restored.
 
+### 3. Full-song render (`--section all`, `realone/units.py`, `realone/worldlist.py`)
+
+```
+.venv/bin/python spike/make_test_clip.py footage/full_test.mp4 --song footage/test_song.wav --offset 0 --secs 90
+.venv/bin/python -m realone render --clip footage/full_test.mp4 --song footage/test_song.wav --section all \
+    --look collage --freeze hook --mask local --local-plate --tag eng_song                  # --workers N to set
+# keyed: one world list per section
+.venv/bin/python -m realone render --clip take.mov --song master.wav --section all --worlds-json worlds.json
+#   worlds.json: {"hook": ["rain-soaked alley, neon"], "hook:2": [{"image": "roof.png"}], "verse": ["..."],
+#                 "#0": ["..."], "default": ["..."]}       or repeat --section-world hook="rooftop at dusk"
+```
+
+Every render, one section or the whole song, now goes through the same pipeline: plan, then render units in
+worker processes, then join. `--section all` plans every section the analysis found, contiguous; each section
+boundary is a cut, each section opens wide and draws from its own world list (lookup per section: `#index`,
+`role:occurrence`, `role`, `default`, then the 0.1.0 `--world`/`--world-image` flags; one global, deduplicated
+list; a section with nothing is refused before any work). With `--local-plate` each role starts the rotation on a
+different plate. `--max-seconds` (40) still guards single sections; a whole song is guarded by `--max-minutes`.
+
+Units and workers (`--workers`, default CPU cores minus 2): one unit per shot, longest first (better packing); a
+shot longer than 1.6x the per-worker share and over 240 frames is split, never within 2 frames of a freeze release
+(its no-jump check needs the frame before from the same worker), and a split piece warms its colour-match EMA on
+the 10 frames before it. Each worker builds its own Compositor once (spawn pool), streams its frames from the
+proxy (and native) file with a frame-exact seek, reads masks from a memory-mapped .npy, and encodes one raw H.264
+segment per look. Everything a frame needs is a function of its index (world clock, crop, grain, boil step)
+except the colour-match EMA, which restarts per unit; a test renders 12 frames whole and in 3 units and gets the
+same world hash on every frame and the same pixels within encoder noise.
+
+Joining, decided by measurement (each tried on a 514-frame numbered sequence in 5 segments, one of them 1 frame):
+- mp4 segments through the concat demuxer: frames drifted after the 1-frame segment (no duration to stamp);
+- raw segments WITH B-frames, stamped by the muxer: the first 4 frames came back reordered;
+- raw segments, no B-frames (`-bf 0`), byte-concatenated: 514 of 514 in order. Chosen. Then two ffmpeg steps:
+  raw -> video-only mp4 stamped at 30 fps with BT.709 written into the SPS (`h264_metadata`; 0.1.0's files said
+  "unknown" for transfer and primaries), then that mp4 + the master slice -> AAC, `-shortest`, faststart. One
+  step lost the audio entirely on 1080p (the raw stream reaches the muxer without timestamps).
+Checks per output (exit 2 on any failure): spec, frame count == plan, every planned cut found in the encoded file
+and no other, output audio vs master within 1 frame, the freeze checks. A song with more than 12 shots gets a
+song sheet (middle frame of every shot, frozen shots outlined) instead of the per-shot columns.
+
+Measured (2026-10-29, the synthetic full test song: 36 bars, 88.2 s, 2645 frames; collage; Hook Freeze on both
+hooks; local masks and plates; `out/TEST_LOCAL_eng_song_all_collage.mp4`):
+- **6 min 10 s wall (370 s) with the masks cached, about 7 min 20 s with them computed** (the masks took 70 s for
+  2645 frames on 4 processes in the run before). Stages: analysis 3.1 s, sync 1.4 s, normalize 0.4 s, render 338 s
+  (7.8 fps overall, 2.0 to 2.4 fps per worker), concat 3.1 s, checks 5.1 s, sheets 16.2 s. 4 workers.
+- **Under what load**: never idle. 1-minute load average 11 to 18 through the run, swap 7.2 to 8.7 GB in use, from
+  two other agents, a Blender render and headless Chrome, on a 12-core (8 performance + 4 efficiency), 16 GB Mac.
+- Checks all passed: 2645/2645 frames, cuts 15/15 on plan and none off it, audio vs master +0.1 ms, both freezes
+  (147 frozen frames each identical; moves before (a real check now: the verse and the bridge precede the hooks),
+  resumes, no jump, artist moves, control moves). Python 1.55 GB peak, largest worker 0.95 GB.
+- **The first attempt used 10 workers (cores minus 2) and was stopped by hand after 8 minutes with no unit
+  finished**: the workers sat at 8 to 20% CPU in the "stuck" state, kernel_task at 275% compressing memory, swap
+  12.5 of 13.3 GB used. Ten workers on a shared 16 GB Mac is slower than four. Decision: the default is now
+  CPU cores minus 2 capped by free memory (vm_stat free + inactive + speculative + purgeable, minus 1.5 GB, over
+  0.95 GB per worker, the measured peak); `--workers N` overrides; the run json says why (`workers_why`). It chose
+  4 here (5.5 GB reclaimable), and each worker then ran at 70 to 80% CPU.
+- **A 3-minute song, extrapolated from these measured rates (not measured)**: 5400 frames at 7.8 fps is 690 s,
+  masks at 38 fps 142 s, the rest about 60 s: about 15 minutes under THIS load, i.e. right at the goal, not under
+  it with margin. On an idle machine with the memory for 10 workers at the per-worker rate measured here (2.2 fps)
+  it would be about 4 minutes of render plus 2.5 of masks, about 7 to 8 minutes, but the machine was not idle once
+  today, so that number is an estimate and is not claimed. The SAM path replaces the Vision masks with a decode of
+  the API's output (cached) and is unmeasured (no key).
+- Song sheet `out/TEST_LOCAL_eng_song_all_collage_contact.jpg`, read: 16 shots in order, every section opens wide,
+  the two freezes outlined, the worlds rotate per section (hook 2 opens on the roof because the bridge ended in the
+  alley). Freeze sheet 2 (`..._freeze2.jpg`), read: the bridge's alley before, the roof frozen at world clock 1911
+  on frames 2060, 2130 and 2200 (the embers in place), released at 1914 and 1942, the changed tile only the figure.
+  The acid stage still swallows the white collage border (shots 1, 4, 9, 12, 15): item 5.
+
+Found on the way:
+- **A whole-song take was refused as ambiguous.** 0.1.0's tie-break needed the true lag to lose NO 3 s window by
+  more than 0.04 to a competitor. On a 90 s take (59 windows), sections that loop every 4 bars fit a 4-bar shift
+  almost as well, so 2 to 9 windows lose by noise (worst -0.092) while the true lag wins 20+ windows by 0.28 to
+  0.64. A take with 24 windows or more (about 36 s) is now judged on all of them: a clear win (0.12) still
+  required, at most a fifth of the windows lost by more than 0.04, none lost by 0.12 or more, and the mean
+  advantage at least 2.5 standard errors (windows overlap by half, so n/2 count). Shorter takes keep the 0.1.0
+  rule exactly; every 0.1.0 sync test still passes (the identical loop and the 8 s take still refuse). Replayed
+  on every sync fixture before choosing: a t-test ALONE would have accepted the loop fixture (t up to 8.7), so the
+  clear-win rule stays for every take. Tests: three whole-song takes sync within a frame; each condition of the
+  long rule refuses on its own; mutation M13 (t-test dropped) turns that test red.
+- Local masks (TEST ONLY) now use `VNGeneratePersonSegmentationRequest` when it finds a person on 2 of 3 probe
+  frames (decided once per clip, so it cannot flip mid-take), else foreground-instance (the drawn figure, where
+  person segmentation returns empty). The coordinator saw foreground-instance pick the bench and dumbbells in and
+  out on James's real clip. Measured on 2 s of it (local only, nothing kept): person segmentation 12.9 to 15.5% of
+  the frame, foreground-instance 16.8 to 20.6%. Masks are written straight into a memory-mapped .npy by up to 4
+  processes (a full song is about 260 KB a frame); a test pins 2 processes == 1 process, byte for byte.
+  `init` on the person request is unavailable through pyobjc; `initWithCompletionHandler_(None)` works.
+
+Tests (`tests/test_song.py` 6, `tests/test_masks_local.py` 1, 2 in `test_sync.py`, 5 in `test_cli.py`): the whole
+song plan (section cuts, wide openings, worlds by role, every cut within a frame of a true downbeat); world lists by
+key and every refusal; units tile every frame exactly once and never split a release, for 1 to 32 workers; raw
+segments with a 1-frame one join frame-exactly with audio and BT.709 tags; a 12-frame real render whole vs in 3
+units (same world hash per frame, pixels within encoder noise); the worker default never outgrows free memory;
+parallel Vision masks == one process; whole-song takes sync; the long-take rule refuses each of its conditions; the
+new flags refuse at the gate in under 10 s. Mutations (scratch copy, restored byte-identical): M12 a unit drops its
+last frame (red); M13 the long-take t-test dropped (red).
+
 ## 0.1.0: the floor (`realone/`, `python -m realone render`)
 
 One section of the song, end to end: a phone take plus the master track in, a finished 9:16 clip out, cuts on

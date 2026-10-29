@@ -54,3 +54,19 @@ def test_a_key_is_never_echoed(junk):
     assert p.returncode == 2  # gets past the gate, then refuses on the junk song: still no network call
     assert secret not in p.stdout and secret not in p.stderr
     assert "present" in p.stdout
+
+
+@pytest.mark.parametrize("extra,msg", [
+    (["--worlds-json", "MISSING"], "--worlds-json not found"),
+    (["--section-world", "hook"], "KEY=PROMPT"),
+    (["--section-world", "hook=rooftop at dusk"], "MODEL_API_KEY is not set"),
+    (["--worlds-json", "PROMPTS"], "MODEL_API_KEY is not set"),
+    (["--local-plate", "--workers", "0"], "--workers must be at least 1"),
+])
+def test_song_flags_refuse_at_the_gate(junk, tmp_path, extra, msg):
+    j = tmp_path / "w.json"
+    j.write_text('{"hook": ["neon alley"], "default": ["rooftop"]}')
+    extra = [str(tmp_path / "nope.json") if x == "MISSING" else str(j) if x == "PROMPTS" else x for x in extra]
+    p, secs = run(["render", "--clip", junk[0], "--song", junk[1], "--mask", "local", "--section", "all"] + extra)
+    assert p.returncode == 2 and msg in p.stderr, p.stderr
+    assert secs < 10

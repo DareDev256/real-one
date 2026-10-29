@@ -6,6 +6,7 @@ import os
 import re
 import time
 from multiprocessing import Pool
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -157,7 +158,7 @@ def hold_missing(packed, have):
     return missing
 
 
-def sam_masks(text, n_frames):
+def sam_masks(text, n_frames, out=None):
     """SAM output text -> packed bool masks (n_frames, W*H/8), plus stats.
     # UNCONFIRMED: only exercised on text built with the parser library's own one_bit encoder
     # (tests/test_sam_decode.py); no live sam-3.1 response has been decoded yet (no key)."""
@@ -187,7 +188,8 @@ def sam_masks(text, n_frames):
         if f not in frames:
             frames[f] = np.zeros((H, W), bool)
         place_mask(frames[f], ras, r[2], r[3], r[4], r[5])
-    packed = np.zeros((n_frames, W * H // 8), np.uint8)
+    packed = (np.lib.format.open_memmap(out, mode="w+", dtype=np.uint8, shape=(n_frames, W * H // 8))
+              if out is not None else np.zeros((n_frames, W * H // 8), np.uint8))  # a memmap for a full song
     have = np.zeros(n_frames, bool)
     for f, m in frames.items():
         if 0 <= f < n_frames:
@@ -201,60 +203,133 @@ def sam_masks(text, n_frames):
 
 def sam_masks_cached(client, norm, tag, n_frames):
     text, prompt, billed = sam_text(client, norm, tag, n_frames)
-    mcache = OUT / "masks" / f"{tag}__{slug(prompt)}.masks.npy"  # decoded masks: reruns skip the decode
-    if mcache.exists():
-        return np.load(mcache), f"SAM 3.1 '{prompt}'", billed
-    packed, _ = sam_masks(text, n_frames)
-    np.save(mcache, packed)
-    return packed, f"SAM 3.1 '{prompt}'", billed
+    """-> (path of the packed .npy, engine, billed). Decoded masks are cached: reruns skip the decode."""
+    mcache = OUT / "masks" / f"{tag}__{slug(prompt)}.masks.npy"
+    if not mcache.exists():
+        tmp = mcache.with_suffix(".tmp.npy")
+        packed, _ = sam_masks(text, n_frames, out=tmp)
+        packed.flush()
+        del packed
+        tmp.rename(mcache)
+    return mcache, f"SAM 3.1 '{prompt}'", billed
 
 
-def vision_masks(norm, n_frames, cache):
-    """TEST ONLY. Apple Vision foreground-instance mask (pyobjc, no model download).
-    VNGeneratePersonSegmentationRequest returned an empty mask on the drawn test figure (it only recognises
-    real people), so subject lifting is used. Says nothing about SAM's edge quality."""
-    if cache.exists():
-        print(f"local mask: cache hit {cache.name}")
-        return np.load(cache)
-    import objc
-    import Quartz
-    import Vision
-    from Foundation import NSData
-    packed = np.zeros((n_frames, W * H // 8), np.uint8)
-    have = np.zeros(n_frames, bool)
-    t0 = time.time()
-    for i, frame in enumerate(read_frames(norm)):
-        if i >= n_frames:
-            break
-        with objc.autorelease_pool():
-            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            data = NSData.dataWithBytes_length_(buf.tobytes(), len(buf))
-            handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(data, None)
+def _vision_one(frame, Vision, Quartz, NSData, objc, person):
+    """One BGR frame -> (H, W) bool mask or None. person=True: VNGeneratePersonSegmentationRequest (real people,
+    stable from frame to frame); False: VNGenerateForegroundInstanceMaskRequest (subject lifting: works on the
+    drawn test figure, but on real footage it changes which objects it includes from frame to frame)."""
+    with objc.autorelease_pool():
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        data = NSData.dataWithBytes_length_(buf.tobytes(), len(buf))
+        handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(data, None)
+        if person:
+            req = Vision.VNGeneratePersonSegmentationRequest.alloc().initWithCompletionHandler_(None)
+            req.setQualityLevel_(0)  # accurate
+            okp, err = handler.performRequests_error_([req], None)
+            res = req.results() if okp else None
+            if not res:
+                return None
+            pb = res[0].pixelBuffer()
+        else:
             req = Vision.VNGenerateForegroundInstanceMaskRequest.alloc().initWithCompletionHandler_(None)
             okp, err = handler.performRequests_error_([req], None)
             res = req.results() if okp else None
             if not res:
-                continue
+                return None
             obs = res[0]
             pb, err = obs.generateScaledMaskForImageForInstances_fromRequestHandler_error_(
                 obs.allInstances(), handler, None)
-            if pb is None:
-                continue
-            Quartz.CVPixelBufferLockBaseAddress(pb, 1)
-            w = Quartz.CVPixelBufferGetWidth(pb)
-            h = Quartz.CVPixelBufferGetHeight(pb)
-            bpr = Quartz.CVPixelBufferGetBytesPerRow(pb)
-            base = Quartz.CVPixelBufferGetBaseAddress(pb)
+        if pb is None:
+            return None
+        Quartz.CVPixelBufferLockBaseAddress(pb, 1)
+        w = Quartz.CVPixelBufferGetWidth(pb)
+        h = Quartz.CVPixelBufferGetHeight(pb)
+        bpr = Quartz.CVPixelBufferGetBytesPerRow(pb)
+        base = Quartz.CVPixelBufferGetBaseAddress(pb)
+        if Quartz.CVPixelBufferGetPixelFormatType(pb) == Quartz.kCVPixelFormatType_OneComponent8:
+            arr = np.frombuffer(base.as_buffer(bpr * h), np.uint8).reshape(h, bpr)[:, :w].astype(np.float32) / 255
+        else:
             arr = np.frombuffer(base.as_buffer(bpr * h), np.float32).reshape(h, bpr // 4)[:, :w].copy()
-            Quartz.CVPixelBufferUnlockBaseAddress(pb, 1)
-        if (w, h) != (W, H):
-            arr = cv2.resize(arr, (W, H), interpolation=cv2.INTER_LINEAR)
-        packed[i] = np.packbits(arr > 0.5)
-        have[i] = packed[i].any()
+        Quartz.CVPixelBufferUnlockBaseAddress(pb, 1)
+    if (w, h) != (W, H):
+        arr = cv2.resize(arr, (W, H), interpolation=cv2.INTER_LINEAR)
+    return arr > 0.5
+
+
+def _vision_range(job):
+    """Worker: frames [f0, f1) of the proxy -> rows of the shared .npy memmap. Returns which rows got a mask."""
+    norm, f0, f1, tmp, person = job
+    import objc
+    import Quartz
+    import Vision
+    from Foundation import NSData
+    packed = np.load(tmp, mmap_mode="r+")
+    have = np.zeros(f1 - f0, bool)
+    for j, frame in enumerate(read_frames(norm, start=f0)):
+        if f0 + j >= f1:
+            break
+        m = _vision_one(frame, Vision, Quartz, NSData, objc, person)
+        if m is not None and m.any():
+            packed[f0 + j] = np.packbits(m)
+            have[j] = True
+    packed.flush()
+    return f0, have
+
+
+def pick_vision_request(norm, n_frames):
+    """Person segmentation when it finds a person (real footage), else foreground-instance (the drawn test figure,
+    on which person segmentation returns empty). Decided once per clip on 3 frames, so it cannot flip mid-take."""
+    import objc
+    import Quartz
+    import Vision
+    from Foundation import NSData
+    probes = sorted({int(n_frames * q) for q in (0.1, 0.5, 0.9)})
+    hits = 0
+    for f in probes:
+        frame = next(read_frames(norm, start=f))
+        m = _vision_one(frame, Vision, Quartz, NSData, objc, True)
+        hits += int(m is not None and m.mean() > 0.01)
+    return hits >= 2
+
+
+def vision_masks(norm, n_frames, cache, workers=1):
+    """TEST ONLY. Apple Vision masks (pyobjc, no model download) -> path of a packed (n, W*H/8) .npy, written as a
+    memmap (a full song is ~260 KB a frame; nothing holds it all in RAM) by up to `workers` processes.
+    VNGeneratePersonSegmentationRequest for real people; VNGenerateForegroundInstanceMaskRequest for the drawn
+    test figure (person segmentation returns empty on it). Says nothing about SAM's edge quality."""
+    cache = Path(cache)
+    person_cache = cache.with_name(cache.name.replace("local_", "local_person_", 1))
+    for c in (cache, person_cache):
+        if c.exists():
+            print(f"local mask: cache hit {c.name}")
+            return c, ("VNGeneratePersonSegmentationRequest" if c == person_cache else
+                       "VNGenerateForegroundInstanceMaskRequest")
+    person = pick_vision_request(norm, n_frames)
+    out = person_cache if person else cache
+    name = "VNGeneratePersonSegmentationRequest" if person else "VNGenerateForegroundInstanceMaskRequest"
+    tmp = out.with_suffix(".tmp.npy")
+    np.lib.format.open_memmap(tmp, mode="w+", dtype=np.uint8, shape=(n_frames, W * H // 8)).flush()
+    k = max(1, min(workers, 4, n_frames // 30 or 1))
+    edges = [round(n_frames * j / k) for j in range(k + 1)]
+    jobs = [(str(norm), edges[j], edges[j + 1], str(tmp), person) for j in range(k)]
+    t0 = time.time()
+    if k == 1:
+        results = [_vision_range(jobs[0])]
+    else:
+        with Pool(k) as pool:
+            results = pool.map(_vision_range, jobs)
+    have = np.zeros(n_frames, bool)
+    for f0, h in results:
+        have[f0:f0 + len(h)] = h
     empty = int((~have).sum())
-    print(f"local mask: Apple Vision foreground-instance, {n_frames} frames in {time.time() - t0:.0f}s, {empty} empty")
+    print(f"local mask: Apple Vision {name}, {n_frames} frames in {time.time() - t0:.0f}s on {k} process(es), "
+          f"{empty} empty")
     if empty > n_frames * 0.5:
+        tmp.unlink(missing_ok=True)
         raise Refuse("Apple Vision found no subject on most frames")
+    packed = np.load(tmp, mmap_mode="r+")
     hold_missing(packed, have)
-    np.save(cache, packed)
-    return packed
+    packed.flush()
+    del packed
+    tmp.rename(out)
+    return out, name

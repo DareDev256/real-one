@@ -164,3 +164,36 @@ def punchin_ab_sheet(video_new, video_old, frames, path, title, crop_boxes):
     head = text_bar(rows[0].shape[1], [(title, INK, 0.55)], height=34)
     cv2.imwrite(str(path), np.vstack([head] + [x for r in rows for x in (r, sep)]), [cv2.IMWRITE_JPEG_QUALITY, 92])
     return path, stats
+
+
+def song_sheet(video, plan, path, title, world_names, cols=9):
+    """A whole song on one sheet: the middle frame of every shot, in order, read back from the encoded file,
+    labelled with its section, framing, world and time; frozen shots outlined."""
+    tw, th = 240, 427
+    shots = plan["shots"]
+    mids = [(s["start_frame"] + s["end_frame"]) // 2 for s in shots]
+    frames = grab(video, mids)
+    frozen = {f["start_frame"] for f in plan.get("freezes", [])}
+    tiles = []
+    for sh, f in zip(shots, mids):
+        t = cv2.resize(frames[f], (tw, th), interpolation=cv2.INTER_AREA)
+        hot = sh["start_frame"] in frozen
+        if hot:
+            cv2.rectangle(t, (0, 0), (tw - 1, th - 1), VERMILION, 3)
+        lab = text_bar(tw, [(f"{sh['index'] + 1}. {sh.get('role', '-')}  bar {sh['bar'] + 1}"
+                             + ("  FREEZE" if hot else ""), VERMILION if hot else INK, 0.42),
+                            (f"{sh['framing']}  {plan['start_s'] + f / 30:.1f}s", DIM, 0.4),
+                            (f"{world_names[sh['world']][:30]}", DIM, 0.4)])
+        tiles.append(np.vstack([t, lab]))
+    blank = np.full_like(tiles[0], BG)
+    rows = []
+    for r in range(0, len(tiles), cols):
+        row = tiles[r:r + cols] + [blank] * (cols - len(tiles[r:r + cols]))
+        gut = np.full((row[0].shape[0], 8, 3), BG, np.uint8)
+        rows.append(np.hstack([gut] + [x for t in row for x in (t, gut)]))
+    sep = np.full((8, rows[0].shape[1], 3), BG, np.uint8)
+    head = text_bar(rows[0].shape[1], [(title, INK, 0.55),
+                                       (f"{len(shots)} shots, {plan['n_frames']} frames; middle frame of each shot, "
+                                        f"read back from {video.name}", DIM, 0.45)], height=56)
+    cv2.imwrite(str(path), np.vstack([head] + [x for r in rows for x in (r, sep)]), [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return path

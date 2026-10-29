@@ -1,27 +1,32 @@
-"""One section of the song, end to end: analyse -> sync -> plan -> mask -> worlds -> composite -> encode -> check."""
-import json
+"""A section, or the whole song, end to end: analyse -> sync -> plan -> mask -> worlds -> composite (parallel units)
+-> concat with the master -> check -> sheets."""
+import os
+import resource
+import shutil
 import time
+from multiprocessing import TimeoutError as PoolTimeout
+from multiprocessing import get_context
 from pathlib import Path
 
-import cv2
 import numpy as np
 
 from realone import __version__
-from realone.audio import analyze, pick_section
-from realone.common import FPS, H, LOCAL_PREFIX, OUT, W, Refuse, file_md5, unpack_mask, write_json
-from realone.composite import LOOKS, Compositor, lab_stats
-from realone.encode import detect_cuts, start_encoder, verify_output
 from realone import freeze as FZ
+from realone import units as U
+from realone import worldlist as WL
+from realone.audio import analyze, pick_section
+from realone.common import FPS, LOCAL_PREFIX, OUT, Refuse, file_md5, write_json
+from realone.composite import LOOKS, is_identity
+from realone.encode import detect_cuts, verify_output
 from realone.masks import sam_cost, sam_masks_cached, vision_masks
-from realone.media import load_audio, load_audio_native, probe, read_frames, stream, write_wav
-from realone.native import normalize as normalize_take
+from realone.media import count_frames, load_audio, load_audio_native, probe, stream, write_wav
 from realone.meta_api import IMAGE_USD, USD_TO_CAD, make_client, require_key
-from realone.plan import bboxes, camera_tracks, plan_shots, shot_index
-from realone.sheets import contact_sheet, freeze_sheet, looks_sheet
+from realone.native import normalize as normalize_take
+from realone.plan import bboxes, camera_tracks, plan_range, shot_index
+from realone.sheets import contact_sheet, freeze_sheet, looks_sheet, song_sheet
 from realone.sync import SR as SYNC_SR
 from realone.sync import measure_offset, sync_clip
-from realone.worlds import (Particles, gen_world, load_plate, local_plates, muse_world_cached, plate_thumb,
-                             world_key, world_layer)
+from realone.worlds import Particles, gen_world, load_plate, local_plates, muse_world_cached, world_key, world_layer
 
 
 def parse_looks(spec):
@@ -35,6 +40,8 @@ def parse_looks(spec):
 def world_prompts(a):
     prompts = list(a.world or [])
     if a.worlds_file:
+        if not Path(a.worlds_file).exists():
+            raise Refuse(f"--worlds-file not found: {a.worlds_file}")
         prompts += [ln.strip() for ln in Path(a.worlds_file).read_text().splitlines() if ln.strip()]
     return prompts
 
@@ -45,64 +52,117 @@ def gate(a):
         if not Path(p).exists():
             raise Refuse(f"not found: {p}")
     local = a.mask == "local"
-    prompts = world_prompts(a)
-    images = list(a.world_image or [])
-    for p in images:
+    for p in list(a.world_image or []):
         if not Path(p).exists():
             raise Refuse(f"world image not found: {p}")
+    default, per = WL.load_config(a, world_prompts(a))
+    prompts = WL.prompts_in(default, per)
     if a.local_plate and not local:
         raise Refuse("--local-plate is test-only and needs --mask local")
-    if not (prompts or images or a.local_plate):
+    if not (default or per or a.local_plate):
         raise Refuse("no worlds: give --world '<prompt>' (repeatable, Muse Image), --world-image <path>, "
-                     "or --local-plate (test only)")
+                     "--worlds-json, or --local-plate (test only)")
+    if getattr(a, "workers", None) is not None and a.workers < 1:
+        raise Refuse(f"--workers must be at least 1 (got {a.workers})")
     key = None
     if a.mask == "sam":
         key = require_key("--mask sam (SAM 3.1)")
     if prompts:
         key = key or require_key("--world (Muse Image)")
-    return local, prompts, images, key
+    return local, default, per, prompts, key
+
+
+def run_units(ctx, units, workers, max_s, t0, n):
+    """Render every unit; workers > 1 uses a spawn pool (one Compositor per process). -> records, by f0."""
+    recs, done = [], 0
+    if workers == 1:
+        U.init_worker(ctx)
+        for u in units:
+            recs.append(U.render_unit(u))
+            done += u[1] - u[0]
+            _progress(recs[-1], done, n, t0, len(recs), len(units))
+            if time.time() - t0 > max_s:
+                raise Refuse(f"render passed the --max-minutes budget at {done}/{n} frames; stopped. "
+                             f"Nothing was claimed.")
+        return sorted(recs, key=lambda r: r["f0"])
+    pool = get_context("spawn").Pool(workers, initializer=U.init_worker, initargs=(ctx,))
+    try:
+        it = pool.imap_unordered(U.render_unit, units)
+        for _ in units:
+            left = max_s - (time.time() - t0)
+            try:
+                r = it.next(timeout=max(1.0, left))
+            except PoolTimeout:
+                raise Refuse(f"render passed the --max-minutes budget at {done}/{n} frames; stopped (the Mac may "
+                             f"be throttled). Nothing was claimed.") from None
+            recs.append(r)
+            done += r["f1"] - r["f0"]
+            _progress(r, done, n, t0, len(recs), len(units))
+        pool.close()
+    finally:
+        pool.terminate()
+        pool.join()
+    return sorted(recs, key=lambda r: r["f0"])
+
+
+def _progress(r, done, n, t0, k, total):
+    el = time.time() - t0
+    print(f"  unit {k}/{total}: frames {r['f0']}-{r['f1'] - 1} in {r['seconds']:.0f}s "
+          f"({(r['f1'] - r['f0']) / max(r['seconds'], 1e-6):.2f} fps, pid {r['pid']}, {r['maxrss_mb']:.0f} MB)   "
+          f"{done}/{n} frames, {el:.0f}s, {done / max(el, 1e-6):.1f} fps overall", flush=True)
 
 
 def render(a):
     t_start = time.time()
+    stages = {}
     looks = parse_looks(a.look)
-    local, prompts, images, key = gate(a)
+    local, default, per, prompts, key = gate(a)
     prefix = LOCAL_PREFIX if local else ""
     base = prefix + a.tag
     OUT.mkdir(exist_ok=True)
     clip, song = Path(a.clip), Path(a.song)
+    if getattr(a, "workers", None):
+        workers, why = a.workers, "--workers"
+    else:
+        workers, why = U.default_workers()
     print(f"Real One {__version__}: {'LOCAL TEST (never the demo)' if local else 'DEMO path (SAM 3.1)'}; "
           f"MODEL_API_KEY {'present' if key else 'absent'}")
 
     # 1. audio
+    t = time.time()
     tl = analyze(song, a.beats_per_bar)
     tl_path = write_json(OUT / f"{base}_timeline.json", tl)
-    sec = pick_section(tl, a.section)
-    sec_name = a.section.replace(":", "").replace("-", "_").replace("#", "s")
+    whole = a.section == "all"
+    secs = list(tl["sections"]) if whole else [pick_section(tl, a.section)]
+    sec_name = "all" if whole else a.section.replace(":", "").replace("-", "_").replace("#", "s")
     tag = f"{base}_{sec_name}"
     print(f"song: {tl['bpm']:.2f} BPM ({tl['grid']} grid), {tl['beats_per_bar']}/4, {len(tl['downbeats'])} bars, "
           f"sections: " + ", ".join(f"{s['role']}[{s['start_bar']}-{s['end_bar']}]" for s in tl["sections"]))
-    print(f"section '{a.section}': bars {sec['start_bar']}-{sec['end_bar']} = {sec['start_s']:.3f}-{sec['end_s']:.3f}s")
+    print(f"section '{a.section}': bars {secs[0]['start_bar']}-{secs[-1]['end_bar']} = "
+          f"{secs[0]['start_s']:.3f}-{secs[-1]['end_s']:.3f}s")
+    stages["analyze_s"] = round(time.time() - t, 1)
 
     # 2. sync (phone mic is only the clock; the render uses the master)
+    t = time.time()
     sy = sync_clip(song, clip, a.sync_near)
     write_json(OUT / f"{tag}_sync.json", sy)
     off = sy["offset_s"]
     print(f"sync: offset {sy['offset_ms']:+.1f} ms (song = clip + offset), r={sy['r_peak']:.2f}, "
           f"margin {sy['margin']:.3f}, resolved by {sy['resolved_by']}")
+    stages["sync_s"] = round(time.time() - t, 1)
 
-    # 3. plan
-    worlds_n = 3 if a.local_plate else len(prompts) + len(images)
-    freezes = FZ.resolve(tl, getattr(a, "freeze", None), getattr(a, "freeze_bars", 2), [sec])
-    plan = plan_shots(tl, sec, a.cut_bars, worlds_n, freezes=freezes)
+    # 3. plan: worlds per section, freezes, cuts
+    freezes = FZ.resolve(tl, getattr(a, "freeze", None), getattr(a, "freeze_bars", 2), secs)
+    entries, per_section, wsrc = WL.assign(secs, default, per, a.local_plate)
+    plan = plan_range(tl, secs, a.cut_bars, per_section, freezes=freezes)
     for f in plan["freezes"]:
         print(f"freeze: {f['role']} bars {f['start_bar']}-{f['end_bar']} = frames {f['start_frame']}-"
               f"{f['end_frame'] - 1} ({f['frames'] / FPS:.2f}s): the world holds, the artist keeps moving")
     s0, n = plan["start_s"], plan["n_frames"]
     dur = n / FPS
-    if dur > a.max_seconds:
+    if not whole and dur > a.max_seconds:
         raise Refuse(f"the section is {dur:.1f}s; the floor renders at most {a.max_seconds:.0f}s per run "
-                     f"(--max-seconds, or pick bars with --section bars:A-B)")
+                     f"(--max-seconds, or pick bars with --section bars:A-B, or the whole song with --section all)")
     info = probe(clip)
     vlen = float((stream(info, "video") or {}).get("duration") or info["format"]["duration"])
     c0 = s0 - off
@@ -110,7 +170,8 @@ def render(a):
         raise Refuse(f"the take does not cover the section: it needs clip time {c0:.2f}-{c0 + dur:.2f}s, "
                      f"the clip runs 0-{vlen:.2f}s")
 
-    # 4. normalize the span of the take that covers the section
+    # 4. normalize the span of the take that covers the section(s)
+    t = time.time()
     work = OUT / "work" / file_md5(clip)[:12]
     take = normalize_take(clip, c0, dur, work, keep_native=not getattr(a, "no_native", False))
     norm, n = take["proxy"], take["n"]
@@ -118,28 +179,35 @@ def render(a):
           f"{take['pix_fmt']} {take['transfer']} rotation {take['rotation']} -> proxy 1080x1920"
           + (f" + native {take['native_size'][0]}x{take['native_size'][1]} for punch-ins" if take["native"] else ""))
     mtag = file_md5(norm)[:12] + f"_{n}f"
+    stages["normalize_s"] = round(time.time() - t, 1)
 
     # 5. spend quote, then masks
+    wrap = not a.no_world_wrap
+    new_prompts = [v for kind, v in entries if kind == "prompt" and not muse_world_cached(v, wrap)]
     client = make_client(key) if key else None
     usd = 0.0
     if not local and not any((OUT / "masks").glob(f"{mtag}__*.txt")):
         usd += sam_cost(n)
-    usd += sum(IMAGE_USD for p in prompts if not muse_world_cached(p, not a.no_world_wrap))
+    usd += IMAGE_USD * len(new_prompts)
     if usd:
         print(f"spend quote: US${usd:.3f} (about CA${usd * USD_TO_CAD:.2f}) for SAM {n} frames + "
-              f"{sum(1 for p in prompts if not muse_world_cached(p, not a.no_world_wrap))} images")
+              f"{len(new_prompts)} images")
         if usd > a.max_usd:
             raise Refuse(f"quote US${usd:.2f} is over --max-usd {a.max_usd:.2f}; nothing was called")
     billed = 0.0
+    t = time.time()
     if local:
         (OUT / "masks").mkdir(parents=True, exist_ok=True)
-        masks = vision_masks(norm, n, OUT / "masks" / f"local_{mtag}.npy")
-        engine = "Apple Vision (VNGenerateForegroundInstanceMaskRequest), TEST ONLY"
+        mpath, req = vision_masks(norm, n, OUT / "masks" / f"local_{mtag}.npy", workers=min(workers, 4))
+        engine = f"Apple Vision ({req}), TEST ONLY"
     else:
-        masks, engine, b = sam_masks_cached(client, norm, mtag, n)
+        mpath, engine, b = sam_masks_cached(client, norm, mtag, n)
         billed += b
+    masks = np.load(mpath, mmap_mode="r")
+    stages["masks_s"] = round(time.time() - t, 1)
 
     # 6. camera
+    t = time.time()
     boxes = bboxes(masks)
     shot_of = shot_index(plan)
     wf = FZ.world_clock(n, plan["freezes"])  # the world clock in frames (holds inside a freeze)
@@ -147,20 +215,17 @@ def render(a):
     pushf = FZ.push_fraction(wf, plan)
 
     # 7. worlds
-    if a.local_plate:
-        worlds = [(nm, p, kind) for nm, p, kind in local_plates()]
-    else:
-        worlds = [(Path(p).stem, Path(p), a.particles) for p in images]
-        for p in prompts:
-            path, b = gen_world(client, p, wrap=not a.no_world_wrap)
+    worlds = []
+    plates_local = local_plates() if any(kind == "plate" for kind, _ in entries) else []
+    for kind, v in entries:
+        if kind == "plate":
+            worlds.append(plates_local[v])
+        elif kind == "image":
+            worlds.append((Path(v).stem, Path(v), a.particles))
+        else:
+            path, b = gen_world(client, v, wrap=wrap)
             billed += b
-            worlds.append((p[:28], path, a.particles))
-    plates = [load_plate(p) for _, p, _ in worlds]
-    wstats = []
-    for pl in plates:
-        small = cv2.resize(pl, (270, 480), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
-        wstats.append(lab_stats(small))
-    parts = [Particles(kind) for _, _, kind in worlds]
+            worlds.append((v[:28], path, a.particles))
     names = [nm for nm, _, _ in worlds]
     for sh in plan["shots"]:
         sh["world_name"] = names[sh["world"]]
@@ -168,90 +233,86 @@ def render(a):
         sh["crop_first_frame"] = [round(float(v), 1) for v in c]
     plan["sync"] = {k: sy[k] for k in ("offset_s", "r_peak", "margin", "resolved_by")}
     plan["clip_span_s"] = [round(c0, 4), round(c0 + dur, 4)]
+    plan["world_sources"] = [{"section": s.get("index", -1), "role": s["role"], "worlds": [names[i] for i in ids],
+                              "from": src} for s, ids, src in zip(secs, per_section, wsrc)]
     shots_path = write_json(OUT / f"{tag}_shots.json", plan)
 
-    # 8. master audio for exactly this section (sample-accurate slice of the master, never the phone mic)
+    # 8. master audio for exactly this span (sample-accurate slice of the master, never the phone mic)
     master, sr = load_audio_native(song)
     i0 = int(round(s0 * sr))
     wav = write_wav(work / f"master_{s0:.4f}_{n}f.wav", master[i0:i0 + int(round(dur * sr))], sr)
+    del master
+    stages["prepare_s"] = round(time.time() - t, 1)
 
-    # 9. composite + encode
-    outs = {look: OUT / f"{tag}_{look}.mp4" for look in looks}
-    encs = {look: start_encoder(outs[look], wav, a.final) for look in looks}
-    comp = Compositor(a)
-    g0 = int(round(s0 * FPS))
-    keys, plate_steps, prev_thumb, wcache = [], np.full(n, np.nan), None, None
-    bbox_out = np.zeros((n, 4))
-    despill_stats = []
+    # 9. composite in parallel units -> raw segments -> one file per look
+    seg_dir = OUT / "work" / f"segments_{tag}"
+    shutil.rmtree(seg_dir, ignore_errors=True)
+    seg_dir.mkdir(parents=True)
+    native_frames = np.array([take["native"] is not None and not is_identity(c) for c in crops], np.uint8)
+    arrays = {"crops": crops, "wf": wf, "pushf": pushf, "shot_of": shot_of, "boxes": boxes,
+              "shot_world": np.array([sh["world"] for sh in plan["shots"]]), "native_frames": native_frames}
+    for look in looks:
+        arrays[f"look_{look}"] = np.full(n, LOOKS.index(look), np.uint8)
+    np.savez(seg_dir / "arrays.npz", **arrays)
+    units = U.make_units(plan, workers, avoid=[f["end_frame"] for f in plan["freezes"]])
+    workers = min(workers, len(units))
+    ctx = {"args": {k: getattr(a, k) for k in ("erode", "feather", "wrap", "match", "grain", "despill", "push")},
+           "proxy": str(norm), "native": str(take["native"]) if take["native"] else None,
+           "native_size": take["native_size"], "ns": list(take["ns"]), "masks": str(mpath),
+           "plates": [str(p) for _, p, _ in worlds], "particles": [k for _, _, k in worlds],
+           "arrays": str(seg_dir / "arrays.npz"), "look_names": list(LOOKS), "outputs": looks,
+           "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
+           "cv_threads": max(1, (os.cpu_count() or 4) // workers)}
+    print(f"render: {n} frames, {len(plan['shots'])} shots, {len(units)} units on {workers} worker(s) ({why})")
     t0 = time.time()
-    nat_iter = read_frames(take["native"], take["native_size"], scale=False) if take["native"] else None
-    sources = {}
-    try:
-        for i, fr in enumerate(read_frames(norm)):
-            if i >= n:
-                break
-            nat = next(nat_iter) if nat_iter is not None else None
-            sh = plan["shots"][shot_of[i]]
-            wt = s0 + wf[i] / FPS  # the world clock (seconds); the artist frame `fr` runs on the real clock
-            x0, y0, cw, ch = crops[i]
-            z = W / cw
-            wkey = (sh["world"], wt, float(pushf[i]), tuple(crops[i]))  # exactly world_layer's inputs
-            if wcache is None or wcache[0] != wkey:  # a frozen clock is the same image: draw it once
-                wcache = (wkey,) + world_layer(plates[sh["world"]], parts[sh["world"]], crops[i], pushf[i], a.push, wt)
-            _, world, front, wbase = wcache
-            keys.append(world_key(world, front))
-            th = plate_thumb(wbase)
-            if prev_thumb is not None:
-                plate_steps[i] = float(np.abs(th - prev_thumb).mean())
-            prev_thumb = th
-            m = unpack_mask(masks[i])
-            frames, inf = comp.frame(fr, m, crops[i], world, front, wstats[sh["world"]], i, g0 + i, looks,
-                                     native=nat, ns=take["ns"])
-            for look in looks:
-                encs[look].stdin.write(frames[look].tobytes())
-            bx = boxes[i] if not np.isnan(boxes[i, 0]) else (0, 0, W, H)
-            bbox_out[i] = ((bx[0] - x0) * z, (bx[1] - y0) * z, (bx[2] - x0) * z, (bx[3] - y0) * z)
-            despill_stats.append(inf[looks[0]].get("pocket_px", 0))
-            src = inf[looks[0]].get("source", "proxy")
-            sources[src] = sources.get(src, 0) + 1
-            el = time.time() - t0
-            if i % 60 == 0:
-                print(f"  frame {i}/{n}  {(i + 1) / max(el, 1e-6):.2f} fps  {el:.0f}s")
-            if el > a.max_minutes * 60:
-                raise Refuse(f"render passed {a.max_minutes:.0f} min at frame {i}/{n}; stopped (the Mac may be "
-                             f"throttled). Nothing was claimed.")
-    finally:
-        if nat_iter is not None:
-            nat_iter.close()
-        for e in encs.values():
-            e.stdin.close()
-        rcs = {look: e.wait() for look, e in encs.items()}
-    if any(rcs.values()):
-        raise Refuse(f"ffmpeg encode failed: {rcs}")
+    recs = run_units(ctx, units, workers, a.max_minutes * 60 - (t0 - t_start), t0, n)
     render_s = time.time() - t0
+    t = time.time()
+    outs = {look: OUT / f"{tag}_{look}.mp4" for look in looks}
+    for look in looks:
+        U.concat_mux([r["segments"][look] for r in recs], wav, outs[look], n)
+    stages["render_s"] = round(render_s, 1)
+    stages["concat_s"] = round(time.time() - t, 1)
+    keys, plate_steps = [], np.full(n, np.nan)
+    bbox_out, pocket = np.zeros((n, 4)), np.zeros(n, int)
+    sources = {}
+    for r in recs:
+        keys += r["keys"]
+        plate_steps[r["f0"]:r["f1"]] = r["plate_steps"]
+        bbox_out[r["f0"]:r["f1"]] = r["bbox"]
+        pocket[r["f0"]:r["f1"]] = r["pocket"]
+        for k, v in r["sources"].items():
+            sources[k] = sources.get(k, 0) + v
+    if len(keys) != n:
+        raise Refuse(f"the units rendered {len(keys)} frames, the plan has {n}")
 
     # 10. checks on what was actually written
+    t = time.time()
     master22 = load_audio(song, SYNC_SR)
     report = {"version": __version__, "mode": "local test" if local else "demo", "engine": engine,
               "normalize": {k: take[k] for k in ("route", "coded", "rotation", "display", "transfer", "codec",
                                                  "pix_fmt", "fps", "native_size", "ns")},
-              "clip": str(clip), "song": str(song), "section": sec, "timeline": str(tl_path),
+              "clip": str(clip), "song": str(song), "section": plan["section"], "timeline": str(tl_path),
               "shots": str(shots_path), "render_s": round(render_s, 1), "fps": round(n / max(render_s, 1e-6), 2),
+              "workers": workers, "workers_why": why, "units": [{k: r[k] for k in ("f0", "f1", "seconds", "pid", "maxrss_mb")}
+                                            for r in recs],
               "billed_usd": round(billed, 4), "looks": {}}
     planned = [s["start_frame"] for s in plan["shots"][1:]]
     all_good = True
     for look in looks:
         rep, good = verify_output(outs[look], dur)
+        frames_out = count_frames(outs[look])
         cuts, _ = detect_cuts(outs[look])
         matched = [p for p in planned if any(abs(c - p) <= 1 for c in cuts)]
         extra = [c for c in cuts if not any(abs(c - p) <= 1 for p in planned)]  # a cut off the beat grid
         out_audio = load_audio(outs[look], SYNC_SR)
         av = measure_offset(master22, out_audio, near_s=s0)
         av_err_ms = (av["offset_s"] - s0) * 1000
-        ok = good and len(matched) == len(planned) and not extra and abs(av_err_ms) <= 1000 / FPS
+        ok = (good and frames_out == n and len(matched) == len(planned) and not extra
+              and abs(av_err_ms) <= 1000 / FPS)
         all_good &= ok
-        report["looks"][look] = {"video": str(outs[look]), "spec": rep, "spec_ok": good,
-                                 "cuts_detected": cuts, "cuts_planned": planned,
+        report["looks"][look] = {"video": str(outs[look]), "spec": rep, "spec_ok": good, "frames": frames_out,
+                                 "frames_planned": n, "cuts_detected": cuts, "cuts_planned": planned,
                                  "cuts_on_plan": f"{len(matched)}/{len(planned)}", "cuts_off_plan": extra,
                                  "audio_vs_master_error_ms": round(av_err_ms, 2), "ok": ok}
     # 10b. the freeze, proven on the world layer of every rendered frame
@@ -262,40 +323,51 @@ def render(a):
             art.append(not np.array_equal(masks[f0], masks[f1 - 1]))
             sh = plan["shots"][shot_of[f0]]
             span = max(1.0, wf[sh["end_frame"] - 1] - wf[sh["start_frame"]] + 1)
-            held = world_layer(plates[sh["world"]], parts[sh["world"]], crops[f0], pushf[f0], a.push, s0 + wf[f0] / FPS)
-            free = world_layer(plates[sh["world"]], parts[sh["world"]], crops[f0], pushf[f0] + 1 / span, a.push,
-                               s0 + (wf[f0] + 1) / FPS)
+            plate, parts = load_plate(worlds[sh["world"]][1]), Particles(worlds[sh["world"]][2])
+            held = world_layer(plate, parts, crops[f0], pushf[f0], a.push, s0 + wf[f0] / FPS)
+            free = world_layer(plate, parts, crops[f0], pushf[f0] + 1 / span, a.push, s0 + (wf[f0] + 1) / FPS)
             ctl.append(world_key(*held[:2]) != world_key(*free[:2]))
         frep, fok = FZ.checks(keys, plate_steps, wf, plan["freezes"], shot_of, art, ctl)
         report["freeze"] = frep
         all_good &= fok
+    stages["checks_s"] = round(time.time() - t, 1)
+
     # 11. contact sheets (read back from the encoded files)
-    title = (f"{'TEST_LOCAL (never the demo)  ' if local else ''}Real One {__version__}  {sec['role']}: "
-             f"bar {sec['start_bar'] + 1} to {sec['end_bar']}  {tl['bpm']:.1f} BPM  cut every {a.cut_bars} bars  "
-             f"sync {sy['offset_ms']:+.0f} ms")
+    t = time.time()
+    title = (f"{'TEST_LOCAL (never the demo)  ' if local else ''}Real One {__version__}  "
+             f"{plan['section']['role']}: bar {plan['start_bar'] + 1} to {plan['end_bar']}  {tl['bpm']:.1f} BPM  "
+             f"cut every {a.cut_bars} bars  sync {sy['offset_ms']:+.0f} ms")
     for look in looks:
         cs = OUT / f"{tag}_{look}_contact.jpg"
-        contact_sheet(outs[look], plan, bbox_out, look, cs, title, names)
+        if len(plan["shots"]) <= 12:
+            contact_sheet(outs[look], plan, bbox_out, look, cs, title, names)
+        else:
+            song_sheet(outs[look], plan, cs, title + f"   look: {look}", names)
         report["looks"][look]["contact_sheet"] = str(cs)
         for k, f in enumerate(plan["freezes"]):
             fs = OUT / f"{tag}_{look}_freeze{k + 1}.jpg"
             freeze_sheet(outs[look], plan, f, wf, fs, title + f"   look: {look}")
             report["looks"][look].setdefault("freeze_sheets", []).append(str(fs))
-    if len(looks) > 1:
+    if len(looks) > 1 and len(plan["shots"]) <= 12:
         ls = OUT / f"{prefix}looks.jpg"
         looks_sheet(outs, plan, ls, title + "   rows: " + " / ".join(looks))
         report["looks_sheet"] = str(ls)
-    report["frames_with_pocket_cut"] = int(sum(1 for v in despill_stats if v > 0))
+    stages["sheets_s"] = round(time.time() - t, 1)
+    report["frames_with_pocket_cut"] = int((pocket > 0).sum())
     report["artist_pixels_from"] = sources  # proxy | native | native+refined, frames each
-    import resource
     report["peak_rss_mb_python"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20, 1)
+    report["peak_rss_mb_worker"] = max(r["maxrss_mb"] for r in recs)
+    report["stages"] = stages
     report["total_s"] = round(time.time() - t_start, 1)
     write_json(OUT / f"{tag}_run.json", report)
+    if all_good:
+        shutil.rmtree(seg_dir, ignore_errors=True)
 
     print("\n=== result ===")
     for look, r in report["looks"].items():
-        print(f"{look:8s} {r['video']}\n         {r['spec']}\n         cuts on plan {r['cuts_on_plan']}, "
-              f"audio vs master {r['audio_vs_master_error_ms']:+.1f} ms, contact {r['contact_sheet']}")
+        print(f"{look:8s} {r['video']}\n         {r['spec']}\n         frames {r['frames']}/{n}, cuts on plan "
+              f"{r['cuts_on_plan']}, audio vs master {r['audio_vs_master_error_ms']:+.1f} ms, "
+              f"contact {r['contact_sheet']}")
     if "looks_sheet" in report:
         print(f"looks    {report['looks_sheet']}")
     for k, fr_ in enumerate(report.get("freeze", {}).get("freezes", [])):
@@ -308,10 +380,12 @@ def render(a):
     if "freeze" in report and not report["freeze"]["world_moves_outside_freezes"]:
         print(f"freeze   FAILED: the world stood still outside a freeze on frames "
               f"{report['freeze']['frames_that_should_move_but_did_not']}")
-    print(f"render   {n} frames x {len(looks)} looks in {render_s:.0f}s ({report['fps']} fps); total {report['total_s']}s")
+    print(f"render   {n} frames x {len(looks)} looks in {render_s:.0f}s ({report['fps']} fps) on {workers} worker(s); "
+          f"total {report['total_s']}s  stages {stages}")
+    print(f"memory   python {report['peak_rss_mb_python']:.0f} MB, largest worker {report['peak_rss_mb_worker']:.0f} MB")
     print(f"masks    {engine}")
     print("cost     US$0.00 (local test, no API calls)" if local and not prompts else
           f"cost     billed this run US${billed:.4f} (about CA${billed * USD_TO_CAD:.2f})")
     if not all_good:
-        raise Refuse("an output failed its checks (see above and the run json)", )
+        raise Refuse("an output failed its checks (see above and the run json)")
     return report
