@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- `scripts/first_keyed_run.sh`: the first keyed runs in two capped stages, `probe` (synthetic take, US$0.50) and
+  `real CLIP SONG` (US$1). Reads the key from `~/.secrets/meta-model-api` without printing it; refuses the gym
+  clip by real path, symlinks included (guard mutation-checked).
+- `pytest.ini`: a bare `pytest` at the root collects `tests/` only (two files shared a basename).
+
 ## 0.2.0 (2026-10-29): the engine
 Hook Freeze in the renderer, native-resolution punch-ins, the whole song in parallel, the Real Receipt number,
 collage legibility. Every 0.1.0 flag works unchanged; every new flag is optional. Keyless proven; the SAM 3.1 and

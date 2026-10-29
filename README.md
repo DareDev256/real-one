@@ -48,6 +48,9 @@ Flags: `--section hook|verse|hook:2|bars:A-B|#i|all`, `--look clean|collage|rece
 New in 0.2.0, all optional: `--freeze [SECTION]` and `--freeze-bars N`; `--worlds-json FILE` and
 `--section-world KEY=PROMPT`; `--workers N` (default CPU cores minus 2, capped by free memory);
 `--receipt-reveal SECTION` and `--receipt-counter`; `--sam-prompt PHRASE` (repeat for a union); `--no-native` (A/B).
+First keyed runs: `scripts/first_keyed_run.sh probe` (SAM 3.1 + Muse Image on the synthetic take, cap US$0.50,
+settles the API shapes still marked UNCONFIRMED), then `scripts/first_keyed_run.sh real CLIP SONG` (one hook,
+collage, Hook Freeze, receipt counter, cap US$1). The key is read from `~/.secrets/meta-model-api` and never printed.
 Every render writes `out/<tag>_<section>_<look>.mp4`, its contact sheet, `_shots.json`, `_run.json` and
 `_receipt.json`. Keyless test runs, tests and the full pipeline: `docs/implementation-notes.md`.
 
