@@ -165,16 +165,18 @@ def test_bullet_checks_fail_on_a_still_artist_a_dead_control_and_a_world_still_o
     assert not ok and rep["frames_that_should_move_but_did_not"] == [30]
 
 
-def test_camera_truck_is_continuous_and_its_zoom_hides_the_plate_edge():
-    plan, fz = _plan(120, 0, 60)
+def test_camera_truck_eases_in_and_out_moves_every_frozen_frame_and_its_zoom_hides_the_plate_edge():
+    plan, fz = _plan(240, 60, 120)
     so = shot_index(plan)
-    dx, zoom = FZ.bullet_camera(120, plan, [fz], so)
+    dx, zoom = FZ.bullet_camera(240, plan, [fz], so)
     st = np.diff(dx)
-    assert np.allclose(st, st[0]) and st[0] > 0                         # constant speed: no jump, never stops
-    assert abs((dx[59] - dx[0]) - FZ.CAM_TRAVEL * W * 59 / 60) < 1e-6   # a few percent of the width per freeze
+    assert abs((dx[119] - dx[60]) - FZ.CAM_TRAVEL * W) < 1e-6          # a few percent of the width per freeze
+    assert np.all(st[60:119] > 0)                                       # moving on every frozen frame
+    assert st[0] == 0 and st[-1] == 0 and st[59] < st[89] > st[120]     # eased: still, faster mid-freeze, still
+    assert np.abs(np.diff(st)).max() < 0.05 * st.max()                  # no velocity step anywhere
     assert np.all(W * (zoom - 1) / 2 >= np.abs(dx).max() + 16)          # the margin covers the slide + the drift
-    vel = FZ.clock_rate(120, [fz], so)
-    assert np.all(vel[0:60] == 0) and list(vel[60:63]) == list(FZ.BURST) and np.all(vel[63:] == 1)
+    vel = FZ.clock_rate(240, [fz], so)
+    assert np.all(vel[60:120] == 0) and list(vel[120:123]) == list(FZ.BURST) and np.all(vel[123:] == 1)
 
 
 def test_the_hit_punch_flash_and_grade():
@@ -201,3 +203,91 @@ def test_cli_freeze_style_defaults_to_bullet_and_a_bare_freeze_still_parses():
     assert a.freeze == ["section"] and a.freeze_style == "bullet"
     a = p.parse_args(["render", "--clip", "x.mp4", "--song", "y.wav", "--freeze", "--freeze-style", "still"])
     assert a.freeze_style == "still"
+
+
+# --------------------------------------------------------------------------- the bullet plan rule + lead-in
+
+def _cuts(plan):
+    return [sh["bar"] for sh in plan["shots"]]
+
+
+def test_bullet_plan_no_cut_on_the_freeze_downbeat_and_one_world_through_the_release(timeline):
+    from realone.audio import pick_section
+    from realone.plan import plan_range
+    lead = pick_section(timeline, "bars:11-20")
+    fzs = FZ.resolve(timeline, ["hook"], 2, [lead])
+    still = plan_range(timeline, [lead], 2, None, freezes=fzs)
+    bullet = plan_range(timeline, [lead], 2, None, freezes=fzs, freeze_style="bullet")
+    assert _cuts(still) == [11, 12, 15, 17, 19]                         # still: unchanged, the freeze on a cut
+    assert _cuts(bullet) == [11, 15, 17, 19]                            # bullet: falls from 11, hangs 12-14, resumes
+    f = bullet["freezes"][0]
+    so = shot_index(bullet)
+    assert so[f["start_frame"] - 1] == so[f["start_frame"]] == so[f["end_frame"]]
+
+
+def test_bullet_plan_on_a_section_boundary_keeps_the_previous_world_through_the_freeze(timeline):
+    from realone.plan import plan_range
+    secs = timeline["sections"]
+    fzs = FZ.resolve(timeline, ["hook"], 2, secs)
+    still = plan_range(timeline, secs, 2, None, freezes=fzs)
+    bullet = plan_range(timeline, secs, 2, None, freezes=fzs, freeze_style="bullet")
+    for sb in (12, 28):                                                 # both hooks start a section
+        assert sb in _cuts(still) and sb not in _cuts(bullet) and sb + 2 not in _cuts(bullet)
+    so = shot_index(bullet)
+    for f in bullet["freezes"]:
+        sh = bullet["shots"][so[f["start_frame"]]]
+        assert sh["start_frame"] < f["start_frame"] and sh["end_frame"] > f["end_frame"]
+        assert sh["role"] != "hook"                                     # the world running in is the one that hangs
+    hooks = [sh for sh in bullet["shots"] if sh["role"] == "hook"]
+    assert [sh["bar"] for sh in hooks] == [16, 18, 32, 34] and hooks[0]["framing"] == "wide"
+    assert {s["start_bar"] for s in secs} - {12, 28} <= set(_cuts(bullet))  # every other section boundary stays
+
+
+def test_bullet_freeze_on_the_first_frame_gets_a_lead_in_in_the_same_world(timeline):
+    from realone.audio import pick_section
+    from realone.plan import plan_range
+    hook = pick_section(timeline, "hook")
+    fzs = FZ.resolve(timeline, ["section"], 2, [hook])
+    secs, info = FZ.lead_in(timeline, [hook], fzs, offset_s=0.0, max_seconds=40)
+    assert info["bars"] == 2 and secs[0]["start_bar"] == 10 and secs[0]["role"] == "hook" and hook["start_bar"] == 12
+    plan = plan_range(timeline, secs, 2, None, freezes=fzs, freeze_style="bullet")
+    f = plan["freezes"][0]
+    assert f["start_frame"] > 0 and _cuts(plan) == [10, 16, 18]
+    so = shot_index(plan)
+    assert so[0] == so[f["start_frame"]] == so[f["end_frame"]]          # lead-in, freeze, release: one shot
+    # the take does not cover the lead-in, or the song has no room, or it would run long: as before, said why
+    s2, i2 = FZ.lead_in(timeline, [hook], fzs, offset_s=timeline["downbeats"][11], max_seconds=40)
+    assert s2[0] is hook and i2["bars"] == 0 and "take starts" in i2["why"]
+    s3, i3 = FZ.lead_in(timeline, [hook], fzs, offset_s=0.0, max_seconds=20)
+    assert i3["bars"] == 0 and "max-seconds" in i3["why"]
+    assert FZ.lead_in(timeline, [hook], [], 0.0, 40) == ([hook], None)
+
+
+def test_bullet_checks_catch_a_cut_on_the_downbeat_and_a_world_swap_through_the_freeze():
+    n = 60
+    fz = {"start_frame": 20, "end_frame": 40, "start_bar": 0, "end_bar": 1, "role": "hook"}
+    wf = FZ.world_clock(n, [fz])
+    skeys = [f"s{int(v)}" for v in wf]
+    keys = [f"k{i}" for i in range(n)]
+    cam = np.arange(n) * 2.0
+    pstep = np.full(n, 10.0)
+    pstep[21:40] = 0.0
+    steps = np.full(n, 0.1)
+    one = np.zeros(n, int)
+    rep, ok = FZ.checks_bullet(keys, skeys, pstep, cam, steps, wf, [fz], one, [True], [True], world_of=one)
+    assert ok and rep["freezes"][0]["no_cut_on_downbeat"] and rep["freezes"][0]["same_world_through"], rep
+    cut = one.copy()
+    cut[20:] = 1                                                        # a cut on the freeze downbeat
+    rep, ok = FZ.checks_bullet(keys, skeys, pstep, cam, steps, wf, [fz], cut, [True], [True], world_of=cut)
+    assert not ok and rep["freezes"][0]["no_cut_on_downbeat"] is False
+    w = one.copy()
+    w[30:] = 2                                                          # same shot, but the world swapped mid-freeze
+    rep, ok = FZ.checks_bullet(keys, skeys, pstep, cam, steps, wf, [fz], one, [True], [True], world_of=w)
+    assert not ok and rep["freezes"][0]["same_world_through"] is False
+    rel = one.copy()
+    rel[40:] = 1                                                        # a cut on the release (not a section start)
+    rep, ok = FZ.checks_bullet(keys, skeys, pstep, cam, steps, wf, [fz], rel, [True], [True], world_of=rel)
+    assert not ok and rep["freezes"][0]["same_world_through"] is False
+    rep, ok = FZ.checks_bullet(keys, skeys, pstep, cam, steps, wf, [fz], rel, [True], [True], world_of=rel,
+                               section_starts=[0, 40])
+    assert rep["freezes"][0]["same_world_through"] is True              # a section boundary there is allowed

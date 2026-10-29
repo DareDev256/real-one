@@ -256,7 +256,7 @@ class Particles:
 DEPTH_LAYERS = (
     {"name": "far", "count": 1.0, "size": 1.6, "blur": 0.8, "bright": 0.42, "speed": 0.55, "parallax": 2.5, "front": False},
     {"name": "mid", "count": 0.5, "size": 2.8, "blur": 1.1, "bright": 0.75, "speed": 1.0, "parallax": 4.5, "front": False},
-    {"name": "near", "count": 0.14, "size": 5.5, "blur": 3.2, "bright": 1.0, "speed": 1.7, "parallax": 9.0, "front": True},
+    {"name": "near", "count": 0.14, "size": 5.5, "blur": 2.2, "bright": 1.0, "speed": 1.7, "parallax": 9.0, "front": True},
 )
 DEPTH_KINDS = {  # base count (far layer), base fall speed px/s (+ down, - up), sideways px/s, motion-blur shutter
     "rain": {"n": 300, "fall": 1500.0, "side": -260.0, "shutter": 0.9},
@@ -289,7 +289,11 @@ class DepthParticles:
             n = int(round(k["n"] * L["count"]))
             self.layers_.append({**L, "n": n, "x0": r.uniform(0, W + 2 * WRAP_PAD, n),
                                  "y0": r.uniform(0, H + 2 * WRAP_PAD, n), "ph": r.uniform(0, 6.28, n),
-                                 "jit": r.uniform(0.8, 1.2, n)})
+                                 "jit": r.uniform(0.8, 1.2, n),
+                                 # per-particle length and brightness variation, widest far away (uniform dashes
+                                 # read as code-drawn)
+                                 "lenj": r.uniform(1 - 0.45 * (1 - li / 2), 1 + 0.45 * (1 - li / 2), n),
+                                 "brj": r.uniform(1 - 0.35 * (1 - li / 2), 1 + 0.25 * (1 - li / 2), n)})
         self.n = sum(L["n"] for L in self.layers_)
 
     def _vel(self, L):
@@ -335,18 +339,19 @@ class DepthParticles:
                 a = a * (0.7 + 0.3 * np.sin(wt * 1.7 + L["ph"]))
             if vel == 0:  # a frozen particle's light is no longer smeared along a streak: it reads as a bright point
                 a = a * FROZEN_GAIN
-            a = np.broadcast_to(a, x.shape)
+            a = np.broadcast_to(a, x.shape) * L["brj"]
             canvas = np.zeros((H, W, 3), np.float32)
-            th = max(1, int(round(size)))
+            th = max(1, int(round(size if self.kind != "rain" else 0.55 * size)))  # rain: thin lines, not pills
             for i in range(L["n"]):
                 c = (a[i] * colour[0], a[i] * colour[1], a[i] * colour[2])
                 x1, y1 = sx[i], sy[i]
                 if self.kind == "rain":
                     # frozen: a short crisp drop (its length a fixed 5 sizes, along the fall direction)
-                    hx, hy = (bx[i], by[i]) if vel > 0 else (0.0, 0.0)
-                    if abs(hx) + abs(hy) < 5.0 * size:
+                    lj = L["lenj"][i]
+                    hx, hy = (bx[i] * lj, by[i] * lj) if vel > 0 else (0.0, 0.0)
+                    if abs(hx) + abs(hy) < 5.0 * size * lj:
                         nrm = np.hypot(vx[i], vy[i]) + 1e-6
-                        hx, hy = vx[i] / nrm * 5.0 * size, vy[i] / nrm * 5.0 * size
+                        hx, hy = vx[i] / nrm * 5.0 * size * lj, vy[i] / nrm * 5.0 * size * lj
                     cv2.line(canvas, (int(x1), int(y1)), (int(x1 - hx), int(y1 - hy)), c, th, cv2.LINE_AA)
                 else:
                     rad = max(1, int(round(0.9 * size)))

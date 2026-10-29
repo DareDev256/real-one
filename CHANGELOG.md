@@ -24,11 +24,29 @@
   real world swap measured 5.7x and was refused; filtered, cuts measure 9.2x and up and other frames 3x or less.
   A detection on the 3 frames after a bullet freeze's downbeat is the hit (punch + flash), reported as
   `detections_on_the_freeze_hit`, not as a cut off the grid.
-- 13 tests (`tests/test_freeze_bullet.py`); mutation checks M17 to M28 on a scratch copy of the repo, each red,
+- 13 tests at first (`tests/test_freeze_bullet.py`); mutation checks M17 to M28 on a scratch copy of the repo, each red,
   each file restored byte-identical by sha256 (see docs/implementation-notes.md).
-- Not solved: a freeze still starts on a cut, so across a section boundary the world swaps on the freeze downbeat
-  and the particles that hang are not the ones the viewer saw falling (visible in a `bars:11-20` lead-in render).
-  Everything is still on the drawn test figure and code-drawn plates.
+- **Bullet plan rule: the freeze downbeat is not a cut** (`plan_range(freeze_style=)`; `still` keeps its rule).
+  The shot running into the freeze keeps its world, framing and camera through the downbeat, even on a section
+  boundary, so the drops the viewer watched fall are the ones that hang; cuts inside the freeze and on its release
+  are dropped too (unless the release is a section boundary), so the same world resumes. A freeze on the render's
+  first frame (`--section hook --freeze`, the director's call) gets a 2-bar lead-in in the same world
+  (`freeze.lead_in`); when the song, the take or `--max-seconds` cannot cover it, the render opens on the downbeat as
+  before and the run json says why (`freeze.lead_in`). New checks: no cut on the downbeat, one world from the frame
+  before the downbeat through the release. Measured on bars 11-20 (lead-in pair): bullet cuts 3/3 (bars 11, 15, 17,
+  19), frames 70-75 one world, every check OK; still unchanged (cuts 4/4, the freeze on a cut).
+- The camera truck eases in before the downbeat and out after the release (smootherstep; it still moves on every
+  frozen frame, 37.8 px over the freeze); the release plate-step check now measures against the camera's own motion.
+  Rain dashes vary in length and brightness per particle (widest far away); rain is drawn as thin lines, so near
+  drops are thin streaks, not pills.
+- Director: nothing depends on a freeze starting on a cut (it reads `cuts_on_plan`, `spec_ok` and the audio error,
+  and finds bare `--freeze` in `--help`); director tests and the `integ03` dry run pass (its fixture freezes no
+  covered hook, so the director's own freeze argv, `--section #2 --freeze`, was run too: exit 0, every check OK).
+  On the test take that hook gets no lead-in: the take starts 1.42 s after bar 10, so the run json says so and the
+  render opens on the downbeat (1 bar would fit; the rule is 2 bars or none).
+- 17 bullet tests; mutations M29 to M34 red (downbeat cut restored, release cut allowed, both new checks forced
+  true, lead-in never applied, camera ease removed).
+- Everything is still on the drawn test figure and code-drawn plates.
 - `scripts/first_keyed_run.sh`: the first keyed runs in two capped stages, `probe` (synthetic take, US$0.50) and
   `real CLIP SONG` (US$1). Reads the key from `~/.secrets/meta-model-api` without printing it; refuses the gym
   clip by real path, symlinks included (guard mutation-checked).

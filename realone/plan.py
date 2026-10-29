@@ -5,9 +5,13 @@ Framing is a virtual camera on the artist: wide (the whole frame), medium and cl
 artist's mask bounding box, smoothed over time inside each shot so the camera breathes instead of tracking).
 The framing pattern restarts at every section, so each section opens wide.
 
-Freezes (realone/freeze.py) change the cut list: a freeze always starts on a cut, and a cut strictly inside a
-freeze or on its release is dropped, so the frozen world is the one that resumes. A section boundary always stays
-a cut (a new section is a new world list).
+Freezes (realone/freeze.py) change the cut list. `still` (0.2.0): a freeze always starts on a cut, and a cut
+strictly inside a freeze or on its release is dropped, so the frozen world is the one that resumes; a section
+boundary always stays a cut (a new section is a new world list). `bullet`: the freeze downbeat is NOT a cut, even on
+a section boundary: the shot running into the freeze keeps its world, framing and camera through the downbeat, so
+the particles the viewer watched falling are the ones that hang; cuts inside the freeze and on its release are
+dropped too (the world that hung is the world that resumes), except a release that is itself a section boundary.
+The first frame of the render is always a shot start.
 """
 import numpy as np
 
@@ -19,13 +23,14 @@ TARGET_Y = {"wide": 0.5, "medium": 0.40, "close": 0.17}  # fraction down the art
 SMOOTH_S = 0.6
 
 
-def plan_shots(tl, section, cut_bars=2, n_worlds=3, pattern=PATTERN, freezes=()):
+def plan_shots(tl, section, cut_bars=2, n_worlds=3, pattern=PATTERN, freezes=(), freeze_style="still"):
     """One section -> plan dict. Every cut is a detected downbeat, rounded to the nearest output frame.
     freezes: [{"start_bar", "end_bar", ...}] from freeze.resolve()."""
-    return plan_range(tl, [section], cut_bars, [list(range(n_worlds))], pattern, freezes)
+    return plan_range(tl, [section], cut_bars, [list(range(n_worlds))], pattern, freezes, freeze_style=freeze_style)
 
 
-def plan_range(tl, sections, cut_bars=2, worlds=None, pattern=PATTERN, freezes=(), force_cuts=()):
+def plan_range(tl, sections, cut_bars=2, worlds=None, pattern=PATTERN, freezes=(), force_cuts=(),
+               freeze_style="still"):
     """A contiguous run of sections -> plan dict.
 
     worlds: per section, a list of world ids (indices into the render's world list); default [0, 1, 2] for all.
@@ -51,13 +56,18 @@ def plan_range(tl, sections, cut_bars=2, worlds=None, pattern=PATTERN, freezes=(
         return int(round((t - s0) * FPS))
 
     fz = [(f["start_bar"], f["end_bar"]) for f in freezes]
+    bullet = freeze_style == "bullet"
     cut_bars_list = []  # (bar, section position)
     for j, sec in enumerate(sections):
         bars = set(range(sec["start_bar"], sec["end_bar"], cut_bars))
-        bars |= {f0 for f0, _ in fz if sec["start_bar"] <= f0 < sec["end_bar"]}  # a freeze starts on a cut
+        if not bullet:
+            bars |= {f0 for f0, _ in fz if sec["start_bar"] <= f0 < sec["end_bar"]}  # a freeze starts on a cut
         bars |= {f for f in force_cuts if sec["start_bar"] <= f < sec["end_bar"]}
         for bar in sorted(bars):
-            if bar != sec["start_bar"] and any(f0 < bar <= f1 for f0, f1 in fz):
+            if bullet:
+                if bar != a and any(f0 <= bar < f1 or (bar == f1 and bar != sec["start_bar"]) for f0, f1 in fz):
+                    continue  # the downbeat, inside, the release: one world falls, hangs and resumes
+            elif bar != sec["start_bar"] and any(f0 < bar <= f1 for f0, f1 in fz):
                 continue  # inside the freeze or on its release: the frozen world is the one that resumes
             cut_bars_list.append((bar, j))
     starts = [frame_of(bar) for bar, _ in cut_bars_list]

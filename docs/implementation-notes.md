@@ -86,8 +86,9 @@ moving person. That reads as green screen; nothing in the frame proves that time
   Drawing also takes the camera dx (each layer slides `parallax` times the plate) and the clock rate `vel`: moving,
   a particle is a streak `speed * 0.9 / 30` long (rain 25 to 85 px); frozen, a crisp mark (rain: 5 sizes long along
   its fall direction) 1.6x brighter, since its light no longer smears along a streak.
-- `freeze.bullet_camera`: each shot that holds a freeze gets a constant-speed sideways truck on the REAL frame
-  clock, centred on the shot; the plate slides `CAM_TRAVEL` = 3.5% of the width over the freeze (37.5 px on the hook)
+- `freeze.bullet_camera`: each shot that holds a freeze gets a sideways truck on the REAL frame clock (first
+  constant speed, now eased: see the cut rule below); the plate slides `CAM_TRAVEL` = 3.5% of the width over the
+  freeze (37.5 px on the hook)
   and a constant zoom margin (1.08 on the hook) covers the slide plus the 16 px world drift. Constant speed means
   the release cannot jump. Shots without a freeze: no truck.
 - `freeze.clock_rate`: 0 on frozen frames, a 1.8 / 1.4 / 1.15 streak burst on the 3 frames after the release.
@@ -125,21 +126,46 @@ Particles chosen: rain. In the stills, rain is the only kind whose moving and fr
 dust is nearly invisible on the light acid stage. (`--particles` only applies to `--world`/`--world-image` worlds;
 the local plates carry rain, embers and dust in turn.)
 
+The cut rule (coordinator's next job, same day). The first lead-in strip showed the rain falling in the neon alley
+on frames 70-72 and an already-frozen sunset roof from 73: a freeze that starts on a cut freezes a world nobody saw
+move. `bullet` now plans differently (`plan_range(freeze_style="bullet")`):
+- the freeze downbeat is never a cut, even on a section boundary: the shot running into it keeps its world, framing
+  and camera; cuts inside the freeze and on the release are dropped too, unless the release is itself a section
+  boundary, so one world falls, hangs and resumes. The render's first frame is always a shot start;
+- `freeze.lead_in`: a freeze on the render's first frame (the director's `--section #i --freeze`) opens
+  `LEAD_IN_BARS` = 2 bars earlier inside the same section, so the lead-in is the start of the shot that freezes. When
+  the song has no 2 bars before, the take does not cover them, or the render would pass `--max-seconds`, the render
+  opens on the downbeat as before and the run json's `freeze.lead_in` says why;
+- the camera truck is now eased (smootherstep from half a freeze before the downbeat to half a freeze after the
+  release, clipped to the shot), still moving on every frozen frame (37.8 px over the freeze, peak offset 24 px,
+  zoom margin 1.08); the release plate-step check compares against the larger of the in-freeze and after-release
+  medians, since the camera moves the plate too;
+- checks: `no_cut_on_downbeat` (n/a only with no lead-in) and `same_world_through` (world id and shot constant from
+  the frame before the downbeat through the release frame).
+Measured (bars 11-20, collage, local plates): bullet cuts 3/3 (bars 11, 15, 17, 19), every check OK; still cuts
+4/4, unchanged. Strip `docs/screenshots/2026-10-29_freeze_v2_bullet_leadin_strip.jpg`, read: frames 70-72 neon
+alley with rain falling as streaks, 73 the punch and flash with the same drops now hanging, 74-75 the alley grading
+cool while they hang. Director: nothing in `realone/director/` depends on a freeze starting on a cut; its tests
+(72) and the `integ03` dry run pass. Its fixture freezes no covered hook, so the director's own argv
+(`Renderer.argv(2, 'collage', freeze=True)`: `--section #2 ... --freeze`) was rendered too: exit 0, every check OK,
+but no lead-in: the test take starts 1.42 s after bar 10 (song time 24.89 s), so `freeze.lead_in` says so and the
+render opens on the downbeat. One bar would fit (bar 11, 27.34 s); a 1-bar fallback is a one-line change if wanted.
+Cheap wins taken: per-particle dash length and brightness variation (widest on the far layer), rain drawn as thin
+lines (near drops are thin streaks, not pills).
+
 Not solved:
-- A freeze starts on a cut (0.2.0 rule, which the director relies on). Across a section boundary the world swaps on
-  the freeze downbeat (lead-in strip: neon-alley rain falling on frames 70-72, the sunset roof frozen from 73), so
-  the particles that hang are not the ones the viewer watched falling. On `--section hook` the render opens frozen,
-  so the hit lands on frame 0 with nothing before it. Next step: in `bullet`, carry the previous shot's world
-  through the freeze downbeat and cut on the release instead.
 - The parallax is a 2D slide per layer, not a true arc; the plate is one flat layer.
+- The thinner hanging dashes read a little less bold at thumbnail scale than the first version's.
 - Everything is on the drawn test figure and code-drawn plates; Muse Image worlds and SAM masks need the key.
 
-Tests (`tests/test_freeze_bullet.py`, 13). Mutation checks on a scratch copy of the repo (renders were running on
+Tests (`tests/test_freeze_bullet.py`, 17). Mutation checks on a scratch copy of the repo (renders were running on
 the live tree), each red, each file restored byte-identical by sha256:
 M17 camera truck removed; M18 `camera_moves` forced true; M19 `rendered_world_moves_in_freeze` forced true;
 M20 `state_frozen_identical` forced true; M21 particle no-jump forced true; M22 camera no-jump forced true;
 M23 clock rate not zeroed in the freeze; M24 frozen drops keep their streak; M25 flash removed; M26 grade without
-desaturation; M27 `still` given the depth particles; M28 the outside-freeze state check dropped.
+desaturation; M27 `still` given the depth particles; M28 the outside-freeze state check dropped;
+M29 a cut on the bullet freeze downbeat again; M30 a cut on the release allowed; M31 `no_cut_on_downbeat`
+forced true; M32 `same_world_through` forced true; M33 the lead-in never applied; M34 the camera ease removed.
 
 ### 2. Native-resolution punch-ins and the phone-clip routes (`realone/native.py`)
 

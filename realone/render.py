@@ -185,6 +185,13 @@ def render(a):
 
     # 3. plan: worlds per section, freezes, cuts
     freezes = FZ.resolve(tl, getattr(a, "freeze", None), getattr(a, "freeze_bars", 2), secs)
+    style = getattr(a, "freeze_style", "bullet") if freezes else "still"  # no freeze: 0.2.0 unchanged
+    lead_in = None
+    if style == "bullet":
+        secs, lead_in = FZ.lead_in(tl, secs, freezes, sy["offset_s"], None if whole else a.max_seconds)
+        if lead_in:
+            print(f"freeze lead-in: {lead_in['bars']} bars" + (f" (bars {lead_in['from_bar']}-{lead_in['freeze_bar']})"
+                                                                if lead_in["bars"] else f": none, {lead_in['why']}"))
     entries, per_section, wsrc = WL.assign(secs, default, per, a.local_plate)
     reveal_secs = []
     for spec in getattr(a, "receipt_reveal", None) or []:
@@ -192,9 +199,9 @@ def render(a):
     lo, hi = secs[0]["start_bar"], secs[-1]["end_bar"]
     reveal_bars = sorted({(max(lo, x["start_bar"]), min(hi, x["end_bar"])) for x in reveal_secs})
     plan = plan_range(tl, secs, a.cut_bars, per_section, freezes=freezes,
-                      force_cuts=[b for pair in reveal_bars for b in pair])
-    style = getattr(a, "freeze_style", "bullet") if plan["freezes"] else "still"  # no freeze: 0.2.0 unchanged
+                      force_cuts=[b for pair in reveal_bars for b in pair], freeze_style=style)
     plan["freeze_style"] = style if plan["freezes"] else None
+    plan["freeze_lead_in"] = lead_in
     for f in plan["freezes"]:
         print(f"freeze: {f['role']} bars {f['start_bar']}-{f['end_bar']} = frames {f['start_frame']}-"
               f"{f['end_frame'] - 1} ({f['frames'] / FPS:.2f}s): the world holds, the artist keeps moving"
@@ -408,9 +415,9 @@ def render(a):
         frames_out = count_frames(outs[look])
         cuts, _ = detect_cuts(outs[look])
         matched = [p for p in planned if any(abs(c - p) <= 1 for c in cuts)]
-        # the bullet freeze's hit (punch + flash decaying over the 3 frames after its downbeat, which is a planned
-        # cut) changes the whole frame like a cut does: a detection there is the hit, not a cut off the grid
-        hit = {f["start_frame"] + j for f in plan["freezes"] for j in range(1, len(FZ.FLASH) + 1)} \
+        # the bullet freeze's hit (punch + flash on its downbeat, decaying over the 3 frames after; the downbeat
+        # is not a cut in `bullet`) changes the whole frame like a cut does: a detection there is the hit
+        hit = {f["start_frame"] + j for f in plan["freezes"] for j in range(0, len(FZ.FLASH) + 1)} \
             if style == "bullet" else set()
         extra = [c for c in cuts if not any(abs(c - p) <= 1 for p in planned)
                  and c not in hit]  # a cut off the beat grid
@@ -441,13 +448,18 @@ def render(a):
             free = world_layer(plate, parts, crops[f0], pushf[f0] + 1 / span, a.push, s0 + (wf[f0] + 1) / FPS)
             ctl.append(world_key(*held[:2]) != world_key(*free[:2]))
         if style == "bullet":
+            sec_starts = sorted({sh["start_frame"] for k, sh in enumerate(plan["shots"])
+                                 if k == 0 or sh["section_pos"] != plan["shots"][k - 1]["section_pos"]})
             if len(state_keys) != n:
                 raise Refuse(f"the units recorded {len(state_keys)} world states, the plan has {n}")
             frep, fok = FZ.checks_bullet(keys, state_keys, FZ.particle_steps(states), cam_used, plate_steps, wf,
-                                         plan["freezes"], shot_of, art, ctl)
+                                         plan["freezes"], shot_of, art, ctl,
+                                         world_of=np.array([plan["shots"][k]["world"] for k in shot_of]),
+                                         section_starts=sec_starts)
         else:
             frep, fok = FZ.checks(keys, plate_steps, wf, plan["freezes"], shot_of, art, ctl)
         report["freeze"] = frep
+        report["freeze"]["lead_in"] = lead_in
         all_good &= fok
     stages["checks_s"] = round(time.time() - t, 1)
 
@@ -499,7 +511,8 @@ def render(a):
               f"no jump: {fr_['no_jump']}; artist moves: {fr_['artist_moves']}; "
               f"world would move unfrozen: {fr_['control_world_would_move']}"
               + (f"; camera moves {fr_['camera_moves']} ({fr_['camera_travel_px']} px), rendered world moves in the "
-                 f"freeze {fr_['rendered_world_moves_in_freeze']}" if "camera_moves" in fr_ else "")
+                 f"freeze {fr_['rendered_world_moves_in_freeze']}; no cut on the downbeat {fr_['no_cut_on_downbeat']}"
+                 f"; same world through {fr_['same_world_through']}" if "camera_moves" in fr_ else "")
               + f"  -> {'OK' if fr_['ok'] else 'FAILED'}")
         for look in looks:
             print(f"         sheet {report['looks'][look].get('freeze_sheets', [''])[k]}")
