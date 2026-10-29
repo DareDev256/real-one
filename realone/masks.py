@@ -12,7 +12,8 @@ import cv2
 import numpy as np
 
 from realone.common import H, OUT, W, Refuse
-from realone.meta_api import SAM_MIN_FRAMES, SAM_MODEL, SAM_USD_PER_1K_FRAMES
+from realone.meta_api import (FILES_MAX_BYTES, SAM_MAX_FRAMES, SAM_MIN_FRAMES, SAM_MODEL, SAM_USD_PER_1K_FRAMES,
+                              UPLOAD_TTL_S)
 from realone.media import read_frames
 
 SAM_PROMPTS = ["the person singing", "the person"]
@@ -26,26 +27,45 @@ def slug(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
 
 
+_UPLOADED = {}  # (path, bytes, mtime) -> file_id: a prompt union uploads the take once per run, not once per prompt
+
+
+def upload_take(client, norm):
+    """Files API upload of the normalized take, once per run, kept on Meta's side for UPLOAD_TTL_S. Refuses a file over
+    the 1 GiB cap before sending a byte (a long take at crf 12 can pass it: about 3.3 MB per second of real footage)."""
+    st = os.stat(norm)
+    key = (str(norm), st.st_size, st.st_mtime)
+    if key in _UPLOADED:
+        return _UPLOADED[key]
+    if st.st_size > FILES_MAX_BYTES:
+        raise Refuse(f"the normalized take is {st.st_size / 2**30:.2f} GiB; the Files API takes at most 1 GiB per file. "
+                     "Render a section at a time (--section), nothing was uploaded")
+    with open(norm, "rb") as f:
+        up = client.files.create(purpose="user_data", file=f,
+                                 expires_after={"anchor": "created_at", "seconds": UPLOAD_TTL_S})
+    _UPLOADED[key] = up.id
+    return up.id
+
+
 def call_sam(client, norm, prompt):
     """Upload the normalized clip (Files API, purpose=user_data), then stream sam-3.1 over /v1/responses.
     Returns (concatenated output_text, file_id).
     Shapes: docs /docs/sam/segmenting (upload once + input_video.file_id, metadata.mask_encoding).
     # UNCONFIRMED: that the Python OpenAI SDK passes `metadata` and `input_video` through unchanged;
     # the docs' own Python example uses client.responses.stream(...) with this exact input."""
-    with open(norm, "rb") as f:
-        up = client.files.create(purpose="user_data", file=f)
+    file_id = upload_take(client, norm)
     parts = []
     with client.responses.stream(
         model=SAM_MODEL,
         input=[{"type": "message", "role": "user", "content": [
             {"type": "input_text", "text": prompt},
-            {"type": "input_video", "file_id": up.id}]}],
+            {"type": "input_video", "file_id": file_id}]}],
         metadata={"mask_encoding": "one_bit"},
     ) as stream:
         for ev in stream:
             if ev.type == "response.output_text.delta":
                 parts.append(ev.delta)
-    return "".join(parts), up.id
+    return "".join(parts), file_id
 
 
 def sam_text_one(client, norm, tag, n_frames, prompt, mdir=None):
@@ -59,6 +79,9 @@ def sam_text_one(client, norm, tag, n_frames, prompt, mdir=None):
         return txt.read_text(), 0.0
     if client is None:
         raise Refuse(f"no cached SAM output for '{prompt}' on this clip and no MODEL_API_KEY")
+    if n_frames > SAM_MAX_FRAMES:
+        raise Refuse(f"{n_frames} frames is over SAM 3.1's {SAM_MAX_FRAMES} per request; render a section at a time "
+                     "(--section), nothing was called")
     print(f"SAM 3.1: segmenting '{prompt}' on {n_frames} frames ...")
     t0 = time.time()
     text, file_id = call_sam(client, norm, prompt)

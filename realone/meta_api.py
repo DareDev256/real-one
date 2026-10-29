@@ -10,6 +10,9 @@ SAM_MODEL = "sam-3.1"
 IMAGE_MODEL = "muse-image-1.0"
 SAM_USD_PER_1K_FRAMES = 0.20
 SAM_MIN_FRAMES = 50
+SAM_MAX_FRAMES = 15000  # docs: media-segmentation, about 15,000 frames per request
+FILES_MAX_BYTES = 1 << 30  # docs: file-handling, the Files API takes up to 1 GiB per file
+UPLOAD_TTL_S = 86400  # the take is the artist's face: Meta keeps it one day, not until deleted
 IMAGE_USD = 0.01
 USD_TO_CAD = 1.40  # rough, for the pre-spend quote only
 

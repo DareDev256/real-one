@@ -12,6 +12,10 @@
   Wonder, a test and the director doc) is replaced with an original line, "watch me move".
 - README: "with depth layers" and "one tap" were wrong (only the particles have depth; the reveal is the
   `--receipt-reveal` flag); Subtext Cut status now matches the director's.
+- SAM upload: the take is uploaded once per run however many `--sam-prompt` phrases (was once per phrase, about
+  600 MB each for a 3-minute real take at crf 12), with a one-day expiry on Meta's side (was kept until deleted).
+  Refuses before any byte or call when the take is over the Files API's 1 GiB or SAM's 15,000 frames. 3 tests,
+  4 mutations red.
 - Director checked against the 0.2.0 renderer (no code change needed): the dry run end to end on the test song
   (2 renders, cuts 3/3, audio 0.14 ms off) and the director's own freeze handoff (bare `--freeze` found in `--help`,
   frames 0-146 identical, the world released after).
