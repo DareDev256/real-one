@@ -264,19 +264,36 @@ class Compositor:
         self.match = {look: ColorMatch(args.match) for look in LOOKS}  # one EMA per look: renders stay independent
         self.collage = Collage()
 
-    def frame(self, src_bgr, mask_bool, crop, world, front, world_stats, idx, gframe, looks):
-        """-> ({look: uint8 frame}, info). world/front float32 0..255 (already the shot's world camera)."""
+    def frame(self, src_bgr, mask_bool, crop, world, front, world_stats, idx, gframe, looks, native=None,
+              ns=(1.0, 1.0)):
+        """-> ({look: uint8 frame}, info). world/front float32 0..255 (already the shot's world camera).
+        native: the same frame at source resolution (9:16 crop, `ns` native px per proxy px). When given, a
+        punch-in takes its pixels from it instead of upscaling the 1080 proxy, and a close shot's mask is
+        edge-refined against those pixels (realone/native.py)."""
         a = self.a
         alpha_src = refine_alpha(mask_bool, a.erode, a.feather)
         fg = src_bgr.astype(np.float32) / 255
+        info_native = None
         if is_identity(crop):
             hard, alpha, zoom = mask_bool, alpha_src, 1.0
         else:
             M, zoom = crop_matrix(crop)
-            fg = cv2.warpAffine(fg, M, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
-            alpha = cv2.warpAffine(alpha_src, M, (W, H), flags=cv2.INTER_LINEAR, borderValue=0)
-            hard = cv2.warpAffine(mask_bool.astype(np.float32), M, (W, H), flags=cv2.INTER_LINEAR, borderValue=0) > 0.5
-            fg = np.clip(fg, 0, 1)
+            if native is not None:
+                from realone.native import REFINE_MIN_UPSAMPLE, native_crop, refine_mask_in_crop
+                fg = native_crop(native, crop, ns)
+                info_native = "native"
+            else:
+                fg = np.clip(cv2.warpAffine(fg, M, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT), 0, 1)
+            if native is not None and zoom >= REFINE_MIN_UPSAMPLE:
+                # the mask edge now follows the native pixels: erode/feather in output px per native px
+                hard = refine_mask_in_crop(fg, mask_bool, crop)
+                k = max(1.0, zoom / min(ns))
+                alpha = refine_alpha(hard, max(1, int(round(a.erode * k))), a.feather * k)
+                info_native = "native+refined"
+            else:
+                alpha = cv2.warpAffine(alpha_src, M, (W, H), flags=cv2.INTER_LINEAR, borderValue=0)
+                hard = cv2.warpAffine(mask_bool.astype(np.float32), M, (W, H), flags=cv2.INTER_LINEAR,
+                                      borderValue=0) > 0.5
         wb_small = cv2.GaussianBlur(cv2.resize(world, (270, 480), interpolation=cv2.INTER_AREA), (0, 0), 4.5)
         wb = cv2.resize(wb_small, (W, H), interpolation=cv2.INTER_LINEAR) / 255
         self.est = despill_estimate(fg, hard, scale=zoom) if a.despill else None
@@ -289,7 +306,7 @@ class Compositor:
             else:
                 o, inf = self._collage(fg, alpha, hard, world, front, wb, world_stats, gframe)
             outs[look] = self.grain.apply(o, idx, a.grain if look != "collage" else a.grain * 0.8).astype(np.uint8)
-            info[look] = inf
+            info[look] = dict(inf, source=info_native or "proxy")
         return outs, info
 
     def _wrap(self, fg, alpha, wb):

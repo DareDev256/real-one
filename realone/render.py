@@ -13,7 +13,8 @@ from realone.composite import LOOKS, Compositor, lab_stats
 from realone.encode import detect_cuts, start_encoder, verify_output
 from realone import freeze as FZ
 from realone.masks import sam_cost, sam_masks_cached, vision_masks
-from realone.media import load_audio, load_audio_native, normalize_span, probe, read_frames, stream, write_wav
+from realone.media import load_audio, load_audio_native, probe, read_frames, stream, write_wav
+from realone.native import normalize as normalize_take
 from realone.meta_api import IMAGE_USD, USD_TO_CAD, make_client, require_key
 from realone.plan import bboxes, camera_tracks, plan_shots, shot_index
 from realone.sheets import contact_sheet, freeze_sheet, looks_sheet
@@ -111,7 +112,11 @@ def render(a):
 
     # 4. normalize the span of the take that covers the section
     work = OUT / "work" / file_md5(clip)[:12]
-    norm, n = normalize_span(clip, c0, dur, work)
+    take = normalize_take(clip, c0, dur, work, keep_native=not getattr(a, "no_native", False))
+    norm, n = take["proxy"], take["n"]
+    print(f"normalize: {take['route']}  source {take['coded'][0]}x{take['coded'][1]} {take['codec']} "
+          f"{take['pix_fmt']} {take['transfer']} rotation {take['rotation']} -> proxy 1080x1920"
+          + (f" + native {take['native_size'][0]}x{take['native_size'][1]} for punch-ins" if take["native"] else ""))
     mtag = file_md5(norm)[:12] + f"_{n}f"
 
     # 5. spend quote, then masks
@@ -179,10 +184,13 @@ def render(a):
     bbox_out = np.zeros((n, 4))
     despill_stats = []
     t0 = time.time()
+    nat_iter = read_frames(take["native"], take["native_size"], scale=False) if take["native"] else None
+    sources = {}
     try:
         for i, fr in enumerate(read_frames(norm)):
             if i >= n:
                 break
+            nat = next(nat_iter) if nat_iter is not None else None
             sh = plan["shots"][shot_of[i]]
             wt = s0 + wf[i] / FPS  # the world clock (seconds); the artist frame `fr` runs on the real clock
             x0, y0, cw, ch = crops[i]
@@ -197,12 +205,15 @@ def render(a):
                 plate_steps[i] = float(np.abs(th - prev_thumb).mean())
             prev_thumb = th
             m = unpack_mask(masks[i])
-            frames, inf = comp.frame(fr, m, crops[i], world, front, wstats[sh["world"]], i, g0 + i, looks)
+            frames, inf = comp.frame(fr, m, crops[i], world, front, wstats[sh["world"]], i, g0 + i, looks,
+                                     native=nat, ns=take["ns"])
             for look in looks:
                 encs[look].stdin.write(frames[look].tobytes())
             bx = boxes[i] if not np.isnan(boxes[i, 0]) else (0, 0, W, H)
             bbox_out[i] = ((bx[0] - x0) * z, (bx[1] - y0) * z, (bx[2] - x0) * z, (bx[3] - y0) * z)
             despill_stats.append(inf[looks[0]].get("pocket_px", 0))
+            src = inf[looks[0]].get("source", "proxy")
+            sources[src] = sources.get(src, 0) + 1
             el = time.time() - t0
             if i % 60 == 0:
                 print(f"  frame {i}/{n}  {(i + 1) / max(el, 1e-6):.2f} fps  {el:.0f}s")
@@ -210,6 +221,8 @@ def render(a):
                 raise Refuse(f"render passed {a.max_minutes:.0f} min at frame {i}/{n}; stopped (the Mac may be "
                              f"throttled). Nothing was claimed.")
     finally:
+        if nat_iter is not None:
+            nat_iter.close()
         for e in encs.values():
             e.stdin.close()
         rcs = {look: e.wait() for look, e in encs.items()}
@@ -220,6 +233,8 @@ def render(a):
     # 10. checks on what was actually written
     master22 = load_audio(song, SYNC_SR)
     report = {"version": __version__, "mode": "local test" if local else "demo", "engine": engine,
+              "normalize": {k: take[k] for k in ("route", "coded", "rotation", "display", "transfer", "codec",
+                                                 "pix_fmt", "fps", "native_size", "ns")},
               "clip": str(clip), "song": str(song), "section": sec, "timeline": str(tl_path),
               "shots": str(shots_path), "render_s": round(render_s, 1), "fps": round(n / max(render_s, 1e-6), 2),
               "billed_usd": round(billed, 4), "looks": {}}
@@ -271,6 +286,9 @@ def render(a):
         looks_sheet(outs, plan, ls, title + "   rows: " + " / ".join(looks))
         report["looks_sheet"] = str(ls)
     report["frames_with_pocket_cut"] = int(sum(1 for v in despill_stats if v > 0))
+    report["artist_pixels_from"] = sources  # proxy | native | native+refined, frames each
+    import resource
+    report["peak_rss_mb_python"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20, 1)
     report["total_s"] = round(time.time() - t_start, 1)
     write_json(OUT / f"{tag}_run.json", report)
 

@@ -46,6 +46,8 @@ def build_parser():
                         "--freeze-bars while the artist keeps moving. Bare --freeze = the rendered section; or name "
                         "one: hook (every hook in range), hook:2, #3, bars:A-B. Repeatable.")
     r.add_argument("--freeze-bars", type=int, default=2, metavar="N", help="length of each freeze in bars (default 2)")
+    r.add_argument("--no-native", action="store_true",
+                   help="A/B only: punch-ins upscale the 1080 proxy (the 0.1.0 path) even when the take is bigger")
 
     an = sub.add_parser("analyze", help="beat grid, downbeats and sections of the master -> timeline json")
     an.add_argument("--song", required=True)

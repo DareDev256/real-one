@@ -126,3 +126,41 @@ def freeze_sheet(video, plan, freeze, wf, path, title):
     sheet = np.vstack([head, body, np.full((8, body.shape[1], 3), BG, np.uint8)])
     cv2.imwrite(str(path), sheet, [cv2.IMWRITE_JPEG_QUALITY, 90])
     return path
+
+
+def receipt_artist_region(frame, erode=9):
+    """In the receipt look only the filmed artist has colour: saturated pixels, eroded away from the matte."""
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    m = (hsv[..., 1] > 40).astype(np.uint8)
+    return cv2.erode(m, np.ones((2 * erode + 1, 2 * erode + 1), np.uint8)) > 0
+
+
+def laplacian_var(frame, region):
+    g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    return float(cv2.Laplacian(g, cv2.CV_32F)[region].var())
+
+
+def punchin_ab_sheet(video_new, video_old, frames, path, title, crop_boxes):
+    """Native punch-in vs the 0.1.0 upscaled proxy, same frames read back from both encodes: full frame and a
+    1:1 crop each, with the Laplacian variance of the artist (receipt look: the coloured pixels)."""
+    a, b = grab(video_new, frames), grab(video_old, frames)
+    rows, stats = [], []
+    for f, (x0, y0, x1, y1) in zip(frames, crop_boxes):
+        reg = receipt_artist_region(a[f]) & receipt_artist_region(b[f])
+        va, vb = laplacian_var(a[f], reg), laplacian_var(b[f], reg)
+        stats.append((f, va, vb))
+        tiles = []
+        for img, lab, v in ((b[f], "0.1.0: proxy upscaled", vb), (a[f], "0.2.0: native 4K", va)):
+            full = cv2.resize(img, (270, 480), interpolation=cv2.INTER_AREA)
+            cv2.rectangle(full, (x0 // 4, y0 // 4), (x1 // 4, y1 // 4), VERMILION, 1)
+            crop = cv2.resize(img[y0:y1, x0:x1], (480, 480), interpolation=cv2.INTER_NEAREST)
+            bar = text_bar(270 + 8 + 480, [(f"{lab}   frame {f}", INK, 0.45),
+                                           (f"Laplacian variance of the artist: {v:.1f}   (1:1 crop shown 1.5x, "
+                                            f"nearest neighbour)", DIM, 0.42)])
+            tiles.append(np.vstack([np.hstack([full, np.full((480, 8, 3), BG, np.uint8), crop]), bar]))
+        gut = np.full((tiles[0].shape[0], 8, 3), BG, np.uint8)
+        rows.append(np.hstack([gut, tiles[0], gut, tiles[1], gut]))
+    sep = np.full((8, rows[0].shape[1], 3), BG, np.uint8)
+    head = text_bar(rows[0].shape[1], [(title, INK, 0.55)], height=34)
+    cv2.imwrite(str(path), np.vstack([head] + [x for r in rows for x in (r, sep)]), [cv2.IMWRITE_JPEG_QUALITY, 92])
+    return path, stats

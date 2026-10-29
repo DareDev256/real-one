@@ -89,14 +89,19 @@ def count_frames(path):
     out = subprocess.run(["ffprobe", "-v", "error", "-count_packets", "-select_streams", "v:0", "-show_entries",
                           "stream=nb_read_packets", "-of", "csv=p=0", str(path)],
                          capture_output=True, text=True, check=True).stdout.strip()
-    return int(out or 0)
+    return int(out.split(",")[0] or 0)  # phone files can carry side data that adds csv fields ("30,")
 
 
-def read_frames(path, size=(W, H)):
-    """Yield BGR uint8 frames via an ffmpeg raw pipe (optionally scaled to `size`)."""
+def read_frames(path, size=(W, H), start=0, scale=True):
+    """Yield BGR uint8 frames via an ffmpeg raw pipe, from frame `start` (an accurate seek: ffmpeg decodes from the
+    keyframe before and drops every frame stamped earlier than half a frame before `start`; tests pin that the
+    first frame read is exactly frame `start`). scale=False reads the file at its own `size` (a native file)."""
     w, h = size
-    cmd = ["ffmpeg", "-v", "fatal", "-i", str(path)]
-    if (w, h) != (W, H):
+    cmd = ["ffmpeg", "-v", "fatal"]
+    if start > 0:
+        cmd += ["-ss", f"{(start - 0.5) / FPS:.6f}"]
+    cmd += ["-i", str(path)]
+    if scale and (w, h) != (W, H):
         cmd += ["-vf", f"scale={w}:{h}:flags=area"]
     cmd += ["-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE)

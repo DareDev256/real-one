@@ -74,6 +74,77 @@ Mutation checks (2026-10-29, run on a scratch copy of the repo so the director's
 mutated file; each restored byte-identical by sha256): M9 the freeze hold removed from `world_clock` (2 tests
 red); M10 the clock snapping back to real time after the release (2 tests red).
 
+### 2. Native-resolution punch-ins and the phone-clip routes (`realone/native.py`)
+
+```
+.venv/bin/python spike/make_test_clip.py footage/perf_4k.mp4 --song footage/test_song.wav --offset 29.0 --secs 9 \
+    --size 2160x3840
+.venv/bin/python -m realone render --clip footage/perf_4k.mp4 --song footage/test_song.wav --section bars:12-15 \
+    --cut-bars 1 --look receipt --mask local --local-plate --sync-near 29 --tag eng_4k_native     # add --no-native for A/B
+```
+
+The take is normalized once into two files from ONE ffmpeg filter graph (`split`), so they cannot drift a frame
+apart: the 1080x1920 proxy (what the segmenter sees; mask index == output frame index, as before) and the 9:16
+centre crop at the source's own resolution (2160x3840 from portrait 4K, 1214x2160 from landscape 4K). Wide shots
+use the proxy. Medium and close shots cut their pixels from the native frame (`native_crop`: the crop in native
+coordinates, a low-pass only when going down in size, cubic resample). Only the output is 1080x1920. Workers
+stream both files frame by frame; nothing holds the clip in memory. Intermediates use a 1 s GOP so a worker that
+starts mid-file decodes at most 29 extra frames. `--no-native` forces the 0.1.0 upscale (A/B only).
+
+Routes (`normalize`, printed and kept in the run json under `normalize`):
+- `sdr`: an SDR take no wider than about the output: the 0.1.0 path, byte for byte, so cached masks keep their
+  keys.
+- `sdr+native`: an SDR take with at least 5% more pixels across than the output.
+- `hdr-vt`, `hdr-vt+native`: HLG (arib-std-b67) or PQ (smpte2084). This ffmpeg (9.0.1) has no zscale, so the
+  tone map goes through VideoToolbox: `-hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld` and
+  `scale_vt=...:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709,hwdownload,format=p010le,
+  format=yuv420p`, then the rotation by hand, then `fps=30` (iPhone clips are 59.94). Facts from the coordinator's
+  measurement on James's own iPhone clip (HEVC 10-bit HLG, 3840x2160, rotation -90): the hwaccel path does not
+  autorotate; rotation -90 needs transpose=1 (transpose=2 is upside down); the VT tone map has visibly better
+  contrast and skin than the plain software path.
+- Found while testing: `media.probe` never asked ffprobe for side data, so the rotation read as 0 and an iPhone
+  clip would have come out sideways. `native.probe_video` asks for the display matrix. Also found: the iPhone
+  clip's "ambient viewing environment" side data rides into the output and makes `ffprobe -of csv` print `30,`,
+  which crashed `count_frames`; it now reads the first field. Checked on 1 s of the real clip (local only, never
+  committed, intermediates deleted): route `hdr-vt+native`, 2160x3840 native, 30 frames, BT.709, upright.
+
+Masks stay at proxy resolution. In a close shot (mask blown up 1.6x or more) the mask is edge-refined against
+the native pixels: a colour guided filter (He et al., the fast form: coefficients solved at half resolution,
+window radius 2 there, eps 1e-4, applied to the full-resolution guide) in a band around the upsampled edge, then
+alpha is eroded/feathered in output pixels per native pixel. Measured against the 4K truth on 6 crops of the test
+figure: close 0.55% -> 0.38% of the artist's area wrong at the edge; medium 0.61% with or without it, so medium
+keeps the plain upsample (a sweep of 36 settings, pre-blurred guides included, found no medium gain).
+
+Measured (2026-10-29, load average 4 to 6):
+- Encoded output, read back, Laplacian variance of the artist (receipt look, so the artist's pixels are not graded;
+  region = the coloured pixels in both files): close 26.5 -> 860.6 (32x) over 73 frames; medium 28.7 -> 59.7
+  (2.1x); wide 42.7 -> 42.7 (unchanged, as it should be).
+- Honest split of that number: the synthetic 4K figure carries detail that only exists at native resolution (a
+  2 px fabric weave and per-pixel sensor noise), which the proxy averages to flat; that is most of the 32x. With
+  weave and noise off (tests), the drawn edges alone measure 39.0 -> 53.0 near the edges (1.36x). Real phone 4K
+  has real texture (skin, fabric, hair), so the true gain sits between those, closer to whatever the texture is.
+- Sheet `out/TEST_LOCAL_eng_4k_punchin_ab.jpg` (same frames from both encodes, 1:1 crops), read: on the face the
+  old path's eyes, mouth and jaw are soft and the native ones crisp, with skin noise visible; on the jacket the old
+  path is flat red and the native one keeps the weave and a crisper edge.
+- Speed: 220 frames, one look, 75 s native vs 69 s old (native crop 20 ms + refinement 45 ms on close frames).
+  `/usr/bin/time -l` peak (python plus its ffmpeg children) 2.06 GB native, 3.05 GB old (the old route decodes the
+  4K source inside ffmpeg's scaler); the python process alone peaked at 1.12 GB on the native run (run json
+  `peak_rss_mb_python`; it includes librosa's analysis of the whole song).
+
+`spike/make_test_clip.py --size WxH`: the same figure drawn at native density through a small drawing wrapper
+(at 1080 it passes the integers straight through: the 1080 clips stay byte-identical, checked by hash), the room
+extended to the sides for landscape, the blur in native pixels (a 4K sensor resolves a sharper edge), plus the
+weave and sensor noise (`WEAVE_AMP`, `NOISE_SIGMA`).
+
+Tests (`tests/test_native.py`, 8): close shot detail (texture case > 20x) and edges only (> 1.2x near the drawn
+edges); the refined mask is closer to the 4K truth; a dot lands on the same output pixel through the native and
+proxy paths (portrait 2x, and landscape where x and y scales differ by 0.1%); a seek returns exactly the frame
+asked for (B-frames, 1 s GOP; frames 1, 29, 30, 31, 47, 74); a synthetic 10-bit HLG HEVC take at 59.94 fps with
+rotation -90 comes out upright (a red block in the coded bottom-left ends top-left), BT.709, yuv420p, 30 frames at
+30 fps (skipped without VideoToolbox); a 1440x2560 SDR take takes the native route and proxy frame k matches native
+frame k, not its neighbour; a 1080x1920 take keeps the 0.1.0 route.
+Mutation M11 (2026-10-29, scratch copy): the compositor ignores the native frame: 2 tests red; restored.
+
 ## 0.1.0: the floor (`realone/`, `python -m realone render`)
 
 One section of the song, end to end: a phone take plus the master track in, a finished 9:16 clip out, cuts on
