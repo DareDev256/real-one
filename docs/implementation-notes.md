@@ -517,8 +517,7 @@ call, refuses over `--max-usd` (default US$1.00), and refuses without `MODEL_API
 
 Question the spike answers: does a SAM 3.1 cut-out of a phone clip, on a generated world, survive a phone screen,
 or does it read as cheap green screen? Verdict is James's, on a phone, from `out/freeze_test.mp4` and
-`out/contact.jpg`. If the edge fails, the plan's floor is plain Real One and the honest pivot is Cartographer
-(round6-fable.md).
+`out/contact.jpg`. If the edge fails, the floor is plain Real One in the cut-out collage look.
 
 ### Run it
 

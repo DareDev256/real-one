@@ -72,13 +72,13 @@ own files: `out/<p>director_<tag>_r<n>_s<section>_<look>.mp4` plus its `_run.jso
    refuses. The fix is an edit to the treatment file and `--treatment <file>`, which re-validates and re-guards with
    no model call. Never a silent pass, never an invented prompt.
 8. **No people in a world.** A semantic rule rejects person words in any world_prompt: the filmed artist is the only
-   person in frame (no generated faces, the backlash in round6-signal-reddit.md signal 11).
-9. **Freeze** is true on exactly one hook. The renderer (0.1.0) has no freeze flag yet; the director reads
-   `python -m realone render --help` at runtime and uses a plain on/off freeze flag if one appears (another agent is
-   adding it). A flag whose value is optional is passed bare; one that requires a value is not guessed at, and the
-   log says freeze was planned, not rendered. At 11:30 the renderer agent's uncommitted `--freeze [SECTION]` (bare =
-   the rendered section, `--freeze-bars` default 2) was detected as `--freeze`, which is exactly what the director
-   passes for the frozen hook.
+   person in frame (no generated faces: fans call AI-faced videos "lazy and cheap", r/eurovision, Mar 2026,
+   reddit.com/comments/1rr2z9a).
+9. **Freeze** is true on exactly one hook. The director reads `python -m realone render --help` at
+   runtime and passes the freeze flag it finds there. A flag whose value is optional is passed bare; one that requires
+   a value is not guessed at, and the log says freeze was planned, not rendered. The 0.2.0 renderer's
+   `--freeze [SECTION]` (bare = the rendered section, `--freeze-bars` default 2) is detected as `--freeze`, which is
+   what the director passes for the frozen hook.
 10. **Lyrics.** The artist's sheet outranks the transcript, section by section; the transcript is kept beside it as
     `heard`. The sheet is in song order (the brief's rule): `[#N]` binds a block, other bracket lines such as
     `[Verse 1]` are labels only (the analyzer's non-hook role names are cosmetic, e.g. the test song's second verse
@@ -180,7 +180,7 @@ removed from the CLI; M7 guard re-ask allowed to change unflagged sections; M8 n
 
 ## Not built, on purpose
 
-- The "literal" toggle from round6-fable.md (render the wristwatch version for laughs, side by side). Cheap to add on
+- A "literal" toggle (render the wristwatch version for laughs, side by side). Cheap to add on
   top of the guard's first-pass prompts, which are already kept in the treatment file.
 - More than one take per run (the renderer takes one `--clip`).
 - The Baseten / Spark Open backend.

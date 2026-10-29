@@ -194,7 +194,7 @@ def parse_json(text):
 
 
 # People words: Real One's rule is that the artist, filmed, is the only person in frame. A generated face is the
-# backlash the brief is built against (round6-signal-reddit.md signal 11), and a second body confuses the cut-out.
+# backlash the brief is built against (r/eurovision, Mar 2026), and a second body confuses the cut-out.
 _PEOPLE = re.compile(r"\b(man|men|woman|women|person|people|crowd|girl|girls|boy|boys|guy|guys|lady|ladies|kid|kids|"
                      r"child|children|dancer|dancers|figure|figures|someone|somebody|stranger|strangers|"
                      r"couple|lover|lovers|singer|rapper|artist|audience|family|friends?)\b", re.I)
