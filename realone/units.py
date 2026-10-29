@@ -24,7 +24,7 @@ import cv2
 import numpy as np
 
 from realone.common import FPS, H, W, unpack_mask
-from realone.composite import Compositor, lab_stats
+from realone.composite import INK, Compositor, lab_stats
 from realone.media import read_frames
 from realone.worlds import Particles, load_plate, plate_thumb, world_key, world_layer
 
@@ -141,6 +141,7 @@ class Ctx:
         self.look_names = list(d["look_names"])
         self.native_frames = arr["native_frames"]  # per frame: 1 if the punch-in uses the native file
         self.counter = arr["counter"] if "counter" in arr.files else np.zeros(len(self.wf), np.uint8)
+        self.shot_ink = arr["shot_ink"] if "shot_ink" in arr.files else np.zeros(len(self.shot_world), np.uint8)
 
 
 def init_worker(d):
@@ -190,7 +191,8 @@ def render_unit(u):
             looks = sorted(set(per_out.values()))
             use_nat = nf if c.native_frames[i] else None
             frames, inf = c.comp.frame(fr, m, crop, world, front, c.wstats[sh_world], i, g0 + i, looks,
-                                       native=use_nat, ns=tuple(d["ns"]), counter=int(c.counter[i]))
+                                       native=use_nat, ns=tuple(d["ns"]), counter=int(c.counter[i]),
+                                       ink=INK if c.shot_ink[c.shot_of[i]] else None)
             if i < f0:
                 continue  # warm-up: the colour-match EMA only
             j = i - f0

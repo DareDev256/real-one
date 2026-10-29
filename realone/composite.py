@@ -12,6 +12,24 @@ from realone.common import FPS, H, W
 LOOKS = ("clean", "collage", "receipt")
 BOIL_FPS = 12
 PAPER = np.array([0.955, 0.955, 0.945], np.float32)  # BGR, near-white paper (not cream)
+INK = np.array([0.065, 0.065, 0.075], np.float32)    # BGR, the dark outline used on a light world
+LIGHT_LUMA = 0.72    # a world pixel this bright (BT.709 luma, 0..1) swallows the near-white paper border
+LIGHT_SHARE = 0.35   # switch the border to a dark outline when this share of the band under it is that bright
+
+
+def border_ink(world, hard, border_px=12):
+    """Collage legibility: is the world under the paper border light enough to swallow it?
+    world (H, W, 3) float 0..255, hard (H, W) bool artist mask. The band is where the border sits (outside the
+    artist, out to the border's widest jag, 1.6x its width). -> ("dark" | "white", share of the band brighter than
+    LIGHT_LUMA). A share, not a mean: the acid stage's rings average to mid grey and still swallow half the border."""
+    d = cv2.distanceTransform((~hard).astype(np.uint8), cv2.DIST_L2, 3)
+    band = (d > 0) & (d <= 1.6 * border_px)
+    if not band.any():
+        return "white", 0.0
+    px = world[band].astype(np.float32) / 255
+    lum = px[:, 0] * 0.0722 + px[:, 1] * 0.7152 + px[:, 2] * 0.2126
+    share = float((lum > LIGHT_LUMA).mean())
+    return ("dark" if share > LIGHT_SHARE else "white"), share
 
 
 def smoothstep(e0, e1, x):
@@ -239,13 +257,14 @@ class Collage:
         fib = r.standard_normal((H // 3, W // 3)).astype(np.float32)
         fib = cv2.resize(cv2.GaussianBlur(fib, (0, 0), sigmaX=0.6, sigmaY=3.0), (W, H), interpolation=cv2.INTER_LINEAR)
         fine = r.standard_normal((H, W)).astype(np.float32)
-        self.paper = (1.0 + 0.018 * fib / (fib.std() + 1e-6) + 0.012 * fine)[..., None] * PAPER
+        self.tex = (1.0 + 0.018 * fib / (fib.std() + 1e-6) + 0.012 * fine)[..., None]  # paper grain, any colour
+        self.paper = self.tex * PAPER
         jx, jy = r.integers(-3, 4, 2)
         self.offset = (self.shadow[0] + int(jx), self.shadow[1] + int(jy))
         self._k = k
 
-    def layers(self, hard, k):
-        """-> (paper_alpha, shadow_alpha, paper_rgb 0..1) for boil step k."""
+    def layers(self, hard, k, ink=None):
+        """-> (paper_alpha, shadow_alpha, paper_rgb 0..1) for boil step k; ink: the border colour (default paper)."""
         self._step(k)
         d_out = cv2.distanceTransform((~hard).astype(np.uint8), cv2.DIST_L2, 3)
         pa = np.clip(self.radius - d_out + 0.5, 0, 1)
@@ -254,7 +273,7 @@ class Collage:
         M = np.float32([[1, 0, sx], [0, 1, sy]])
         sa = cv2.warpAffine(pa, M, (W, H), borderValue=0)
         sa = cv2.GaussianBlur(sa, (0, 0), 1.2) * self.dark
-        return pa, sa, self.paper
+        return pa, sa, (self.paper if ink is None else self.tex * ink)
 
 
 class Compositor:
@@ -266,13 +285,14 @@ class Compositor:
         self.counter = None
 
     def frame(self, src_bgr, mask_bool, crop, world, front, world_stats, idx, gframe, looks, native=None,
-              ns=(1.0, 1.0), counter=False):
+              ns=(1.0, 1.0), counter=False, ink=None):
         """-> ({look: uint8 frame}, info). world/front float32 0..255 (already the shot's world camera).
         native: the same frame at source resolution (9:16 crop, `ns` native px per proxy px). When given, a
         punch-in takes its pixels from it instead of upscaling the 1080 proxy, and a close shot's mask is
         edge-refined against those pixels (realone/native.py).
         counter: draw the Real Receipt counter on the receipt look: 0/False no, 1/True top left, 2 top right,
         3 lower left (receipt.PLACES).
+        ink: the collage border colour: None = near-white paper; INK on a light world (see border_ink).
         info[look]["filmed"]: the share of the frame that is the artist's filmed pixels (the artist mask in output
         space minus any pocket the despill cut open), the same for every look."""
         a = self.a
@@ -311,7 +331,7 @@ class Compositor:
             elif look == "receipt":
                 o, inf = self._receipt(fg, alpha, hard, world, front, wb)
             else:
-                o, inf = self._collage(fg, alpha, hard, world, front, wb, world_stats, gframe)
+                o, inf = self._collage(fg, alpha, hard, world, front, wb, world_stats, gframe, ink)
             inf = dict(inf, source=info_native or "proxy", filmed=filmed)
             if counter and look == "receipt":
                 if self.counter is None:
@@ -343,14 +363,14 @@ class Compositor:
         out = fgd * al[..., None] * 255 + wg * (1 - al[..., None])
         return out + fgr * (1 - al[..., None]), st  # grey particles stay off the filmed artist
 
-    def _collage(self, fg, alpha, hard, world, front, wb, wstats, gframe):
+    def _collage(self, fg, alpha, hard, world, front, wb, wstats, gframe, ink=None):
         k = boil_step(gframe)
-        pa, sa, paper = self.collage.layers(hard, k)
-        fgd, cut, st = despill_apply(fg, self.est, PAPER)
+        pa, sa, paper = self.collage.layers(hard, k, ink)
+        fgd, cut, st = despill_apply(fg, self.est, PAPER if ink is None else ink)
         al = refine_alpha(hard, 1, 0.8) * (1 - cut)  # a crisper scissor edge than the clean look
         f = self.match["collage"](fgd, al, wstats)
         base = world * (1 - sa[..., None])
         base = base * (1 - pa[..., None]) + paper * 255 * pa[..., None]
         out = f * al[..., None] * 255 + base * (1 - al[..., None])
-        st = dict(st, boil_step=int(k))
+        st = dict(st, boil_step=int(k), ink="white" if ink is None else "dark")
         return out + front * 0.6 * (1 - pa[..., None]), st

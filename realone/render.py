@@ -16,8 +16,8 @@ from realone import receipt as R
 from realone import units as U
 from realone import worldlist as WL
 from realone.audio import analyze, pick_section
-from realone.common import FPS, LOCAL_PREFIX, OUT, Refuse, file_md5, write_json
-from realone.composite import LOOKS, is_identity
+from realone.common import FPS, LOCAL_PREFIX, OUT, Refuse, file_md5, unpack_mask, write_json
+from realone.composite import LIGHT_SHARE, LOOKS, border_ink, crop_matrix, is_identity
 from realone.encode import detect_cuts, verify_output
 from realone.masks import sam_cost, sam_masks_cached, vision_masks
 from realone.media import count_frames, load_audio, load_audio_native, probe, stream, write_wav
@@ -111,6 +111,35 @@ def _progress(r, done, n, t0, k, total):
     print(f"  unit {k}/{total}: frames {r['f0']}-{r['f1'] - 1} in {r['seconds']:.0f}s "
           f"({(r['f1'] - r['f0']) / max(r['seconds'], 1e-6):.2f} fps, pid {r['pid']}, {r['maxrss_mb']:.0f} MB)   "
           f"{done}/{n} frames, {el:.0f}s, {done / max(el, 1e-6):.1f} fps overall", flush=True)
+
+
+def collage_inks(plan, worlds, masks, crops, wf, pushf, s0, push):
+    """Collage legibility, decided once per shot (so the border never flickers): on the shot's first, middle and
+    last frame, the share of the band under the paper border that is brighter than LIGHT_LUMA; over LIGHT_SHARE on
+    average -> a dark outline for the whole shot. -> uint8 per shot (1 = dark), and the shots get
+    `collage_ink` and `border_light_share`."""
+    import cv2
+    out = np.zeros(len(plan["shots"]), np.uint8)
+    plates = {}
+    for k, sh in enumerate(plan["shots"]):
+        f0, f1 = sh["start_frame"], sh["end_frame"]
+        wid = sh["world"]
+        if wid not in plates:
+            plates[wid] = (load_plate(worlds[wid][1]), Particles(worlds[wid][2]))
+        plate, parts = plates[wid]
+        shares = []
+        for i in sorted({f0, (f0 + f1) // 2, f1 - 1}):
+            world, _, _ = world_layer(plate, parts, crops[i], pushf[i], push, s0 + wf[i] / FPS)
+            m = unpack_mask(masks[i])
+            if not is_identity(crops[i]):
+                M, _ = crop_matrix(crops[i])
+                m = cv2.warpAffine(m.astype(np.float32), M, (m.shape[1], m.shape[0]), flags=cv2.INTER_LINEAR) > 0.5
+            shares.append(border_ink(world, m)[1])
+        share = float(np.mean(shares))
+        sh["border_light_share"] = round(share, 3)
+        sh["collage_ink"] = "dark" if share > LIGHT_SHARE else "white"
+        out[k] = sh["collage_ink"] == "dark"
+    return out
 
 
 def render(a):
@@ -292,7 +321,11 @@ def render(a):
             sh["counter_place"] = R.place_for(outb)
             counter[f0:f1] = np.where(on_receipt[f0:f1], sh["counter_place"], 0)
     arrays["counter"] = counter
-    write_json(shots_path, plan)  # again: now with each shot's counter place
+    shot_ink = np.zeros(len(plan["shots"]), np.uint8)
+    if any(LOOKS[int(v)] == "collage" for look in looks for v in np.unique(arrays[f"look_{look}"])):
+        shot_ink = collage_inks(plan, worlds, masks, crops, wf, pushf, s0, a.push)
+    arrays["shot_ink"] = shot_ink
+    write_json(shots_path, plan)  # again: now with each shot's counter place and collage ink
     np.savez(seg_dir / "arrays.npz", **arrays)
     units = U.make_units(plan, workers, avoid=[f["end_frame"] for f in plan["freezes"]])
     workers = min(workers, len(units))

@@ -289,6 +289,31 @@ the place goes where the artist is not, and a free place beats a slightly covere
 Mutation M14 (2026-10-29, scratch copy): the counter under-reports by 10%: 2 tests red; restored byte-identical.
 Pillow 13.0.0 is now a direct dependency and pinned.
 
+### 5. Collage legibility (`composite.border_ink`, `render.collage_inks`)
+
+0.1.0's known limit: on a light world (the acid stage's white rings) the near-white paper border vanishes and only
+the offset shadow separates the cut-out. Now the border becomes a dark outline (BGR 0.065, 0.065, 0.075, the same
+paper grain on it) when the world under it is light, automatically, with no flag.
+- What is measured: the band the border actually covers (outside the artist, out to 1.6x the border width, the
+  widest jag), BT.709 luma of the world there (plate plus back particles). A share, not a mean: the share of the
+  band brighter than 0.72 (where near-white paper at 0.955 no longer reads). Over 0.35 means dark. The rings
+  average to mid grey and still swallow half the border, so a mean would miss exactly the case that prompted this.
+- Decided once per shot (on its first, middle and last frame, through the shot's own camera), so the border never
+  flickers mid-shot; a cut is where it may change. The shot list records `collage_ink` and `border_light_share`.
+  The collage despill target follows the ink (the edge decontaminates toward what will sit behind it).
+- Measured on the hook (bars 13-20, collage, Hook Freeze): neon alley 0.000 white, sunset roof 0.067 white, acid
+  stage close-up 0.469 dark; frames 588/588, cuts 2/2, audio +0.1 ms, the freeze checks all OK.
+- Read on `out/TEST_LOCAL_eng_ink_ab.jpg` (frame 514 of the item 1 render vs now, 1:1): before, the white border
+  melts into the white ring beside the head; now the dark outline holds the silhouette against it. Honest costs:
+  the border fills any gap narrower than itself (it did in white too), so in dark the hair strands merge into one
+  dark shape; and where the same band crosses a black ring the dark outline disappears (the skin edge still
+  separates there). On a mixed ground no one border colour wins everywhere; the rule picks the one that loses
+  less. Contact sheet `out/TEST_LOCAL_eng_ink_hook_collage_contact.jpg`.
+
+Tests (`tests/test_collage_ink.py`, 3): a white world switches to a dark outline (ring luma under 0.15, 0.7 under
+the world); a dark world keeps the paper (over 0.85); a world white only where the border sits switches, white only
+far from the artist does not. Mutation M15 (scratch copy): the border never switches: 2 tests red; restored.
+
 ## 0.1.0: the floor (`realone/`, `python -m realone render`)
 
 One section of the song, end to end: a phone take plus the master track in, a finished 9:16 clip out, cuts on
