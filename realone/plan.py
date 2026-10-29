@@ -1,7 +1,13 @@
-"""Shot list for one section: cuts on downbeats every N bars; with one take, a cut is a world swap and a reframe.
+"""Shot list for one section or a run of sections: cuts on downbeats every N bars; with one take, a cut is a world
+swap and a reframe.
 
 Framing is a virtual camera on the artist: wide (the whole frame), medium and close (crops centred on the
 artist's mask bounding box, smoothed over time inside each shot so the camera breathes instead of tracking).
+The framing pattern restarts at every section, so each section opens wide.
+
+Freezes (realone/freeze.py) change the cut list: a freeze always starts on a cut, and a cut strictly inside a
+freeze or on its release is dropped, so the frozen world is the one that resumes. A section boundary always stays
+a cut (a new section is a new world list).
 """
 import numpy as np
 
@@ -13,32 +19,85 @@ TARGET_Y = {"wide": 0.5, "medium": 0.40, "close": 0.17}  # fraction down the art
 SMOOTH_S = 0.6
 
 
-def plan_shots(tl, section, cut_bars=2, n_worlds=3, pattern=PATTERN):
-    """-> plan dict. Every cut is a detected downbeat, rounded to the nearest output frame."""
+def plan_shots(tl, section, cut_bars=2, n_worlds=3, pattern=PATTERN, freezes=()):
+    """One section -> plan dict. Every cut is a detected downbeat, rounded to the nearest output frame.
+    freezes: [{"start_bar", "end_bar", ...}] from freeze.resolve()."""
+    return plan_range(tl, [section], cut_bars, [list(range(n_worlds))], pattern, freezes)
+
+
+def plan_range(tl, sections, cut_bars=2, worlds=None, pattern=PATTERN, freezes=()):
+    """A contiguous run of sections -> plan dict.
+
+    worlds: per section, a list of world ids (indices into the render's world list); default [0, 1, 2] for all.
+    Shot k of a section uses framing pattern[k] and world worlds[section][k + r], where r rotates the list by one
+    when the section's first world would repeat the previous shot's world."""
     if cut_bars not in (1, 2, 4, 8):
         raise Refuse(f"--cut-bars must be 1, 2, 4 or 8 (got {cut_bars})")
     db = tl["downbeats"]
     bpb = tl["beats_per_bar"]
-    a, b = section["start_bar"], section["end_bar"]
+    a, b = sections[0]["start_bar"], sections[-1]["end_bar"]
+    for s, s_next in zip(sections, sections[1:]):
+        if s["end_bar"] != s_next["start_bar"]:
+            raise Refuse(f"sections must be contiguous (bar {s['end_bar']} vs {s_next['start_bar']})")
     s0 = float(db[a])
-    s1 = float(db[b]) if b < len(db) else float(section["end_s"])
+    s1 = float(db[b]) if b < len(db) else float(sections[-1]["end_s"])
     n_frames = int(round((s1 - s0) * FPS))
     phase = tl["beats"].index(db[0]) if db[0] in tl["beats"] else 0
-    bars = list(range(a, b, cut_bars))
-    starts = [int(round((db[bar] - s0) * FPS)) for bar in bars]
-    shots = []
-    for k, (bar, f0) in enumerate(zip(bars, starts)):
+    worlds = worlds or [[0, 1, 2]] * len(sections)
+
+    def frame_of(bar):
+        t = float(db[bar]) if bar < len(db) else s1
+        return int(round((t - s0) * FPS))
+
+    fz = [(f["start_bar"], f["end_bar"]) for f in freezes]
+    cut_bars_list = []  # (bar, section position)
+    for j, sec in enumerate(sections):
+        bars = set(range(sec["start_bar"], sec["end_bar"], cut_bars))
+        bars |= {f0 for f0, _ in fz if sec["start_bar"] <= f0 < sec["end_bar"]}  # a freeze starts on a cut
+        for bar in sorted(bars):
+            if bar != sec["start_bar"] and any(f0 < bar <= f1 for f0, f1 in fz):
+                continue  # inside the freeze or on its release: the frozen world is the one that resumes
+            cut_bars_list.append((bar, j))
+    starts = [frame_of(bar) for bar, _ in cut_bars_list]
+    shots, k_in, prev_world = [], {}, None
+    rot = {}
+    for k, ((bar, j), f0) in enumerate(zip(cut_bars_list, starts)):
         f1 = starts[k + 1] if k + 1 < len(starts) else n_frames
-        framing = pattern[k % len(pattern)]
+        ki = k_in.get(j, 0)
+        k_in[j] = ki + 1
+        wl = worlds[j]
+        if ki == 0:
+            rot[j] = 1 if (len(wl) > 1 and wl[0] == prev_world) else 0
+        world = wl[(ki + rot[j]) % len(wl)]
+        framing = pattern[ki % len(pattern)]
         cut_t = s0 + f0 / FPS
+        sec = sections[j]
         shots.append({
             "index": k, "start_frame": f0, "end_frame": f1, "frames": f1 - f0,
             "cut_time_s": round(cut_t, 4), "bar": bar, "beat_index": phase + bar * bpb, "beat_in_bar": 1,
             "downbeat_s": round(float(db[bar]), 4), "cut_error_ms": round((cut_t - db[bar]) * 1000, 2),
-            "world": k % n_worlds, "framing": framing, "zoom": FRAMINGS[framing],
+            "world": world, "framing": framing, "zoom": FRAMINGS[framing],
+            "section_pos": j, "section_index": sec.get("index", -1), "role": sec.get("role", "-"),
         })
-    return {"section": section, "start_s": round(s0, 4), "end_s": round(s1, 4), "n_frames": n_frames,
-            "fps": FPS, "cut_bars": cut_bars, "bpm": tl["bpm"], "beats_per_bar": bpb, "shots": shots}
+        prev_world = world
+    fr = []
+    for f in freezes:
+        fr.append(dict(f, start_frame=frame_of(f["start_bar"]), end_frame=frame_of(f["end_bar"]),
+                       start_s=round(float(db[f["start_bar"]]), 4)))
+        fr[-1]["frames"] = fr[-1]["end_frame"] - fr[-1]["start_frame"]
+    return {"section": sections[0] if len(sections) == 1 else
+            {"role": "song", "start_bar": a, "end_bar": b, "start_s": s0, "end_s": s1, "bars": b - a},
+            "sections": sections, "start_bar": a, "end_bar": b,
+            "start_s": round(s0, 4), "end_s": round(s1, 4), "n_frames": n_frames,
+            "fps": FPS, "cut_bars": cut_bars, "bpm": tl["bpm"], "beats_per_bar": bpb, "shots": shots, "freezes": fr}
+
+
+def shot_index(plan):
+    """-> int array: which shot each frame belongs to."""
+    out = np.zeros(plan["n_frames"], int)
+    for sh in plan["shots"]:
+        out[sh["start_frame"]:sh["end_frame"]] = sh["index"]
+    return out
 
 
 def bboxes(masks, step=4):

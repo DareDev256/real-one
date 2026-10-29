@@ -90,3 +90,39 @@ def looks_sheet(videos, plan, path, title):
     sheet = np.vstack([head] + [x for r in rows for x in (r, sep)])
     cv2.imwrite(str(path), sheet, [cv2.IMWRITE_JPEG_QUALITY, 90])
     return path
+
+
+def freeze_sheet(video, plan, freeze, wf, path, title):
+    """One freeze, read back from the encoded file: frames before / inside / after it, each labelled with its
+    world clock, plus a tile of what changed between two frozen frames (grain ignored): only the artist."""
+    f0, f1, n = freeze["start_frame"], freeze["end_frame"], plan["n_frames"]
+    a_in, b_in = min(f1 - 1, f0 + 3), max(f0, f1 - 4)
+    picks = [("before", f0 - 6), ("frozen", a_in), ("frozen", (f0 + f1) // 2), ("frozen", b_in),
+             ("released", f1 + 2), ("released", f1 + 30)]
+    picks = [(k, i) for k, i in picks if 0 <= i < n]
+    frames = grab(video, [i for _, i in picks])
+    tw, th = 300, 533
+    tiles = []
+    for kind, i in picks:
+        t = cv2.resize(frames[i], (tw, th), interpolation=cv2.INTER_AREA)
+        col = VERMILION if kind == "frozen" else INK
+        if kind == "frozen":
+            cv2.rectangle(t, (0, 0), (tw - 1, th - 1), VERMILION, 3)
+        lab = text_bar(tw, [(f"{kind.upper()}  frame {i}  t={plan['start_s'] + i / 30:.2f}s", col, 0.45),
+                            (f"world clock {int(wf[i])}  (frame index {i})", DIM, 0.45)])
+        tiles.append(np.vstack([t, lab]))
+    d = np.abs(frames[a_in].astype(np.int16) - frames[b_in].astype(np.int16)).max(axis=2)
+    moved = (d > 28).astype(np.uint8) * 255
+    moved = cv2.cvtColor(cv2.resize(moved, (tw, th), interpolation=cv2.INTER_AREA), cv2.COLOR_GRAY2BGR)
+    lab = text_bar(tw, [(f"changed: frame {a_in} vs {b_in}", VERMILION, 0.45),
+                        ("white = moved (the artist); black = held", DIM, 0.45)])
+    tiles.append(np.vstack([moved, lab]))
+    gut = np.full((tiles[0].shape[0], 8, 3), BG, np.uint8)
+    body = np.hstack([gut] + [x for t in tiles for x in (t, gut)])
+    head = text_bar(body.shape[1], [(title, INK, 0.55),
+                                    (f"freeze {freeze['role']} bars {freeze['start_bar'] + 1}-{freeze['end_bar']}: "
+                                     f"frames {f0}-{f1 - 1}, world clock held at {int(wf[f0])}; "
+                                     f"read back from {video.name}", DIM, 0.45)], height=56)
+    sheet = np.vstack([head, body, np.full((8, body.shape[1], 3), BG, np.uint8)])
+    cv2.imwrite(str(path), sheet, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return path

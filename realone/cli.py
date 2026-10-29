@@ -41,6 +41,11 @@ def build_parser():
     r.add_argument("--max-usd", type=float, default=1.00, help="refuse if the API spend quote is over this")
     r.add_argument("--max-minutes", type=float, default=20.0, help="stop a render that runs longer than this")
     r.add_argument("--max-seconds", type=float, default=40.0, help="longest section one run will render")
+    r.add_argument("--freeze", nargs="?", action="append", const="section", metavar="SECTION",
+                   help="Hook Freeze: on the section's first downbeat the world (plate, particles, camera) stops for "
+                        "--freeze-bars while the artist keeps moving. Bare --freeze = the rendered section; or name "
+                        "one: hook (every hook in range), hook:2, #3, bars:A-B. Repeatable.")
+    r.add_argument("--freeze-bars", type=int, default=2, metavar="N", help="length of each freeze in bars (default 2)")
 
     an = sub.add_parser("analyze", help="beat grid, downbeats and sections of the master -> timeline json")
     an.add_argument("--song", required=True)

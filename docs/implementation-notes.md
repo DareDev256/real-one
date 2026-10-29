@@ -1,5 +1,79 @@
 # Implementation notes
 
+## 0.2.0: the engine (Hook Freeze, native punch-ins, full song, Real Receipt, collage legibility)
+
+Built 2026-10-29 by the engine agent while James was at work; every decision below was made without him and is
+logged here so it can be reversed. The director (`realone/director/`, `docs/director.md`) is a separate agent's
+work and calls `python -m realone render` by subprocess; every 0.1.0 flag still works unchanged and every new
+flag is optional.
+
+### 1. Hook Freeze in the renderer (`realone/freeze.py`)
+
+```
+.venv/bin/python -m realone render --clip footage/perf_test.mp4 --song footage/test_song.wav \
+    --section hook --freeze hook --look collage --mask local --local-plate --tag eng_freeze
+```
+
+`--freeze [SECTION]` (repeatable) and `--freeze-bars N` (default 2). The freeze starts on the section's first
+downbeat. Bare `--freeze` freezes the rendered section (this is the form the director's `--help` probe picks up:
+it only passes a flag that takes no value). A bare role (`--freeze hook`) means every section with that role
+inside the rendered bars; `hook:2`, `#3`, `bars:A-B` name one, with the same grammar as `--section`. A freeze
+longer than its section, or running past the rendered bars, is refused (exit 2), not clipped.
+
+What stops and what does not:
+- The world clock `wf` (frames) advances 1 per frame, except inside a freeze, where every frame shows the clock
+  of the freeze's first frame. The first frame after the freeze is one step on, so it resumes from where it
+  stopped. Plate push-in (now measured on `wf`, so it holds and resumes), the sideways drift, the particles and
+  the parallax are all pure functions of `wf` (`worlds.world_layer`). Without a freeze `wf[i] = i` and
+  `world_layer` reproduces the 0.1.0 inline maths byte for byte (checked when it was factored out).
+- The virtual camera (reframe crop) holds its first-frame framing for the whole freeze, then eases back onto
+  the live track over 0.5 s (smoothstep, stopping at the next cut). The artist kept moving, so the live track
+  has moved on; an ease is a camera move, a snap would be a jump.
+- The artist's frames, the grain and the collage boil run on the real frame index: a frozen frame with live
+  grain reads as a stopped world, with dead grain it reads as a still image (the spike's finding).
+
+Decisions:
+- **A freeze always starts on a cut, and the cuts inside it and on its release are dropped.** With the default
+  2-bar cuts and a 2-bar freeze on the hook, the release would otherwise land on a cut, which swaps the world at
+  the very moment it should come back to life, and "resumes from where it stopped" would mean nothing. So the
+  hook's first shot runs 4 bars (2 frozen, 2 live) and the next cut is bar 5 of the hook. A section boundary
+  always stays a cut; if a freeze fills its whole section the resume check is reported "n/a: the release is a
+  section cut".
+- **The framing pattern restarts at every section**, so each section, and therefore every freeze, opens on the
+  wide shot: the freeze shows the world it stops.
+
+Checks after every render with a freeze (port of the spike's, on the rendered world layer; any failure exits 2
+and the run json keeps the report under `freeze`):
+- frozen: the md5 of the world layer (plate + particles) is identical on every frame of the freeze;
+- moving: every frame outside a freeze whose world clock advanced has a different hash from the frame before
+  (same shot); this covers "moves before" and "after";
+- resumes: the 3 frames after the release each differ from the one before;
+- no jump: the clock step at the release is 1, and the plate's change at the release (mean abs difference of a
+  135x240 plate thumbnail, particles excluded) is at most 3x the median change over the next 2 s of the same shot;
+- the artist moves (the mask differs between the first and last frozen frame), and a control: the world at the
+  unfrozen clock one frame later differs from the frozen world (so it was the freeze that held it, not a world
+  that never moves).
+The world cache that skips redrawing a frozen world is keyed on exactly `world_layer`'s inputs (world, world
+time, push fraction, crop), so a bug that fed the real clock into the particles would miss the cache, draw a
+moving world, and fail the check.
+
+Measured (2026-10-29, `--section hook --freeze hook`, collage, local plates, load average 17 to 21 on 12 cores
+from two other agents and a Blender render): freeze on frames 0-146 (4.90 s, bars 13-14), world identical on
+all 147 frozen frames, resumes, no jump, the artist moves, the control world moves; cuts on plan 2/2 (bars 17 and
+19), audio vs master +0.1 ms; 588 frames in 246 s (2.4 fps, single process).
+Sheet `out/TEST_LOCAL_eng_freeze_hook_collage_freeze1.jpg`, read: the rain streaks sit in the same places in
+frozen frames 3, 73 and 143 while the pose changes; the "changed" tile (frame 3 vs 143, grain ignored) is black
+everywhere except the figure; the released frames (world clock 3 and 31) show the rain moving again.
+
+Tests (`tests/test_freeze.py`, 7): clock holds and steps by one; the world layer is byte-identical in a freeze,
+moving outside, and its release is not a jump; a release that snaps to real time is caught as a jump; the checks
+fail when the world moves inside a freeze, stands still outside one, or the artist does not move; the plan
+starts the freeze on a cut and drops the cuts inside and on the release; `hook` resolves to every hook and
+refuses what does not fit; the camera holds then eases with no step over a fifth of the gap.
+Mutation checks (2026-10-29, run on a scratch copy of the repo so the director's live renders never saw a
+mutated file; each restored byte-identical by sha256): M9 the freeze hold removed from `world_clock` (2 tests
+red); M10 the clock snapping back to real time after the release (2 tests red).
+
 ## 0.1.0: the floor (`realone/`, `python -m realone render`)
 
 One section of the song, end to end: a phone take plus the master track in, a finished 9:16 clip out, cuts on

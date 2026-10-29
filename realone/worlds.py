@@ -165,6 +165,33 @@ def world_view(plate, zoom, center, dx=0.0, dy=0.0):
     return cv2.warpAffine(plate, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
 
+PARALLAX = 0.25  # the world zooms a quarter as much as the artist: the artist feels closer than the world
+
+
+def world_layer(plate, parts, crop, push_frac, push, wt):
+    """The world for one frame, a pure function of the WORLD clock `wt` (seconds) and the camera `crop`:
+    -> (world float32 0..255 with the back particles, front particles float32 0..255, plate-only float32).
+    The world zooms a quarter as much as the artist (cheap parallax) toward the same point, plus `push` over
+    the shot (`push_frac` 0..1, measured on the world clock) and a slow sideways drift."""
+    x0, y0, cw, ch = crop
+    z = W / cw
+    ccx, ccy = x0 + cw / 2, y0 + ch / 2
+    zw = (1 + PARALLAX * (z - 1)) * (1 + push * push_frac)
+    centre = (W / 2 + (ccx - W / 2) * PARALLAX, H / 2 + (ccy - H / 2) * PARALLAX)
+    wbase = world_view(plate, zw, centre, dx=16 * np.sin(0.55 * wt)).astype(np.float32)
+    back, front = parts.layers(wt)
+    return np.clip(wbase + back * 255, 0, 255), front * 255, wbase
+
+
+def world_key(world, front):
+    """Hash of the world layer (what the freeze check compares frame to frame)."""
+    return hashlib.md5(world.tobytes() + front.tobytes()).hexdigest()
+
+
+def plate_thumb(wbase):
+    return cv2.resize(wbase, (135, 240), interpolation=cv2.INTER_AREA)
+
+
 class Particles:
     """Code-drawn particles, positions a pure function of the WORLD clock (a frozen clock is a frozen layer)."""
 

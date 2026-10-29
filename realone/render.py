@@ -11,16 +11,16 @@ from realone.audio import analyze, pick_section
 from realone.common import FPS, H, LOCAL_PREFIX, OUT, W, Refuse, file_md5, unpack_mask, write_json
 from realone.composite import LOOKS, Compositor, lab_stats
 from realone.encode import detect_cuts, start_encoder, verify_output
+from realone import freeze as FZ
 from realone.masks import sam_cost, sam_masks_cached, vision_masks
 from realone.media import load_audio, load_audio_native, normalize_span, probe, read_frames, stream, write_wav
 from realone.meta_api import IMAGE_USD, USD_TO_CAD, make_client, require_key
-from realone.plan import bboxes, camera_tracks, plan_shots
-from realone.sheets import contact_sheet, looks_sheet
+from realone.plan import bboxes, camera_tracks, plan_shots, shot_index
+from realone.sheets import contact_sheet, freeze_sheet, looks_sheet
 from realone.sync import SR as SYNC_SR
 from realone.sync import measure_offset, sync_clip
-from realone.worlds import Particles, gen_world, load_plate, local_plates, muse_world_cached, world_view
-
-PARALLAX = 0.25  # the world zooms a quarter as much as the artist: the artist feels closer than the world
+from realone.worlds import (Particles, gen_world, load_plate, local_plates, muse_world_cached, plate_thumb,
+                             world_key, world_layer)
 
 
 def parse_looks(spec):
@@ -92,7 +92,11 @@ def render(a):
 
     # 3. plan
     worlds_n = 3 if a.local_plate else len(prompts) + len(images)
-    plan = plan_shots(tl, sec, a.cut_bars, worlds_n)
+    freezes = FZ.resolve(tl, getattr(a, "freeze", None), getattr(a, "freeze_bars", 2), [sec])
+    plan = plan_shots(tl, sec, a.cut_bars, worlds_n, freezes=freezes)
+    for f in plan["freezes"]:
+        print(f"freeze: {f['role']} bars {f['start_bar']}-{f['end_bar']} = frames {f['start_frame']}-"
+              f"{f['end_frame'] - 1} ({f['frames'] / FPS:.2f}s): the world holds, the artist keeps moving")
     s0, n = plan["start_s"], plan["n_frames"]
     dur = n / FPS
     if dur > a.max_seconds:
@@ -132,7 +136,10 @@ def render(a):
 
     # 6. camera
     boxes = bboxes(masks)
-    crops = camera_tracks(plan, boxes)
+    shot_of = shot_index(plan)
+    wf = FZ.world_clock(n, plan["freezes"])  # the world clock in frames (holds inside a freeze)
+    crops = FZ.hold_camera(camera_tracks(plan, boxes), plan["freezes"], shot_of)
+    pushf = FZ.push_fraction(wf, plan)
 
     # 7. worlds
     if a.local_plate:
@@ -167,10 +174,8 @@ def render(a):
     outs = {look: OUT / f"{tag}_{look}.mp4" for look in looks}
     encs = {look: start_encoder(outs[look], wav, a.final) for look in looks}
     comp = Compositor(a)
-    shot_of = np.zeros(n, int)
-    for sh in plan["shots"]:
-        shot_of[sh["start_frame"]:sh["end_frame"]] = sh["index"]
     g0 = int(round(s0 * FPS))
+    keys, plate_steps, prev_thumb, wcache = [], np.full(n, np.nan), None, None
     bbox_out = np.zeros((n, 4))
     despill_stats = []
     t0 = time.time()
@@ -179,17 +184,20 @@ def render(a):
             if i >= n:
                 break
             sh = plan["shots"][shot_of[i]]
-            t = s0 + i / FPS
+            wt = s0 + wf[i] / FPS  # the world clock (seconds); the artist frame `fr` runs on the real clock
             x0, y0, cw, ch = crops[i]
             z = W / cw
-            ccx, ccy = x0 + cw / 2, y0 + ch / 2
-            zw = (1 + PARALLAX * (z - 1)) * (1 + a.push * (i - sh["start_frame"]) / max(1, sh["frames"]))
-            centre = (W / 2 + (ccx - W / 2) * PARALLAX, H / 2 + (ccy - H / 2) * PARALLAX)
-            wbase = world_view(plates[sh["world"]], zw, centre, dx=16 * np.sin(0.55 * t)).astype(np.float32)
-            back, front = parts[sh["world"]].layers(t)
-            world = np.clip(wbase + back * 255, 0, 255)
+            wkey = (sh["world"], wt, float(pushf[i]), tuple(crops[i]))  # exactly world_layer's inputs
+            if wcache is None or wcache[0] != wkey:  # a frozen clock is the same image: draw it once
+                wcache = (wkey,) + world_layer(plates[sh["world"]], parts[sh["world"]], crops[i], pushf[i], a.push, wt)
+            _, world, front, wbase = wcache
+            keys.append(world_key(world, front))
+            th = plate_thumb(wbase)
+            if prev_thumb is not None:
+                plate_steps[i] = float(np.abs(th - prev_thumb).mean())
+            prev_thumb = th
             m = unpack_mask(masks[i])
-            frames, inf = comp.frame(fr, m, crops[i], world, front * 255, wstats[sh["world"]], i, g0 + i, looks)
+            frames, inf = comp.frame(fr, m, crops[i], world, front, wstats[sh["world"]], i, g0 + i, looks)
             for look in looks:
                 encs[look].stdin.write(frames[look].tobytes())
             bx = boxes[i] if not np.isnan(boxes[i, 0]) else (0, 0, W, H)
@@ -231,6 +239,21 @@ def render(a):
                                  "cuts_detected": cuts, "cuts_planned": planned,
                                  "cuts_on_plan": f"{len(matched)}/{len(planned)}", "cuts_off_plan": extra,
                                  "audio_vs_master_error_ms": round(av_err_ms, 2), "ok": ok}
+    # 10b. the freeze, proven on the world layer of every rendered frame
+    if plan["freezes"]:
+        art, ctl = [], []
+        for f in plan["freezes"]:
+            f0, f1 = f["start_frame"], f["end_frame"]
+            art.append(not np.array_equal(masks[f0], masks[f1 - 1]))
+            sh = plan["shots"][shot_of[f0]]
+            span = max(1.0, wf[sh["end_frame"] - 1] - wf[sh["start_frame"]] + 1)
+            held = world_layer(plates[sh["world"]], parts[sh["world"]], crops[f0], pushf[f0], a.push, s0 + wf[f0] / FPS)
+            free = world_layer(plates[sh["world"]], parts[sh["world"]], crops[f0], pushf[f0] + 1 / span, a.push,
+                               s0 + (wf[f0] + 1) / FPS)
+            ctl.append(world_key(*held[:2]) != world_key(*free[:2]))
+        frep, fok = FZ.checks(keys, plate_steps, wf, plan["freezes"], shot_of, art, ctl)
+        report["freeze"] = frep
+        all_good &= fok
     # 11. contact sheets (read back from the encoded files)
     title = (f"{'TEST_LOCAL (never the demo)  ' if local else ''}Real One {__version__}  {sec['role']}: "
              f"bar {sec['start_bar'] + 1} to {sec['end_bar']}  {tl['bpm']:.1f} BPM  cut every {a.cut_bars} bars  "
@@ -239,6 +262,10 @@ def render(a):
         cs = OUT / f"{tag}_{look}_contact.jpg"
         contact_sheet(outs[look], plan, bbox_out, look, cs, title, names)
         report["looks"][look]["contact_sheet"] = str(cs)
+        for k, f in enumerate(plan["freezes"]):
+            fs = OUT / f"{tag}_{look}_freeze{k + 1}.jpg"
+            freeze_sheet(outs[look], plan, f, wf, fs, title + f"   look: {look}")
+            report["looks"][look].setdefault("freeze_sheets", []).append(str(fs))
     if len(looks) > 1:
         ls = OUT / f"{prefix}looks.jpg"
         looks_sheet(outs, plan, ls, title + "   rows: " + " / ".join(looks))
@@ -253,6 +280,16 @@ def render(a):
               f"audio vs master {r['audio_vs_master_error_ms']:+.1f} ms, contact {r['contact_sheet']}")
     if "looks_sheet" in report:
         print(f"looks    {report['looks_sheet']}")
+    for k, fr_ in enumerate(report.get("freeze", {}).get("freezes", [])):
+        print(f"freeze   {fr_['role']} frames {fr_['frames']}: world identical on all {fr_['n_frames']} frozen frames: "
+              f"{fr_['frozen_identical']}; moves before: {fr_['moves_before']}; resumes: {fr_['resumes']}; "
+              f"no jump: {fr_['no_jump']}; artist moves: {fr_['artist_moves']}; "
+              f"world would move unfrozen: {fr_['control_world_would_move']}  -> {'OK' if fr_['ok'] else 'FAILED'}")
+        for look in looks:
+            print(f"         sheet {report['looks'][look].get('freeze_sheets', [''])[k]}")
+    if "freeze" in report and not report["freeze"]["world_moves_outside_freezes"]:
+        print(f"freeze   FAILED: the world stood still outside a freeze on frames "
+              f"{report['freeze']['frames_that_should_move_but_did_not']}")
     print(f"render   {n} frames x {len(looks)} looks in {render_s:.0f}s ({report['fps']} fps); total {report['total_s']}s")
     print(f"masks    {engine}")
     print("cost     US$0.00 (local test, no API calls)" if local and not prompts else
