@@ -1,0 +1,11 @@
+{
+  "_FIXTURE": "Hand-written watch notes for the dry run's revised hook render (receipt). NOT model output: no model saw the video.",
+  "response": {
+    "verdict": "keep",
+    "notes": [
+      {"t_s": 0.0, "against": "look", "severity": "low", "note": "The grey world against the coloured performer turns 'I'm good' into a claim the frame is testing."},
+      {"t_s": 9.8, "against": "camera", "severity": "low", "note": "The close-up now holds still around the performance; nothing competes with it."}
+    ],
+    "suggestion": {"field": "none", "value": "", "why": "The hook now serves its subtext."}
+  }
+}

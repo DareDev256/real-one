@@ -1,0 +1,13 @@
+{
+  "_FIXTURE": "Hand-written watch notes for the dry run's first hook render (collage). NOT model output: no model saw the video. Timestamps sit on the render's planned cuts (every 2 bars at 98 BPM = 4.9 s).",
+  "response": {
+    "verdict": "revise",
+    "notes": [
+      {"t_s": 0.0, "against": "look", "severity": "mid", "note": "The wide opens on a paper cut-out with a 12 fps boil; it reads hand-made and playful while the subtext is someone holding himself together."},
+      {"t_s": 4.9, "against": "edit", "severity": "low", "note": "The cut to the medium lands on the bar line; the edit serves the hook."},
+      {"t_s": 9.8, "against": "look", "severity": "high", "note": "On the close-up the jittering paper edge pulls the eye off the performance; 'I'm good' needs stillness around it, not craft."},
+      {"t_s": 14.7, "against": "world", "severity": "low", "note": "This dry-run world is a procedural test plate, not the laundromat; judge timing and look only."}
+    ],
+    "suggestion": {"field": "look", "value": "receipt", "why": "Receipt keeps only the filmed artist in colour: the one true thing in a frame that is pretending."}
+  }
+}

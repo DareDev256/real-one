@@ -1,0 +1,15 @@
+{
+  "_FIXTURE": "Hand-written stand-in for a Muse Voice Transcribe file-mode response (ENDPOINTING) on the synthetic test song. NOT model output: the synthetic vocal is a formant synth with no words. Shape from dev.meta.ai/docs/api-reference/voice/schemas (TranscribeResponse). It mishears on purpose ('rent to Friday') so the dry run shows the artist's sheet outranking it.",
+  "sessionId": "FIXTURE",
+  "transcript": "told my mama I'm good I'm good phone face down on the kitchen counter rent to Friday I'm good I'm good don't call it keys in my hand lights on at four and I'm still holding bus pass two jobs one dream boss want overtime I'm good I'm good don't call it",
+  "audioDurationMs": 91063,
+  "turns": [
+    {"turnId": 1, "startMs": 11200, "endMs": 17800, "transcript": "told my mama I'm good I'm good"},
+    {"turnId": 2, "startMs": 18100, "endMs": 28900, "transcript": "phone face down on the kitchen counter rent to Friday"},
+    {"turnId": 3, "startMs": 30400, "endMs": 39600, "transcript": "I'm good I'm good don't call it keys in my hand"},
+    {"turnId": 4, "startMs": 40100, "endMs": 48800, "transcript": "lights on at four and I'm still holding"},
+    {"turnId": 5, "startMs": 50200, "endMs": 67900, "transcript": "bus pass two jobs one dream boss want overtime"},
+    {"turnId": 6, "startMs": 69800, "endMs": 88100, "transcript": "I'm good I'm good don't call it"},
+    {"turnId": 7, "startMs": 88600, "endMs": 91063, "transcript": ""}
+  ]
+}

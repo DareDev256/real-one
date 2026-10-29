@@ -1,0 +1,9 @@
+{
+  "_FIXTURE": "Hand-written guard re-ask response for the dry run. NOT model output. Rewrites only the two sections the guard flagged, as places that carry the subtext.",
+  "response": {
+    "rewrites": [
+      {"index": 1, "world_prompt": "a hotel lobby nobody checks into, marble floor polished to a mirror, one chandelier on a dimmer, velvet ropes around nothing", "why": "Composure as a room built for show, staffed by no one."},
+      {"index": 2, "world_prompt": "an empty laundromat after midnight, one dryer still turning, fluorescent tubes humming over rows of plastic chairs, rain streaking the window", "why": "Everything keeps spinning while he waits in place: 'good' as holding still."}
+    ]
+  }
+}

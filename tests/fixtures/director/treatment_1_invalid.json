@@ -1,0 +1,13 @@
+{
+  "_FIXTURE": "Hand-written first treatment response for the dry run. NOT model output. Deliberately INVALID so the dry run exercises the one repair turn: section 0 has no `why`, section 1 freezes a verse, section 2 has a named colour instead of hex, section 3 uses a look that does not exist.",
+  "response": {
+    "song_subtext": "Someone performing 'fine' for everyone who might ask, while the life underneath runs on empty.",
+    "sections": [
+      {"index": 0, "subtext": "The breath before the performance of being okay starts.", "world_prompt": "a dark stairwell between floors, one exit sign humming green, the pause before anything starts", "palette": ["#0A0A0A", "#1F3D2B", "#3BFF7A"], "camera_energy": "low", "look": "clean", "freeze": false},
+      {"index": 1, "subtext": "Reassuring the people who love him while hiding the arithmetic of the month.", "world_prompt": "a phone lying screen-down on a kitchen counter beside an unpaid rent notice", "palette": ["#FFFFFF", "#111111", "#FF3B30"], "camera_energy": "mid", "look": "clean", "freeze": true, "why": "Start close to the lie."},
+      {"index": 2, "subtext": "'I'm good' as a wall: the more he repeats it, the less anyone is allowed in.", "world_prompt": "a hand gripping car keys under bright kitchen lights at four in the morning", "palette": ["#000000", "teal", "#F2F2F2"], "camera_energy": "high", "look": "collage", "freeze": false, "why": "The hook is the wall."},
+      {"index": 3, "subtext": "Grinding toward a dream he cannot afford to name out loud.", "world_prompt": "an empty night-shift break room, a vending machine glowing, a wall calendar with every square crossed out, rain on a high window", "palette": ["#101820", "#FEE715", "#FFFFFF"], "camera_energy": "mid", "look": "grainy", "freeze": false, "why": "The grind has no audience."},
+      {"index": 4, "subtext": "The same words, but now it is a decision instead of a deflection.", "world_prompt": "a rooftop water tower at blue hour over a city still asleep, a loose tarp lifting in the wind", "palette": ["#0B1D3A", "#FF5E3A", "#FFFFFF"], "camera_energy": "high", "look": "clean", "freeze": false, "why": "The last hook is where he stops pretending."}
+    ]
+  }
+}

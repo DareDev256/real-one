@@ -1,0 +1,26 @@
+# FIXTURE: lyric sheet written for the synthetic test song (spike/make_test_song.py). Original lines, invented for
+# the dry run and the tests; not a real song, not the artist's. The synthetic vocal sings no words at all.
+
+[Verse 1]
+Told my mama I'm good, I'm good
+Phone face down on the kitchen counter
+Rent due Friday, I ain't even counted
+Smile for the camera like I should
+
+[Hook]
+I'm good, I'm good, don't call it
+Keys in my hand but I ain't going
+I'm good, I'm good, don't call it
+Lights on at four and I'm still holding
+
+[Verse 2]
+Bus pass, two jobs, one dream
+Boss want overtime, I said bet
+Voice notes I record and never send
+Saving every dollar that I don't have yet
+
+[Hook]
+I'm good, I'm good, don't call it
+Keys in my hand but I ain't going
+I'm good, I'm good, don't call it
+Lights on at four and I'm still holding

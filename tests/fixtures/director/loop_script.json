@@ -1,0 +1,19 @@
+{
+  "_FIXTURE": "Hand-written turns standing in for Muse Wonder driving the director's tools in the dry run. NOT model output. Each turn is what the model side 'says' and which tools it calls; the code side (tools.py) really executes them, including real renders. '@render:2' means the latest render of section 2 (a fixture cannot know file paths in advance; only FIXTURE runs resolve it).",
+  "model_turns": [
+    {"text": "The take covers section 2 only (the first hook). Building its world first.",
+     "calls": [{"name": "generate_world", "arguments": {"section": 2, "prompt": "an empty laundromat after midnight, one dryer still turning, fluorescent tubes humming over rows of plastic chairs, rain streaking the window"}}]},
+    {"text": "Rendering the hook as written: collage, no freeze (the freeze is on the last hook).",
+     "calls": [{"name": "render_section", "arguments": {"section": 2, "look": "collage", "freeze": false}}]},
+    {"text": "Watching it against the treatment.",
+     "calls": [{"name": "watch", "arguments": {"render_path": "@render:2"}}]},
+    {"text": "The note at 9.8 s is right: the paper boil makes the hook playful when it should be held together. One change in the revision pass.",
+     "calls": [{"name": "revise", "arguments": {"section": 2, "field": "look", "value": "receipt", "because": "watch note at 9.8 s: the 12 fps boil fights the stillness 'I'm good' needs; receipt leaves only the filmed artist in colour"}}]},
+    {"text": "Re-rendering the hook in receipt.",
+     "calls": [{"name": "render_section", "arguments": {"section": 2, "look": "receipt", "freeze": false}}]},
+    {"text": "Watching the revision once.",
+     "calls": [{"name": "watch", "arguments": {"render_path": "@render:2"}}]},
+    {"text": "Done.",
+     "calls": [{"name": "finish", "arguments": {"summary": "Rendered the first hook (the only covered section), watched it, used the one revision pass to move it from collage to receipt, re-rendered and re-watched: keep."}}]}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "_FIXTURE": "Which hand-written response answers which request in a --dry-run on the synthetic test song. None of these are model output. Each queue is consumed in order; when one runs out the dry run refuses instead of inventing a response.",
+  "transcribe": ["transcript_test_song.json"],
+  "treatment": ["treatment_1_invalid.json"],
+  "treatment_repair": ["treatment_2_literal.json"],
+  "guard_reask": ["guard_rewrites.json"],
+  "loop": ["loop_script.json"],
+  "watch": ["watch_1_hook_collage.json", "watch_2_hook_receipt.json"],
+  "decide": ["decide_code_driver.json"]
+}
