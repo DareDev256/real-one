@@ -25,12 +25,13 @@ def plan_shots(tl, section, cut_bars=2, n_worlds=3, pattern=PATTERN, freezes=())
     return plan_range(tl, [section], cut_bars, [list(range(n_worlds))], pattern, freezes)
 
 
-def plan_range(tl, sections, cut_bars=2, worlds=None, pattern=PATTERN, freezes=()):
+def plan_range(tl, sections, cut_bars=2, worlds=None, pattern=PATTERN, freezes=(), force_cuts=()):
     """A contiguous run of sections -> plan dict.
 
     worlds: per section, a list of world ids (indices into the render's world list); default [0, 1, 2] for all.
     Shot k of a section uses framing pattern[k] and world worlds[section][k + r], where r rotates the list by one
-    when the section's first world would repeat the previous shot's world."""
+    when the section's first world would repeat the previous shot's world. force_cuts: bars that must be cuts (a
+    receipt reveal flips the look there, which is only clean on a cut)."""
     if cut_bars not in (1, 2, 4, 8):
         raise Refuse(f"--cut-bars must be 1, 2, 4 or 8 (got {cut_bars})")
     db = tl["downbeats"]
@@ -54,6 +55,7 @@ def plan_range(tl, sections, cut_bars=2, worlds=None, pattern=PATTERN, freezes=(
     for j, sec in enumerate(sections):
         bars = set(range(sec["start_bar"], sec["end_bar"], cut_bars))
         bars |= {f0 for f0, _ in fz if sec["start_bar"] <= f0 < sec["end_bar"]}  # a freeze starts on a cut
+        bars |= {f for f in force_cuts if sec["start_bar"] <= f < sec["end_bar"]}
         for bar in sorted(bars):
             if bar != sec["start_bar"] and any(f0 < bar <= f1 for f0, f1 in fz):
                 continue  # inside the freeze or on its release: the frozen world is the one that resumes

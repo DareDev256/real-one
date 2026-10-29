@@ -140,6 +140,7 @@ class Ctx:
         self.look_of = {k[5:]: arr[k] for k in arr.files if k.startswith("look_")}  # output -> per-frame look id
         self.look_names = list(d["look_names"])
         self.native_frames = arr["native_frames"]  # per frame: 1 if the punch-in uses the native file
+        self.counter = arr["counter"] if "counter" in arr.files else np.zeros(len(self.wf), np.uint8)
 
 
 def init_worker(d):
@@ -159,6 +160,8 @@ def render_unit(u):
     t0 = time.time()
     s0, g0 = d["s0"], d["g0"]
     c.comp.match = {k: type(v)(c.args.match) for k, v in c.comp.match.items()}  # a unit starts its own EMA
+    if c.comp.counter is not None:
+        c.comp.counter.reset()  # and picks its counter ink afresh (a unit starts on a cut)
     need_native = d["native"] is not None and bool(c.native_frames[max(0, f0 - warm):f1].any())
     start = max(0, f0 - warm)
     prox = read_frames(d["proxy"], start=start)
@@ -187,7 +190,7 @@ def render_unit(u):
             looks = sorted(set(per_out.values()))
             use_nat = nf if c.native_frames[i] else None
             frames, inf = c.comp.frame(fr, m, crop, world, front, c.wstats[sh_world], i, g0 + i, looks,
-                                       native=use_nat, ns=tuple(d["ns"]))
+                                       native=use_nat, ns=tuple(d["ns"]), counter=int(c.counter[i]))
             if i < f0:
                 continue  # warm-up: the colour-match EMA only
             j = i - f0

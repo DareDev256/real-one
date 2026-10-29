@@ -8,6 +8,8 @@ scipy==1.18.1
 numba==0.68.1
 llvmlite==0.50.0
 soundfile==0.14.0
+# Real Receipt counter typography (0.2.0)
+pillow==13.0.0
 # tests
 pytest==9.2.0
 # local test segmenter only (Apple Vision); never used for the demo

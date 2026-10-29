@@ -54,6 +54,11 @@ def build_parser():
                         '"verse": [...], "default": [...]}')
     r.add_argument("--section-world", action="append", metavar="KEY=PROMPT",
                    help='a Muse Image world for one section key (hook, hook:2, #3, verse, default); repeatable')
+    r.add_argument("--receipt-reveal", action="append", metavar="SECTION",
+                   help="Real Receipt: flip this section to the receipt look (generated pixels grey, the filmed "
+                        "artist in colour): outro, hook:last, hook:2, #4, bars:A-B; repeatable")
+    r.add_argument("--receipt-counter", action="store_true",
+                   help="draw the FILMED / GENERATED share on receipt frames (out/<tag>_receipt.json is always written)")
     r.add_argument("--no-native", action="store_true",
                    help="A/B only: punch-ins upscale the 1080 proxy (the 0.1.0 path) even when the take is bigger")
 

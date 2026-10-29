@@ -12,6 +12,7 @@ import numpy as np
 
 from realone import __version__
 from realone import freeze as FZ
+from realone import receipt as R
 from realone import units as U
 from realone import worldlist as WL
 from realone.audio import analyze, pick_section
@@ -154,12 +155,30 @@ def render(a):
     # 3. plan: worlds per section, freezes, cuts
     freezes = FZ.resolve(tl, getattr(a, "freeze", None), getattr(a, "freeze_bars", 2), secs)
     entries, per_section, wsrc = WL.assign(secs, default, per, a.local_plate)
-    plan = plan_range(tl, secs, a.cut_bars, per_section, freezes=freezes)
+    reveal_secs = []
+    for spec in getattr(a, "receipt_reveal", None) or []:
+        reveal_secs += [x for x in FZ.select_sections(tl, spec, secs) if x not in reveal_secs]
+    lo, hi = secs[0]["start_bar"], secs[-1]["end_bar"]
+    reveal_bars = sorted({(max(lo, x["start_bar"]), min(hi, x["end_bar"])) for x in reveal_secs})
+    plan = plan_range(tl, secs, a.cut_bars, per_section, freezes=freezes,
+                      force_cuts=[b for pair in reveal_bars for b in pair])
     for f in plan["freezes"]:
         print(f"freeze: {f['role']} bars {f['start_bar']}-{f['end_bar']} = frames {f['start_frame']}-"
               f"{f['end_frame'] - 1} ({f['frames'] / FPS:.2f}s): the world holds, the artist keeps moving")
     s0, n = plan["start_s"], plan["n_frames"]
     dur = n / FPS
+
+    def frame_of_bar(bar):
+        t = tl["downbeats"][bar] if bar < len(tl["downbeats"]) else plan["end_s"]
+        return int(np.clip(round((t - s0) * FPS), 0, n))
+
+    plan["receipt_reveal"] = [{"start_bar": b0, "end_bar": b1, "frames": [frame_of_bar(b0), frame_of_bar(b1) - 1],
+                               "roles": sorted({x["role"] for x in reveal_secs if x["start_bar"] <= b0 < x["end_bar"]})}
+                              for b0, b1 in reveal_bars]
+    for r_ in plan["receipt_reveal"]:
+        print(f"receipt reveal: bars {r_['start_bar']}-{r_['end_bar']} = frames {r_['frames'][0]}-{r_['frames'][1]}: "
+              f"generated pixels grey, the filmed artist in colour"
+              + (" + counter" if getattr(a, "receipt_counter", False) else ""))
     if not whole and dur > a.max_seconds:
         raise Refuse(f"the section is {dur:.1f}s; the floor renders at most {a.max_seconds:.0f}s per run "
                      f"(--max-seconds, or pick bars with --section bars:A-B, or the whole song with --section all)")
@@ -251,8 +270,29 @@ def render(a):
     native_frames = np.array([take["native"] is not None and not is_identity(c) for c in crops], np.uint8)
     arrays = {"crops": crops, "wf": wf, "pushf": pushf, "shot_of": shot_of, "boxes": boxes,
               "shot_world": np.array([sh["world"] for sh in plan["shots"]]), "native_frames": native_frames}
+    rid = LOOKS.index("receipt")
     for look in looks:
-        arrays[f"look_{look}"] = np.full(n, LOOKS.index(look), np.uint8)
+        lk = np.full(n, LOOKS.index(look), np.uint8)
+        for r_ in plan["receipt_reveal"]:
+            lk[r_["frames"][0]:r_["frames"][1] + 1] = rid
+        arrays[f"look_{look}"] = lk
+    on_receipt = np.any([arrays[f"look_{look}"] == rid for look in looks], axis=0)
+    counter = np.zeros(n, np.uint8)
+    if getattr(a, "receipt_counter", False):
+        for sh in plan["shots"]:  # one place per shot, the one the artist covers least
+            f0, f1 = sh["start_frame"], sh["end_frame"]
+            if not on_receipt[f0:f1].any():
+                continue
+            outb = []
+            for i in range(f0, f1, 3):
+                bx = boxes[i] if not np.isnan(boxes[i, 0]) else (0, 0, 1080, 1920)
+                x0, y0, cw, ch = crops[i]
+                z = 1080 / cw
+                outb.append(((bx[0] - x0) * z, (bx[1] - y0) * z, (bx[2] - x0) * z, (bx[3] - y0) * z))
+            sh["counter_place"] = R.place_for(outb)
+            counter[f0:f1] = np.where(on_receipt[f0:f1], sh["counter_place"], 0)
+    arrays["counter"] = counter
+    write_json(shots_path, plan)  # again: now with each shot's counter place
     np.savez(seg_dir / "arrays.npz", **arrays)
     units = U.make_units(plan, workers, avoid=[f["end_frame"] for f in plan["freezes"]])
     workers = min(workers, len(units))
@@ -285,6 +325,17 @@ def render(a):
             sources[k] = sources.get(k, 0) + v
     if len(keys) != n:
         raise Refuse(f"the units rendered {len(keys)} frames, the plan has {n}")
+    filmed = {look: np.concatenate([r["filmed"][look] for r in recs]) for look in looks}
+    look_runs = {}
+    for look in looks:
+        lk, runs = arrays[f"look_{look}"], []
+        for i in range(n):
+            if not runs or runs[-1]["look"] != LOOKS[lk[i]]:
+                runs.append({"look": LOOKS[lk[i]], "frames": [i, i]})
+            runs[-1]["frames"][1] = i
+        look_runs[look] = runs
+    receipt_path = R.write_json(OUT / f"{tag}_receipt.json", plan, filmed, look_runs, plan["receipt_reveal"],
+                                bool(getattr(a, "receipt_counter", False)), s0, write_json)
 
     # 10. checks on what was actually written
     t = time.time()
@@ -353,6 +404,9 @@ def render(a):
         looks_sheet(outs, plan, ls, title + "   rows: " + " / ".join(looks))
         report["looks_sheet"] = str(ls)
     stages["sheets_s"] = round(time.time() - t, 1)
+    report["receipt"] = {"json": str(receipt_path), **{look: dict(zip(("filmed_pct", "generated_pct"),
+                                                                    R.split(float(np.nanmean(filmed[look])))))
+                                                        for look in looks}}
     report["frames_with_pocket_cut"] = int((pocket > 0).sum())
     report["artist_pixels_from"] = sources  # proxy | native | native+refined, frames each
     report["peak_rss_mb_python"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20, 1)
@@ -382,6 +436,10 @@ def render(a):
               f"{report['freeze']['frames_that_should_move_but_did_not']}")
     print(f"render   {n} frames x {len(looks)} looks in {render_s:.0f}s ({report['fps']} fps) on {workers} worker(s); "
           f"total {report['total_s']}s  stages {stages}")
+    for look in looks:
+        rc = report["receipt"][look]
+        print(f"receipt  {look}: filmed {rc['filmed_pct']}%  generated {rc['generated_pct']}% of the pixels over the "
+              f"video; per frame in {receipt_path}")
     print(f"memory   python {report['peak_rss_mb_python']:.0f} MB, largest worker {report['peak_rss_mb_worker']:.0f} MB")
     print(f"masks    {engine}")
     print("cost     US$0.00 (local test, no API calls)" if local and not prompts else

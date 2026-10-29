@@ -240,6 +240,55 @@ parallel Vision masks == one process; whole-song takes sync; the long-take rule 
 new flags refuse at the gate in under 10 s. Mutations (scratch copy, restored byte-identical): M12 a unit drops its
 last frame (red); M13 the long-take t-test dropped (red).
 
+### 4. Real Receipt as a song mode, and the hard number (`realone/receipt.py`)
+
+```
+.venv/bin/python -m realone render --clip footage/full_test.mp4 --song footage/test_song.wav --section bars:26-30 \
+    --look collage --receipt-reveal hook:2 --receipt-counter --mask local --local-plate --tag eng_receipt
+.venv/bin/python -m realone render ... --section all --look collage --receipt-reveal hook:last --receipt-counter
+```
+
+- **The number, on every render**: `out/<tag>_<section>_receipt.json` (`<tag>` as in every other output) holds,
+  per output, every frame's filmed share, the whole video's, and each section's, plus the look of every frame (as
+  runs) and the reveal spans. Filmed = the artist mask in output space (after the reframe) minus any pocket of the
+  source room the despill cut open to show the world, over the 1080x1920 frame; everything else (plate,
+  particles, collage paper, the counter) is generated. Decision: the mask, not the eroded and feathered matte,
+  because the ask defines filmed as "the artist mask"; the matte differs from it by about 0.3 points wide and 0.6
+  in a 1.4x punch-in (the erosion scales with the zoom), which would break the 0.5-point promise. It is the same
+  for every look and a pure function of the frame (so it does not depend on the units).
+- **`--receipt-reveal SECTION`** (repeatable; the grammar of `--section`, plus `role:last`): that section renders
+  in the receipt look in every output. The reveal's first and last bars are forced cuts, so the flip from colour
+  to grey always lands on a cut (the cut check would otherwise see the flip as an off-grid cut and fail the
+  render). `--look receipt` makes the whole render a receipt section.
+- **`--receipt-counter`**: on receipt frames, `FILMED 24.7%  GENERATED 75.3%` in DIN Condensed Bold (macOS
+  Supplemental; then DIN Alternate, Helvetica, DejaVu Condensed, Pillow's own), set like a till receipt: label,
+  dotted leader, right-aligned figure to one decimal (the two always sum to 100.0), and a thin bar filled to the
+  filmed share. Greyscale on purpose: in the receipt look colour belongs to the filmed pixels only. Per frame, so
+  it ticks with the artist's movement. Drawn before the grain, so it sits in the picture.
+  - Place: chosen once per shot among top left, top right and lower left (inside the 9:16 safe area, clear of a
+    phone's caption band), whichever the artist's box covers least over the shot; ties keep top left.
+  - Ink: the first render put white type on the acid stage's white rings and the GENERATED row vanished. Mean
+    luminance could not see it (the rings average to mid grey). Now the counter takes the ink that fewer pixels
+    under it fight (white vs pixels brighter than 0.6, near-black vs darker than 0.4), with hysteresis so a shot
+    cannot flicker, and on a mixed ground lays a soft feathered pad of the opposite tone behind the block only as
+    strong as that conflict (none on a plain ground: just type).
+  - Read on `out/TEST_LOCAL_eng_receipt_counter_shots.jpg` (hook 2 in the receipt look, one crop per shot, read
+    back from the encode): wide 14.1%, medium 24.7%, close 34.3%, medium 25.0%, each equal to that frame's json value
+    rounded (14.07, 24.69, 34.30, 24.97); the close shot on the rings is legible on its pad; in the last medium shot
+    a bright neon tube crosses "75.0%", still readable through the halo but not perfectly clean (a known limit).
+    `out/TEST_LOCAL_eng_receipt_counter_1to1.jpg` (bars 26-30, collage with hook 2 revealed): frame 146 collage,
+    no counter; frame 147 receipt with the counter at 24.7%, the json's value for that frame.
+- Measured: bars 26-30 with the reveal, 294 frames, cut 1/1 on plan (the reveal's), audio -0.3 ms, 54 s on 2
+  workers (load about 4); hook 2 in receipt with the counter, 588 frames, cuts 3/3, audio +0.3 ms, filmed 25.2% over
+  the hook, 62 s on 4 workers.
+
+Tests (`tests/test_receipt.py`, 9): the counter's number is within 0.5 points of the mask area, wide and in a 1.4x
+punch-in, and equals the measured share rounded to 0.1; the counter changes only its own block and only on the
+receipt look; every look reports a filmed share; filmed + generated == 100.0; section selection incl. `hook:last`;
+the place goes where the artist is not, and a free place beats a slightly covered one; it draws at its place.
+Mutation M14 (2026-10-29, scratch copy): the counter under-reports by 10%: 2 tests red; restored byte-identical.
+Pillow 13.0.0 is now a direct dependency and pinned.
+
 ## 0.1.0: the floor (`realone/`, `python -m realone render`)
 
 One section of the song, end to end: a phone take plus the master track in, a finished 9:16 clip out, cuts on

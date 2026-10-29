@@ -263,13 +263,18 @@ class Compositor:
         self.grain = Grain()
         self.match = {look: ColorMatch(args.match) for look in LOOKS}  # one EMA per look: renders stay independent
         self.collage = Collage()
+        self.counter = None
 
     def frame(self, src_bgr, mask_bool, crop, world, front, world_stats, idx, gframe, looks, native=None,
-              ns=(1.0, 1.0)):
+              ns=(1.0, 1.0), counter=False):
         """-> ({look: uint8 frame}, info). world/front float32 0..255 (already the shot's world camera).
         native: the same frame at source resolution (9:16 crop, `ns` native px per proxy px). When given, a
         punch-in takes its pixels from it instead of upscaling the 1080 proxy, and a close shot's mask is
-        edge-refined against those pixels (realone/native.py)."""
+        edge-refined against those pixels (realone/native.py).
+        counter: draw the Real Receipt counter on the receipt look: 0/False no, 1/True top left, 2 top right,
+        3 lower left (receipt.PLACES).
+        info[look]["filmed"]: the share of the frame that is the artist's filmed pixels (the artist mask in output
+        space minus any pocket the despill cut open), the same for every look."""
         a = self.a
         alpha_src = refine_alpha(mask_bool, a.erode, a.feather)
         fg = src_bgr.astype(np.float32) / 255
@@ -297,6 +302,8 @@ class Compositor:
         wb_small = cv2.GaussianBlur(cv2.resize(world, (270, 480), interpolation=cv2.INTER_AREA), (0, 0), 4.5)
         wb = cv2.resize(wb_small, (W, H), interpolation=cv2.INTER_LINEAR) / 255
         self.est = despill_estimate(fg, hard, scale=zoom) if a.despill else None
+        cut = self.est["cut"] if self.est is not None else 0.0
+        filmed = float((hard * (1.0 - cut)).mean())
         outs, info = {}, {}
         for look in looks:
             if look == "clean":
@@ -305,8 +312,15 @@ class Compositor:
                 o, inf = self._receipt(fg, alpha, hard, world, front, wb)
             else:
                 o, inf = self._collage(fg, alpha, hard, world, front, wb, world_stats, gframe)
+            inf = dict(inf, source=info_native or "proxy", filmed=filmed)
+            if counter and look == "receipt":
+                if self.counter is None:
+                    from realone.receipt import Counter
+                    self.counter = Counter()
+                inf["counter_text"] = self.counter.draw(o, filmed, int(counter))
+                inf["counter_place"] = int(counter)
             outs[look] = self.grain.apply(o, idx, a.grain if look != "collage" else a.grain * 0.8).astype(np.uint8)
-            info[look] = dict(inf, source=info_native or "proxy")
+            info[look] = inf
         return outs, info
 
     def _wrap(self, fg, alpha, wb):

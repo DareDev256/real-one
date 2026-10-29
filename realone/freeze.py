@@ -17,6 +17,33 @@ from realone.common import FPS, Refuse
 EASE_S = 0.5  # after the release the camera eases from the held framing back to the live track
 
 
+def select_sections(tl, spec, rendered):
+    """Sections named by `spec` that START inside the rendered bars (the grammar of --section, plus role:last).
+    None / "" / "section": the rendered section (when rendering the whole song: every hook); a bare role: every
+    section with that role; "hook:2", "hook:last", "#3", "bars:A-B": that one."""
+    a, b = rendered[0]["start_bar"], rendered[-1]["end_bar"]
+    if spec in (None, "", "section"):
+        cands = rendered if len(rendered) == 1 else [s for s in rendered if s["role"] == "hook"]
+        label = "the rendered section" if len(rendered) == 1 else "every hook"
+    elif spec.endswith(":last"):
+        role = spec[:-5]
+        cands, label = [s for s in tl["sections"] if s["role"] == role][-1:], spec
+        if not cands:
+            found = ", ".join(f"#{s['index']} {s['role']}" for s in tl["sections"])
+            raise Refuse(f"{spec}: no {role} in this song (found: {found})")
+    elif spec.startswith(("bars:", "#")) or ":" in spec:
+        cands, label = [pick_section(tl, spec)], spec
+    else:
+        cands, label = [s for s in tl["sections"] if s["role"] == spec], f"every {spec}"
+        if not cands:
+            found = ", ".join(f"#{s['index']} {s['role']}" for s in tl["sections"])
+            raise Refuse(f"{spec}: no {spec} in this song (found: {found})")
+    inside = [s for s in cands if a <= s["start_bar"] < b]
+    if not inside:
+        raise Refuse(f"{spec or 'section'}: {label} does not start inside the rendered bars {a}-{b}")
+    return inside
+
+
 def resolve(tl, specs, bars_n, rendered):
     """--freeze values -> [{"spec", "section_index", "role", "occurrence", "start_bar", "end_bar"}].
 
@@ -34,20 +61,7 @@ def resolve(tl, specs, bars_n, rendered):
     a, b = rendered[0]["start_bar"], rendered[-1]["end_bar"]
     out = {}
     for spec in specs:
-        if spec in (None, "", "section"):
-            cands = rendered if len(rendered) == 1 else [s for s in rendered if s["role"] == "hook"]
-            label = "the rendered section" if len(rendered) == 1 else "every hook"
-        elif spec.startswith(("bars:", "#")) or ":" in spec:
-            cands, label = [pick_section(tl, spec)], spec
-        else:
-            cands, label = [s for s in tl["sections"] if s["role"] == spec], f"every {spec}"
-            if not cands:
-                found = ", ".join(f"#{s['index']} {s['role']}" for s in tl["sections"])
-                raise Refuse(f"--freeze {spec}: no {spec} in this song (found: {found})")
-        inside = [s for s in cands if a <= s["start_bar"] < b]
-        if not inside:
-            raise Refuse(f"--freeze {spec or ''}: {label} does not start inside the rendered bars {a}-{b}")
-        for s in inside:
+        for s in select_sections(tl, spec, rendered):
             fb0, fb1 = s["start_bar"], s["start_bar"] + bars_n
             name = f"{s['role']} (bars {s['start_bar']}-{s['end_bar']})"
             if fb1 > s["end_bar"]:
