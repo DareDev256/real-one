@@ -12,6 +12,9 @@
   Wonder, a test and the director doc) is replaced with an original line, "watch me move".
 - README: "with depth layers" and "one tap" were wrong (only the particles have depth; the reveal is the
   `--receipt-reveal` flag); Subtext Cut status now matches the director's.
+- Director checked against the 0.2.0 renderer (no code change needed): the dry run end to end on the test song
+  (2 renders, cuts 3/3, audio 0.14 ms off) and the director's own freeze handoff (bare `--freeze` found in `--help`,
+  frames 0-146 identical, the world released after).
 - `pytest.ini`: a bare `pytest` at the root collects `tests/` only (two files shared a basename).
 
 ## 0.2.0 (2026-10-29): the engine
