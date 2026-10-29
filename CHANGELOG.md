@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.2.0 (2026-10-29): the engine
+Hook Freeze in the renderer, native-resolution punch-ins, the whole song in parallel, the Real Receipt number,
+collage legibility. Every 0.1.0 flag works unchanged; every new flag is optional. Keyless proven; the SAM 3.1 and
+Muse Image paths stay unproven until the key lands. Measurements, decisions and limits: `docs/implementation-notes.md`.
+- **Hook Freeze** (`--freeze [SECTION]`, `--freeze-bars N`): on a section's first downbeat the world clock stops
+  (plate push-in, drift, particles, camera) while the artist and the grain keep moving; it resumes one frame step
+  on, and the camera eases back over 0.5 s. Proven on every render by hashing the world layer: identical through
+  the freeze, moving outside it, no jump on the release, the artist moving, an unfrozen control moving; a failed
+  check exits 2. A freeze starts on a cut; cuts inside it and on its release are dropped so the frozen world is
+  the one that resumes. Freeze contact sheet. A bare `--freeze` is what the director's `--help` probe passes.
+- **Native punch-ins**: the take is normalized once into a 1080x1920 proxy and a frame-aligned native 9:16 crop (one
+  ffmpeg graph); medium and close shots take their pixels from the native frame, and close shots edge-refine the
+  mask against them (colour guided filter): close-shot Laplacian variance 26.5 -> 860.6 on the synthetic 4K take
+  (mostly native-only texture; drawn edges alone 1.36x), wrong edge pixels 0.55% -> 0.38%. HDR (HLG/PQ) phone clips
+  tone-map through VideoToolbox, with the rotation applied by hand and fps=30. Fixed: a phone clip's rotation was
+  never read (sideways output); frame counting crashed on phone side data. `--no-native` for A/B;
+  `spike/make_test_clip.py --size WxH`.
+- **Full song** (`--section all`, `--worlds-json`, `--section-world KEY=PROMPT`, `--workers N`): one world list per
+  section; render units in worker processes (default CPU cores minus 2, capped by free memory after 10 workers
+  thrashed swap on a shared 16 GB Mac); raw H.264 segments (no B-frames) joined byte for byte and muxed with the
+  master, BT.709 now written into the stream. The synthetic full song (2645 frames, both hooks frozen) in 370 s
+  wall with masks cached, under load 11 to 18; a 3-minute song extrapolates to about 15 minutes at that load.
+  Long takes now sync (judged on all their windows; a whole-song take was refused before). Local masks use person
+  segmentation for real people, written as a memmap by several processes.
+- **Real Receipt**: every render writes `out/<tag>_<section>_receipt.json`, the filmed share of every frame, of
+  each section and of the whole video (the artist mask over the frame, the rest generated). `--receipt-reveal
+  SECTION` flips a section (e.g. `hook:last`) to the receipt look, on cuts. `--receipt-counter` draws
+  `FILMED 24.7%  GENERATED 75.3%` in DIN Condensed, set like a till receipt, placed per shot where the artist is
+  not, inked against the ground; it matches the mask area within 0.5 points (tested).
+- **Collage legibility**: when more than 35% of the band under the paper border is lighter than luma 0.72, the
+  border becomes a dark outline for that shot.
+- **SAM prompt union** (`--sam-prompt`, repeatable): one call per phrase, OR-ed, so a held prop stays in the cut-out.
+- 75 engine tests (147 with the director's); mutation checks M9 to M16, each guard broken on a scratch copy of the
+  repo, its test red, restored byte-identical: freeze hold removed, release snapping to real time, native frame
+  ignored, a unit dropping its last frame, the long-take t-test dropped, the counter under-reporting by 10%, the
+  collage border never switching, the SAM union keeping one phrase.
+- Pinned: pillow 13.0.0.
+- **Director** (separate agent; commits cfce1e3, defdf5b): `python -m realone.director plan|direct|review`: Muse
+  Voice Transcribe lyrics (the artist's sheet outranks it), a Muse Wonder treatment per section (subtext,
+  world_prompt, palette, camera_energy, look, freeze, why) with strict validation, a literal-lyrics guard, and a
+  Wonder-driven tool loop (generate_world, render_section, watch with video in, revise) with one revision pass.
+  Spend is quoted in US$ and CA$, with a US$2 cap unless --yes-spend. --dry-run uses FIXTURE responses. See
+  docs/director.md.
+
 ## 0.1.0 (2026-10-29): the floor
 One song section, end to end, as a package: `python -m realone render --clip <take> --song <master> --section hook
 --look collage|clean|receipt|all`. Keyless test runs (`--mask local --local-plate`) write `out/TEST_LOCAL_*`.
