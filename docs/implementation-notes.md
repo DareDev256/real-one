@@ -314,6 +314,37 @@ Tests (`tests/test_collage_ink.py`, 3): a white world switches to a dark outline
 the world); a dark world keeps the paper (over 0.85); a world white only where the border sits switches, white only
 far from the artist does not. Mutation M15 (scratch copy): the border never switches: 2 tests red; restored.
 
+### 6. SAM prompt union (`--sam-prompt`, the coordinator's optional note)
+
+```
+.venv/bin/python -m realone render --clip take.mov --song master.wav --section hook \
+    --sam-prompt "the person" --sam-prompt "the microphone" --world "..."
+```
+
+The coordinator saw props pop in and out of a cut-out on James's real clip. `--sam-prompt` (repeatable) makes one
+SAM 3.1 call per phrase, each cached and each in the spend quote (US$0.20 per 1k frames per uncached phrase),
+decodes each on its own (so each phrase keeps its own objects), and ORs the masks per frame into a memory-mapped
+union. A phrase that matches nothing is left out and named; nothing matched is refused. Without the flag, the 0.1.0
+chain ("the person singing", then "the person") is unchanged. `--sam-prompt` with `--mask local` is refused (the
+local test masks take no prompt). UNCONFIRMED like every SAM path here: tested offline only, on text built with
+the parser library's own encoder (`tests/test_sam_union.py`: person + microphone land exactly where their boxes say
+on every frame, an empty phrase is left out, the quote counts only uncached phrases, no key means no call).
+Mutation M16: a "union" that keeps only the first phrase: red. A per-phrase hold of missing frames is the 0.1.0
+rule; a prop that leaves the frame for good holds its last mask (a known limit until real output is seen).
+
+### Known limits of 0.2.0
+
+- Everything visual was still judged on a drawn figure with Apple Vision masks, plus 2 s of James's real clip for
+  orientation and mask area only. SAM 3.1 and Muse Image remain unproven until the key lands.
+- The 3-minute-in-15 goal is met only by extrapolation, and only at the line under today's load (about 15 min);
+  an idle-machine run was never possible today.
+- Native punch-ins: the close-shot mask refinement helps (0.55% to 0.38% wrong edge pixels) but medium shots use
+  the plain upsample; the detail gain on real skin and fabric is unmeasured (the synthetic weave is the stand-in).
+- Collage dark outline: fills hair gaps solid and vanishes over black where the ground is mixed.
+- Receipt counter: a bright stripe crossing the figures stays readable through the halo but not perfectly clean.
+- Long-take sync rule: calibrated on the procedural song (4-bar loops); a real song with long identical repeats
+  may still refuse; `--sync-near` remains the way out.
+
 ## 0.1.0: the floor (`realone/`, `python -m realone render`)
 
 One section of the song, end to end: a phone take plus the master track in, a finished 9:16 clip out, cuts on

@@ -48,31 +48,84 @@ def call_sam(client, norm, prompt):
     return "".join(parts), up.id
 
 
-def sam_text(client, norm, tag, n_frames):
-    """Cached: out/masks/<tag>__<prompt>.txt (raw output_text) + .json. A rerun costs nothing.
-    Tries 'the person singing', then 'the person'. Returns (text, prompt, billed_usd_this_run)."""
-    mdir = OUT / "masks"
+def sam_text_one(client, norm, tag, n_frames, prompt, mdir=None):
+    """One prompt, cached: <mdir>/<tag>__<prompt>.txt (raw output_text) + .json. A rerun costs nothing.
+    -> (text, billed_usd_this_run)."""
+    mdir = Path(mdir or OUT / "masks")
     mdir.mkdir(parents=True, exist_ok=True)
+    txt, meta = mdir / f"{tag}__{slug(prompt)}.txt", mdir / f"{tag}__{slug(prompt)}.json"
+    if txt.exists():
+        print(f"SAM 3.1: cache hit for '{prompt}' ({txt.name}), no API call")
+        return txt.read_text(), 0.0
+    if client is None:
+        raise Refuse(f"no cached SAM output for '{prompt}' on this clip and no MODEL_API_KEY")
+    print(f"SAM 3.1: segmenting '{prompt}' on {n_frames} frames ...")
+    t0 = time.time()
+    text, file_id = call_sam(client, norm, prompt)
+    txt.write_text(text)
+    meta.write_text(json.dumps({"prompt": prompt, "file_id": file_id, "frames": n_frames,
+                                "seconds": round(time.time() - t0, 1), "empty": not text.strip()}, indent=2))
+    return text, sam_cost(n_frames)
+
+
+def sam_text(client, norm, tag, n_frames):
+    """The default chain: 'the person singing', then 'the person'. Returns (text, prompt, billed_usd_this_run)."""
     billed = 0.0
     for prompt in SAM_PROMPTS:
-        txt, meta = mdir / f"{tag}__{slug(prompt)}.txt", mdir / f"{tag}__{slug(prompt)}.json"
-        if not txt.exists():
-            if client is None:
-                raise Refuse("no cached SAM masks for this clip and no MODEL_API_KEY")
-            print(f"SAM 3.1: segmenting '{prompt}' on {n_frames} frames ...")
-            t0 = time.time()
-            text, file_id = call_sam(client, norm, prompt)
-            txt.write_text(text)
-            meta.write_text(json.dumps({"prompt": prompt, "file_id": file_id, "frames": n_frames,
-                                        "seconds": round(time.time() - t0, 1), "empty": not text.strip()}, indent=2))
-            billed += sam_cost(n_frames)
-        else:
-            print(f"SAM 3.1: cache hit for '{prompt}' ({txt.name}), no API call")
-        text = txt.read_text()
+        text, b = sam_text_one(client, norm, tag, n_frames, prompt)
+        billed += b
         if text.strip():
             return text, prompt, billed
         print(f"SAM 3.1: no match for '{prompt}', trying the fallback prompt")
     raise Refuse("SAM 3.1 matched nothing for any prompt; check the clip (is the artist in frame?)")
+
+
+def sam_uncached(tag, prompts, mdir=None):
+    """The prompts that would cost an API call (no cached output yet)."""
+    mdir = Path(mdir or OUT / "masks")
+    return [p for p in prompts if not (mdir / f"{tag}__{slug(p)}.txt").exists()]
+
+
+def _decoded(text, n_frames, path):
+    if not path.exists():
+        tmp = path.with_suffix(".tmp.npy")
+        packed, _ = sam_masks(text, n_frames, out=tmp)
+        packed.flush()
+        del packed
+        tmp.rename(path)
+    return path
+
+
+def sam_masks_union(client, norm, tag, n_frames, prompts, mdir=None):
+    """--sam-prompt, repeated (0.2.0): one SAM 3.1 call per prompt ("the person", "the microphone"), each cached
+    and each billed, decoded on its own (so each keeps its own objects), then OR-ed per frame, so a held prop stays
+    in the cut-out. A prompt that matches nothing is left out and named. -> (path, engine, billed).
+    # UNCONFIRMED: like every SAM path here, exercised only on text built with the parser library's own encoder."""
+    mdir = Path(mdir or OUT / "masks")
+    billed, paths, used = 0.0, [], []
+    for p in prompts:
+        text, b = sam_text_one(client, norm, tag, n_frames, p, mdir)
+        billed += b
+        if not text.strip():
+            print(f"SAM 3.1: '{p}' matched nothing; left out of the union")
+            continue
+        paths.append(_decoded(text, n_frames, mdir / f"{tag}__{slug(p)}.masks.npy"))
+        used.append(p)
+    if not paths:
+        raise Refuse(f"SAM 3.1 matched nothing for any --sam-prompt {prompts}")
+    if len(paths) == 1:
+        return paths[0], f"SAM 3.1 '{used[0]}'", billed
+    out = mdir / f"{tag}__union__{'+'.join(slug(p) for p in used)}.masks.npy"
+    if not out.exists():
+        tmp = out.with_suffix(".tmp.npy")
+        u = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.uint8, shape=(n_frames, W * H // 8))
+        arrays = [np.load(p, mmap_mode="r") for p in paths]
+        for i in range(n_frames):
+            u[i] = np.bitwise_or.reduce([a[i] for a in arrays])
+        u.flush()
+        del u
+        tmp.rename(out)
+    return out, f"SAM 3.1 union of {used}", billed
 
 
 async def _parse_async(text):
@@ -202,16 +255,9 @@ def sam_masks(text, n_frames, out=None):
 
 
 def sam_masks_cached(client, norm, tag, n_frames):
-    text, prompt, billed = sam_text(client, norm, tag, n_frames)
     """-> (path of the packed .npy, engine, billed). Decoded masks are cached: reruns skip the decode."""
-    mcache = OUT / "masks" / f"{tag}__{slug(prompt)}.masks.npy"
-    if not mcache.exists():
-        tmp = mcache.with_suffix(".tmp.npy")
-        packed, _ = sam_masks(text, n_frames, out=tmp)
-        packed.flush()
-        del packed
-        tmp.rename(mcache)
-    return mcache, f"SAM 3.1 '{prompt}'", billed
+    text, prompt, billed = sam_text(client, norm, tag, n_frames)
+    return _decoded(text, n_frames, OUT / "masks" / f"{tag}__{slug(prompt)}.masks.npy"), f"SAM 3.1 '{prompt}'", billed
 
 
 def _vision_one(frame, Vision, Quartz, NSData, objc, person):

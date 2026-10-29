@@ -70,3 +70,9 @@ def test_song_flags_refuse_at_the_gate(junk, tmp_path, extra, msg):
     p, secs = run(["render", "--clip", junk[0], "--song", junk[1], "--mask", "local", "--section", "all"] + extra)
     assert p.returncode == 2 and msg in p.stderr, p.stderr
     assert secs < 10
+
+
+def test_sam_prompt_is_refused_on_the_local_path(junk):
+    p, secs = run(["render", "--clip", junk[0], "--song", junk[1], "--mask", "local", "--local-plate",
+                   "--sam-prompt", "the microphone"])
+    assert p.returncode == 2 and "--sam-prompt is for --mask sam" in p.stderr and secs < 10

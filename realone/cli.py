@@ -20,6 +20,9 @@ def build_parser():
     r.add_argument("--look", default="collage", help="clean | collage | receipt | all | a comma list")
     r.add_argument("--mask", choices=["sam", "local"], default="sam",
                    help="sam = Meta SAM 3.1 (default, needs MODEL_API_KEY); local = Apple Vision, TEST ONLY")
+    r.add_argument("--sam-prompt", action="append", metavar="PHRASE",
+                   help='SAM 3.1 noun phrase; repeat for a union, e.g. --sam-prompt "the person" --sam-prompt '
+                        '"the microphone" (one billed call each; default: "the person singing", then "the person")')
     r.add_argument("--local-plate", action="store_true", help="three procedural test plates (TEST ONLY, needs --mask local)")
     r.add_argument("--world", action="append", help="a Muse Image world prompt; repeat for one world per shot")
     r.add_argument("--worlds-file", help="one Muse Image prompt per line")

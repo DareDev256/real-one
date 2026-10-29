@@ -19,7 +19,7 @@ from realone.audio import analyze, pick_section
 from realone.common import FPS, LOCAL_PREFIX, OUT, Refuse, file_md5, unpack_mask, write_json
 from realone.composite import LIGHT_SHARE, LOOKS, border_ink, crop_matrix, is_identity
 from realone.encode import detect_cuts, verify_output
-from realone.masks import sam_cost, sam_masks_cached, vision_masks
+from realone.masks import sam_cost, sam_masks_cached, sam_masks_union, sam_uncached, vision_masks
 from realone.media import count_frames, load_audio, load_audio_native, probe, stream, write_wav
 from realone.meta_api import IMAGE_USD, USD_TO_CAD, make_client, require_key
 from realone.native import normalize as normalize_take
@@ -60,6 +60,8 @@ def gate(a):
     prompts = WL.prompts_in(default, per)
     if a.local_plate and not local:
         raise Refuse("--local-plate is test-only and needs --mask local")
+    if getattr(a, "sam_prompt", None) and local:
+        raise Refuse("--sam-prompt is for --mask sam (SAM 3.1); the local test masks take no prompt")
     if not (default or per or a.local_plate):
         raise Refuse("no worlds: give --world '<prompt>' (repeatable, Muse Image), --world-image <path>, "
                      "--worlds-json, or --local-plate (test only)")
@@ -234,7 +236,10 @@ def render(a):
     new_prompts = [v for kind, v in entries if kind == "prompt" and not muse_world_cached(v, wrap)]
     client = make_client(key) if key else None
     usd = 0.0
-    if not local and not any((OUT / "masks").glob(f"{mtag}__*.txt")):
+    sam_prompts = getattr(a, "sam_prompt", None)
+    if not local and sam_prompts:
+        usd += sam_cost(n) * len(sam_uncached(mtag, sam_prompts))  # one call per prompt not yet cached
+    elif not local and not any((OUT / "masks").glob(f"{mtag}__*.txt")):
         usd += sam_cost(n)
     usd += IMAGE_USD * len(new_prompts)
     if usd:
@@ -249,7 +254,10 @@ def render(a):
         mpath, req = vision_masks(norm, n, OUT / "masks" / f"local_{mtag}.npy", workers=min(workers, 4))
         engine = f"Apple Vision ({req}), TEST ONLY"
     else:
-        mpath, engine, b = sam_masks_cached(client, norm, mtag, n)
+        if sam_prompts:
+            mpath, engine, b = sam_masks_union(client, norm, mtag, n, sam_prompts)
+        else:
+            mpath, engine, b = sam_masks_cached(client, norm, mtag, n)
         billed += b
     masks = np.load(mpath, mmap_mode="r")
     stages["masks_s"] = round(time.time() - t, 1)
