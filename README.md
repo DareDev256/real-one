@@ -14,7 +14,7 @@ Built for the Meta Global AI Developer Hackathon (Cerebral Valley), Oct 27 to No
 
 ## Status
 
-- [ ] Freeze spike: 10 s phone clip, one world, a 3 s freeze
+- [~] Freeze spike: script written and plumbing-tested locally (0.0.2); waiting on the Meta API key for the real edge test
 - [ ] Floor: one song section end to end
 - [ ] Subtext Cut
 - [ ] Full song + Real Receipt

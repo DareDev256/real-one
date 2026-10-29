@@ -1,0 +1,9 @@
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+openai==3.41.0
+meta-sam-parser==0.1.0
+# local test segmenter only (Apple Vision); never used for the demo
+pyobjc-core==12.2.2; sys_platform == "darwin"
+pyobjc-framework-Cocoa==12.2.2; sys_platform == "darwin"
+pyobjc-framework-Quartz==12.2.2; sys_platform == "darwin"
+pyobjc-framework-Vision==12.2.2; sys_platform == "darwin"
