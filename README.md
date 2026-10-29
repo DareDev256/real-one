@@ -15,11 +15,26 @@ Built for the Meta Global AI Developer Hackathon (Cerebral Valley), Oct 27 to No
 ## Status
 
 - [~] Freeze spike: script written and plumbing-tested locally (0.0.2); waiting on the Meta API key for the real edge test
-- [ ] Floor: one song section end to end
+- [~] Floor (0.1.0): one song section end to end, three looks (clean, collage, receipt), cuts on downbeats, master
+  audio in sync. Proven keyless on a synthetic song and a drawn test figure; the SAM 3.1 and Muse Image path is
+  wired but unproven until the key lands
 - [ ] Subtext Cut
 - [ ] Full song + Real Receipt
 - [ ] Hook Freeze on the hook
 - [ ] 3-minute demo video
+
+## Run it
+
+```
+.venv/bin/pip install -r requirements.txt
+export MODEL_API_KEY=...   # lives outside the repo; without it only the TEST_LOCAL path runs
+.venv/bin/python -m realone render --clip footage/take1.mov --song footage/master.wav --section hook \
+    --look collage --world "rain-soaked Toronto alley at night" --world "rooftop at dusk" --world "empty stage"
+```
+
+Flags: `--section hook|verse|hook:2|bars:A-B`, `--look clean|collage|receipt|all`, `--cut-bars 1|2|4|8`,
+`--mask sam|local`, `--final` (x264 slow, crf 17), `--sync-near <s>`, `--max-usd`, `--max-minutes`.
+Keyless test run, tests and the full pipeline: `docs/implementation-notes.md`.
 
 ## Rules this repo follows
 

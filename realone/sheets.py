@@ -1,0 +1,92 @@
+"""Contact sheets, read back from the ENCODED video (what a viewer actually gets), not from memory."""
+import cv2
+import numpy as np
+
+from realone.common import H, W
+from realone.media import read_frames
+
+INK = (236, 236, 236)
+DIM = (150, 150, 150)
+VERMILION = (43, 65, 232)  # BGR
+BG = 14
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+
+
+def grab(video, idxs):
+    want = {int(i): None for i in idxs}
+    top = max(want)
+    for i, fr in enumerate(read_frames(video)):
+        if i in want:
+            want[i] = fr.copy()
+        if i >= top:
+            break
+    return {i: (f if f is not None else np.zeros((H, W, 3), np.uint8)) for i, f in want.items()}
+
+
+def text_bar(width, lines, height=None):
+    lh = 19
+    h = height or (10 + lh * len(lines))
+    bar = np.full((h, width, 3), BG, np.uint8)
+    for j, (txt, col, scale) in enumerate(lines):
+        cv2.putText(bar, txt, (8, 18 + j * lh), FONT, scale, col, 1, cv2.LINE_AA)
+    return bar
+
+
+def edge_crop(frame, bbox, size=300):
+    """1:1 crop around the chin/collar (where concave pockets and fringes live)."""
+    x0, y0, x1, y1 = bbox
+    cx, cy = (x0 + x1) / 2, y0 + (y1 - y0) * 0.24
+    xs = int(np.clip(cx - size / 2, 0, W - size))
+    ys = int(np.clip(cy - size / 2, 0, H - size))
+    return frame[ys:ys + size, xs:xs + size]
+
+
+def contact_sheet(video, plan, bbox_out, look, path, title, world_names):
+    shots = plan["shots"]
+    tw, th = 300, 533
+    picks = []
+    for sh in shots:
+        picks += [sh["start_frame"], (sh["start_frame"] + sh["end_frame"]) // 2]
+    frames = grab(video, picks)
+    cols = []
+    for sh in shots:
+        f_cut, f_mid = sh["start_frame"], (sh["start_frame"] + sh["end_frame"]) // 2
+        cut_tile = cv2.resize(frames[f_cut], (tw, th), interpolation=cv2.INTER_AREA)
+        cv2.rectangle(cut_tile, (0, 0), (tw - 1, th - 1), VERMILION, 3)
+        mid_tile = cv2.resize(frames[f_mid], (tw, th), interpolation=cv2.INTER_AREA)
+        crop = edge_crop(frames[f_mid], bbox_out[f_mid])
+        lab1 = text_bar(tw, [
+            (f"SHOT {sh['index'] + 1}  CUT {sh['cut_time_s']:.3f}s  (frame {f_cut})", VERMILION, 0.45),
+            (f"bar {sh['bar'] + 1} beat 1 = downbeat {sh['downbeat_s']:.3f}s", INK, 0.45),
+            (f"cut error {sh['cut_error_ms']:+.1f} ms   beat #{sh['beat_index']}", INK, 0.45),
+            (f"{sh['framing']} x{sh['zoom']:.1f}   world: {world_names[sh['world']]}", DIM, 0.45)])
+        lab2 = text_bar(tw, [(f"mid-shot  t={plan['start_s'] + f_mid / 30:.2f}s  (frame {f_mid})", DIM, 0.45)])
+        lab3 = text_bar(tw, [("edge, 1:1 pixels (chin / collar)", DIM, 0.45)])
+        cols.append(np.vstack([cut_tile, lab1, mid_tile, lab2, crop, lab3]))
+    gut = np.full((cols[0].shape[0], 8, 3), BG, np.uint8)
+    body = np.hstack([gut] + [x for c in cols for x in (c, gut)])
+    head = text_bar(body.shape[1], [(title, INK, 0.6), (f"look: {look}   frames read back from {video.name}", DIM, 0.45)],
+                    height=56)
+    sheet = np.vstack([head, body, np.full((8, body.shape[1], 3), BG, np.uint8)])
+    cv2.imwrite(str(path), sheet, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return path
+
+
+def looks_sheet(videos, plan, path, title):
+    """Rows = looks, columns = the mid frame of each shot, same frames in every row."""
+    tw, th = 270, 480
+    mids = [(s["start_frame"] + s["end_frame"]) // 2 for s in plan["shots"]]
+    rows = []
+    for look, video in videos.items():
+        frames = grab(video, mids)
+        tiles = []
+        for sh, f in zip(plan["shots"], mids):
+            t = cv2.resize(frames[f], (tw, th), interpolation=cv2.INTER_AREA)
+            tiles.append(np.vstack([t, text_bar(tw, [(f"{look}  shot {sh['index'] + 1}  {sh['framing']}", INK, 0.45)])]))
+        gut = np.full((tiles[0].shape[0], 8, 3), BG, np.uint8)
+        rows.append(np.hstack([gut] + [x for t in tiles for x in (t, gut)]))
+    sep = np.full((8, rows[0].shape[1], 3), BG, np.uint8)
+    head = text_bar(rows[0].shape[1], [(title, INK, 0.55)], height=34)
+    sheet = np.vstack([head] + [x for r in rows for x in (r, sep)])
+    cv2.imwrite(str(path), sheet, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return path

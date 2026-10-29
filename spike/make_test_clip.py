@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Synthesize a 10 s portrait test clip (a drawn, shaded figure swaying and
-walking in a dim room, with a beat + tone audio track). Plumbing test only:
-it is not footage of anyone, and it never goes in the demo.
+"""Synthesize a portrait test clip: a drawn, shaded figure swaying and walking in a dim room. Plumbing test
+only: it is not footage of anyone, and it never goes in the demo.
 
-    python spike/make_test_clip.py footage/synthetic_test.mp4
+    python spike/make_test_clip.py footage/synthetic_test.mp4            # 10 s, beat + tone audio (spike 0.0.2)
+
+Performance mode (floor 0.1.0): the figure bobs on the test song's beat, and the clip's audio is what a phone
+on set would record from a KNOWN offset into the song (band-limited playback, a room, the artist singing a
+separate take live, room noise). Ground truth goes to <out>.truth.json.
+
+    python spike/make_test_clip.py footage/perf_test.mp4 --song footage/test_song.wav --offset 26.317 --secs 26
 """
+import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -30,8 +37,8 @@ def capsule(img, p0, p1, r0, r1, col, shade=0.35):
     cv2.line(img, a, b, hl, max(2, int(r0 * 0.35)), cv2.LINE_AA)
 
 
-def figure(t):
-    """Draw the figure on a transparent BGRA layer at time t."""
+def figure(t, beat=None):
+    """Draw the figure on a transparent BGRA layer at time t. beat=(song_time, beat_s, first_beat_s): bob on it."""
     layer = np.zeros((H, W, 4), np.uint8)
     img = np.zeros((H, W, 3), np.uint8)
     m = np.zeros((H, W), np.uint8)
@@ -40,6 +47,11 @@ def figure(t):
     step = np.sin(t * 2 * np.pi * 0.9)
     cx = int(W * 0.5 + sway * 120)
     base = int(H * 0.88 + abs(np.sin(t * 2 * np.pi * 0.9)) * -14)
+    if beat is not None:  # phase-locked to the song: lowest point of the bob exactly on each beat
+        st, bs, b0 = beat
+        ph = ((st - b0) / bs) % 1.0
+        cx = int(W * 0.5 + np.sin((st - b0) / (8 * bs) * 2 * np.pi) * 120)  # sway over 2 bars
+        base = int(H * 0.88 + 30 * np.cos(ph * 2 * np.pi) - 16)
 
     skin = (120, 150, 205)       # BGR warm brown-ish
     jacket = (40, 40, 150)       # deep red
@@ -117,24 +129,49 @@ def background(t):
     return bg
 
 
-def main(out):
+def performance_audio(song, offset, secs, out_wav, seed=1):
+    """Phone-mic audio for a take that started `offset` s into the song. Returns the song's truth dict."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import soundfile as sf
+    from make_test_song import SR, make_live_vocal, phone_mic
+    truth = json.loads(Path(song).with_suffix(".truth.json").read_text())
+    y, sr = sf.read(str(song), dtype="float32")
+    y = y.mean(axis=1) if y.ndim == 2 else y
+    if sr != SR:
+        raise SystemExit(f"expected a {SR} Hz test song")
+    live = make_live_vocal(bpm=truth["bpm"], lead_in=truth["lead_in_s"], seed=truth["seed"])
+    mic = phone_mic(y, offset, secs, seed=seed, live_vocal=live, vocal_db=0.0, snr_db=20.0)
+    sf.write(str(out_wav), mic, SR, subtype="PCM_16")
+    return truth
+
+
+def main(out, song=None, offset=0.0, secs=SECS):
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    # beat + tone so the audio path is exercised
     audio = out.with_suffix(".tmp.wav")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
-                    f"sine=f=220:d={SECS}", "-f", "lavfi", "-i",
-                    f"aevalsrc='0.6*sin(2*PI*55*t)*exp(-8*mod(t,0.5))':d={SECS}:s=44100",
-                    "-filter_complex", "[0][1]amix=inputs=2:normalize=0,volume=0.7", str(audio)], check=True)
+    beat = None
+    if song:
+        truth = performance_audio(song, offset, secs, audio)
+        beat = (60.0 / truth["bpm"], truth["first_downbeat_s"])
+        out.with_suffix(".truth.json").write_text(json.dumps({
+            "song": str(song), "offset_s": offset, "secs": secs, "fps": FPS,
+            "convention": "song_time = clip_time + offset_s",
+            "audio": "phone-mic simulation: band-limited playback, room, live vocal take at 0 dB, noise at 20 dB SNR",
+            "note": "drawn figure, not footage of anyone; never the demo"}, indent=2))
+    else:  # beat + tone so the audio path is exercised
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                        f"sine=f=220:d={secs}", "-f", "lavfi", "-i",
+                        f"aevalsrc='0.6*sin(2*PI*55*t)*exp(-8*mod(t,0.5))':d={secs}:s=44100",
+                        "-filter_complex", "[0][1]amix=inputs=2:normalize=0,volume=0.7", str(audio)], check=True)
     enc = subprocess.Popen(
         ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}",
          "-r", str(FPS), "-i", "-", "-i", str(audio), "-c:v", "libx264", "-crf", "16",
          "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-movflags", "+faststart", str(out)],
         stdin=subprocess.PIPE)
-    for i in range(FPS * SECS):
+    for i in range(int(round(FPS * secs))):
         t = i / FPS
         bg = background(t)
-        f = figure(t)
+        f = figure(t, None if beat is None else (t + offset, beat[0], beat[1]))
         a = f[..., 3:4].astype(np.float32) / 255
         frame = f[..., :3].astype(np.float32) * a + bg * (1 - a)
         enc.stdin.write(np.clip(frame, 0, 255).astype(np.uint8).tobytes())
@@ -145,4 +182,10 @@ def main(out):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "footage/synthetic_test.mp4")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("out", nargs="?", default="footage/synthetic_test.mp4")
+    ap.add_argument("--song", help="test song (performance mode); its .truth.json must sit beside it")
+    ap.add_argument("--offset", type=float, default=0.0, help="song time at the clip's first frame")
+    ap.add_argument("--secs", type=float, default=SECS)
+    a = ap.parse_args()
+    main(a.out, a.song, a.offset, a.secs)

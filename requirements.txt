@@ -2,6 +2,14 @@ numpy==2.5.4
 opencv-python-headless==5.0.0.93
 openai==3.41.0
 meta-sam-parser==0.1.0
+# audio analysis + sync (0.1.0); scipy and numba are librosa's own, pinned so a fresh venv resolves the same
+librosa==1.0.0
+scipy==1.18.1
+numba==0.68.1
+llvmlite==0.50.0
+soundfile==0.14.0
+# tests
+pytest==9.2.0
 # local test segmenter only (Apple Vision); never used for the demo
 pyobjc-core==12.2.2; sys_platform == "darwin"
 pyobjc-framework-Cocoa==12.2.2; sys_platform == "darwin"
