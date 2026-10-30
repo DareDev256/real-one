@@ -34,6 +34,7 @@ you stay in colour.
 | **Muse Wonder** | Hears the song as audio, reads the lyrics and the beat grid, and writes a treatment per section from what the song means, not what the words say. Then watches its own render as video and gives notes for one revision pass. |
 | **Muse Image** | Builds one vertical world per section from the director's world prompt. |
 | **Muse Voice Transcribe** | Lyrics from the master, placed by section; the artist's own lyric sheet outranks it. |
+| **Muse Spark Open** (Baseten) | The open-weight brain: writes the same song's treatment through the same guard, so the two directors can be compared side by side (`plan --brain spark-open`). |
 
 Every path is wired and tested offline against the documented API shapes. None has run with a key yet; the first
 keyed run is `scripts/first_keyed_run.sh probe`.
@@ -53,7 +54,7 @@ keyed run is `scripts/first_keyed_run.sh probe`.
 
 ## Engineering
 
-- 202 tests. Each guard was also broken on purpose to prove its test goes red, then restored byte-identical; the
+- 216 tests. Each guard was also broken on purpose to prove its test goes red, then restored byte-identical; the
   log is in `docs/implementation-notes.md` and the CHANGELOG.
 - Every render reads its own output back: cuts within 1 frame of the plan, audio within 1 frame of the master, and the
   freeze proven by hashing the world state. A failed check exits non-zero.
@@ -85,7 +86,8 @@ Flags: `--section hook|verse|hook:2|bars:A-B|#i|all`, `--look clean|collage|rece
   `--look collage,receipt`; `scripts/serve_watch_page.py` serves it locally. Test renders carry a TEST banner.
 - **README media:** `scripts/readme_media.py --tag TAG --section SECTION` regenerates the two images above. Test
   renders are stamped TEST RENDER.
-- **Director:** `python -m realone.director plan|direct|review`; see `docs/director.md`.
+- **Director:** `python -m realone.director plan|direct|review`; `plan --brain spark-open` writes the treatment on
+  Muse Spark Open (Baseten) instead of Muse Wonder; see `docs/director.md`.
 
 Every render writes `out/<tag>_<section>_<look>.mp4`, its contact sheet, `_shots.json`, `_run.json` and
 `_receipt.json`. Keyless test runs and the full pipeline: `docs/implementation-notes.md`.

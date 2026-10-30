@@ -17,7 +17,7 @@ from pathlib import Path
 
 from realone.common import LOCAL_PREFIX, OUT, Refuse, file_md5, write_json
 from realone.director import budget, lyrics as lyr, loop, treatment as trt
-from realone.director.backend import FIXTURE_LABEL, FixtureBackend, MetaBackend
+from realone.director.backend import FIXTURE_LABEL, FixtureBackend, MetaBackend, SparkOpenBackend
 from realone.director.budget import WONDER_MODEL
 from realone.director.tools import Renderer, State, Tools
 
@@ -50,6 +50,10 @@ def build_parser():
 
     pl = sub.add_parser("plan", help="lyrics + treatment + guard, no render")
     common(pl)
+    pl.add_argument("--brain", choices=["wonder", "spark-open"], default="wonder",
+                    help="who writes the treatment: Muse Wonder (Meta Model API) or Muse Spark Open on Baseten "
+                         "(open weights; needs BASETEN_API_KEY and --no-transcribe)")
+    pl.add_argument("--spark-model", default=budget.SPARK_MODEL, help="Baseten model slug for --brain spark-open")
     di = sub.add_parser("direct", help="plan, then Wonder drives worlds, renders, watch, one revision pass")
     common(di)
     di.add_argument("--clip", required=True, help="the artist's phone take")
@@ -82,6 +86,8 @@ def _meta(a, mode_key):
          "mode": "DRY RUN" if a.dry_run else "keyed", "song": str(a.song) if hasattr(a, "song") else None}
     if a.dry_run:
         m["FIXTURE"] = FIXTURE_LABEL
+    elif getattr(a, "brain", "wonder") == "spark-open":
+        m["model"] = f"{a.spark_model} (Baseten)"
     else:
         m["model"] = WONDER_MODEL
     m.update(mode_key)
@@ -146,7 +152,14 @@ def main(argv=None):
         if a.cmd == "review":
             return review(a)
         _exists(a.song, a.lyrics, getattr(a, "clip", None))
-        key = None if a.dry_run else budget.require_key()  # before any work
+        brain = getattr(a, "brain", "wonder")
+        if brain == "spark-open" and not a.no_transcribe:
+            raise Refuse("--brain spark-open needs --no-transcribe (Baseten has no transcription endpoint); pass "
+                         "--lyrics for the words. Nothing was called.")
+        if a.dry_run:
+            key = None
+        else:  # before any work
+            key = budget.require_baseten_key() if brain == "spark-open" else budget.require_key()
         prefix = LOCAL_PREFIX if a.dry_run else ""
         OUT.mkdir(exist_ok=True)
         stem = OUT / f"{prefix}director_{a.tag}"
@@ -167,9 +180,9 @@ def main(argv=None):
                          transcribe=not a.no_transcribe, direct=a.cmd == "direct",
                          covered_s=[s["end_s"] - s["start_s"] for s in timeline["sections"]
                                     if s["index"] in covered],
-                         max_turns=getattr(a, "max_turns", 8), driver=getattr(a, "driver", "model"))
+                         max_turns=getattr(a, "max_turns", 8), driver=getattr(a, "driver", "model"), brain=brain)
         if a.treatment:
-            q["lines"] = [x for x in q["lines"] if not x["what"].startswith("Wonder treatment")
+            q["lines"] = [x for x in q["lines"] if not x["what"].startswith(f"{budget.BRAIN_NAME[brain]} treatment")
                           and "repair" not in x["what"] and "re-ask" not in x["what"]]
             for k in ("ceiling", "expected"):
                 q[f"{k}_usd"] = round(sum(x[f"{k}_usd"] for x in q["lines"]), 4)
@@ -182,7 +195,7 @@ def main(argv=None):
             print(budget.format_quote(q, "director: spend quote before any call:"))
             cap = budget.gate(q, a.cap_usd, a.yes_spend)
             meter = budget.Meter(cap, a.max_calls)
-            backend = MetaBackend(key, meter)
+            backend = SparkOpenBackend(key, meter, a.spark_model) if brain == "spark-open" else MetaBackend(key, meter)
         rec, tpath, ly, res = plan_stage(a, backend, meter, prefix, timeline)
         print(f"director: treatment -> {tpath}" + ("   [FIXTURE]" if a.dry_run else ""))
         _print_treatment(rec)

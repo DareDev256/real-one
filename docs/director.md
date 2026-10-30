@@ -20,6 +20,10 @@ What the docs confirm and what they do not: `docs/meta-api-director.md`.
 # keyed (MODEL_API_KEY in the environment): quotes US$ and CA$ first, refuses a ceiling over US$2 without --yes-spend
 .venv/bin/python -m realone.director direct --clip footage/take1.mov --song footage/master.wav --lyrics lyrics.txt
 
+# the same treatment from Muse Spark Open on Baseten (BASETEN_API_KEY): open weights, plan only, no transcription
+.venv/bin/python -m realone.director plan --brain spark-open --no-transcribe --song footage/master.wav \
+    --lyrics lyrics.txt --tag spark
+
 .venv/bin/python -m pytest -q tests/test_director*.py
 ```
 
@@ -41,7 +45,7 @@ own files: `out/<p>director_<tag>_r<n>_s<section>_<look>.mp4` plus its `_run.jso
 | guard | `director/guard.py` | none (deterministic) | score, shared words, concrete hits |
 | loop | `director/loop.py`, `director/tools.py` | Muse Wonder with function tools | renders, notes, one revision |
 | budget | `director/budget.py` | none | quote, meter, refusals |
-| backends | `director/backend.py` | Meta Model API, or FIXTURE | swappable |
+| backends | `director/backend.py` | Meta Model API, Muse Spark Open on Baseten (plan), or FIXTURE | swappable |
 
 ## Decisions (made without James, 2026-10-29; each one is reversible)
 
@@ -112,8 +116,15 @@ own files: `out/<p>director_<tag>_r<n>_s<section>_<look>.mp4` plus its `_run.jso
     is invalid (repair turn), the repaired one is literal in two sections (guard re-ask), and the first watch asks
     for a revision (one pass). `@render:N` in a fixture means "the latest render of section N" and only resolves on
     the FIXTURE backend. The renders themselves are real (`--mask local --local-plate`).
-19. **Backends are swappable**: `respond`, `upload`, `transcribe`, `image`. A chat-completions backend for Muse Spark
-    Open on Baseten fits behind the same four methods; not built (no key, not asked for yet).
+19. **Backends are swappable**: `respond`, `upload`, `transcribe`, `image`. `SparkOpenBackend` (2026-10-30) runs
+    Muse Spark Open on Baseten behind the same four methods for `plan --brain spark-open`, so one song gets a Wonder
+    treatment and a Spark Open treatment through the same guard and validation. It drafts only: watching a render,
+    transcription and worlds stay on the Meta Model API. Chat completions keep no state, so `previous_id` replays
+    stored history; there is no Files API, so the song goes inline as base64 `input_audio` (capped at 20 MB).
+    Prices: US$1.25 in, US$0.15 cached, US$4.25 out per 1M tokens (baseten.co/library/muse-spark-open, read
+    2026-10-30). UNCONFIRMED until the first keyed call: the model slug (`-1026` from the hackathon rules vs the
+    library page's bare `muse-spark-open`; `--spark-model` switches), the audio part shape, and strict
+    `json_schema` support (a failed parse still gets the one repair turn).
 
 ## Dry run on the synthetic test song (2026-10-29)
 
@@ -183,4 +194,4 @@ removed from the CLI; M7 guard re-ask allowed to change unflagged sections; M8 n
 - A "literal" toggle (render the wristwatch version for laughs, side by side). Cheap to add on
   top of the guard's first-pass prompts, which are already kept in the treatment file.
 - More than one take per run (the renderer takes one `--clip`).
-- The Baseten / Spark Open backend.
+- Spark Open in `direct` (the loop and the watch stay on Muse Wonder).

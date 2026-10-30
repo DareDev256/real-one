@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- **Muse Spark Open on Baseten as a second director brain** (`plan --brain spark-open`, for the open-weight bonus).
+  `SparkOpenBackend` in `realone/director/backend.py` implements the same four methods as the Wonder backend over
+  OpenAI-compatible chat completions: instructions as a system message, the treatment schema as a strict
+  `json_schema` response_format, tools nested, function outputs as tool messages, `previous_id` replayed from stored
+  history, the song inline as base64 audio (no Files API; refused over 20 MB, nothing sent). The quote and meter use
+  Baseten's published prices (US$1.25 / 0.15 / 4.25 per 1M tokens, read 2026-10-30). Refuses before any work
+  without `BASETEN_API_KEY`, with transcription on, or for `direct`. Keyless: 14 tests on a fake client, including
+  a full treatment through `treatment.make`; 9 guards broken on purpose, all red, files restored byte-identical.
+  Not run with a key yet; the slug, audio part and strict schema are UNCONFIRMED until the first call.
 - README rewritten for a judge with two minutes, after a blind critic ranked it last of four (no visible proof, and a
   `[~]` checklist that read as "not built"). It now leads with the concept line, a Hook Freeze GIF and a Real Receipt
   still (stamped TEST RENDER until the first keyed render), a model table, what it does and the engineering. The

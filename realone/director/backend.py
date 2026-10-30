@@ -11,10 +11,13 @@
   Every paid call goes through the Meter first. The key is never printed: error text is scrubbed.
 - FixtureBackend: hand-written responses from tests/fixtures/director/, for --dry-run and the tests. Every Turn it
   returns carries source "FIXTURE:<file>"; it is never presented as model output.
-- Later, not built: a chat-completions backend for Muse Spark Open on Baseten (`meta-models/muse-spark-open-1026`)
-  implements the same four methods; `respond` maps `schema` to `response_format` and `tools` to the nested
-  chat-completions tool format (docs/tool-calling).
+- SparkOpenBackend: Muse Spark Open on Baseten (OpenAI-compatible chat completions), for `plan --brain spark-open`.
+  `respond` maps `instructions` to a system message, `schema` to `response_format`, `tools` to the nested
+  chat-completions format and `function_call_output` to tool messages; chat completions are stateless, so
+  `previous_id` replays the stored history. There is no Files API: `upload` keeps the path and `respond` inlines the
+  song as base64 `input_audio` (the part shape is OpenAI's; UNCONFIRMED for Baseten until the first keyed call).
 """
+import base64
 import json
 import math
 import uuid
@@ -22,7 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from realone.common import REPO, Refuse
-from realone.director.budget import (MAX_OUT, VOICE_MODEL, VOICE_USD_PER_S, WONDER_MODEL, wonder_usd)
+from realone.director.budget import (MAX_OUT, SPARK_BASE_URL, SPARK_MODEL, VOICE_MODEL, VOICE_USD_PER_S,
+                                     WONDER_MODEL, spark_usd, wonder_usd)
 from realone.director.schema import wire_schema
 
 FIXTURE_DIR = REPO / "tests" / "fixtures" / "director"
@@ -167,6 +171,114 @@ class MetaBackend:
         if usd:
             self.meter.charge("image:generate", usd, {"world": Path(path).name})
         return path, ("cache hit, no call" if not usd else "generated")
+
+
+# --------------------------------------------------------------------------------------------- Spark Open (Baseten)
+
+SPARK_AUDIO_MAX_BYTES = 20 << 20  # inlined as base64 in one request; a 3 min mono 96k MP3 is about 2 MB
+
+
+class SparkOpenBackend:
+    fixture = False
+
+    def __init__(self, key, meter, model=SPARK_MODEL, client=None):
+        self._key = key
+        self.meter = meter
+        self.model = model
+        self.label = f"{model} (Baseten)"
+        if client is None:
+            from openai import OpenAI
+            client = OpenAI(base_url=SPARK_BASE_URL, api_key=key, timeout=1800.0)
+        self.client = client
+        self._files = {}
+        self._history = {}
+
+    def _part(self, p):
+        t = p.get("type")
+        if t == "input_text":
+            return {"type": "text", "text": p["text"]}
+        if t == "input_audio":
+            path = self._files.get(p.get("file_id"))
+            if path is None:
+                raise Refuse(f"input_audio names {p.get('file_id')!r}, which this Spark Open run never uploaded")
+            data = base64.b64encode(Path(path).read_bytes()).decode()
+            return {"type": "input_audio", "input_audio": {"data": data, "format": Path(path).suffix.lstrip(".")}}
+        raise Refuse(f"Spark Open drafts treatments only; a {t!r} input part is not wired (watching a render stays "
+                     f"on Muse Wonder)")
+
+    def _messages(self, items):
+        out = []
+        for it in items:
+            if it.get("type") == "function_call_output":
+                out.append({"role": "tool", "tool_call_id": it["call_id"], "content": it["output"]})
+            else:
+                out.append({"role": it.get("role", "user"), "content": [self._part(p) for p in it["content"]]})
+        return out
+
+    def respond(self, *, purpose, instructions, input, schema=None, schema_name=None, tools=None, previous_id=None,
+                effort="medium", max_output_tokens=None, est_input_tokens=0):
+        import openai
+        kind = purpose if purpose in MAX_OUT else "loop"
+        max_out = max_output_tokens or MAX_OUT[kind]
+        if previous_id is not None and previous_id not in self._history:
+            raise Refuse(f"previous_id {previous_id!r} is not a turn of this Spark Open run; nothing was called")
+        messages = list(self._history[previous_id]) if previous_id else [{"role": "system", "content": instructions}]
+        messages += self._messages(input)
+        self.meter.before(f"Muse Spark Open ({purpose})", spark_usd(est_input_tokens, max_out))
+        kw = {"model": self.model, "messages": messages, "max_tokens": max_out}
+        if schema is not None:
+            kw["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": schema_name or purpose, "schema": wire_schema(schema), "strict": True}}
+        if tools:
+            kw["tools"] = [{"type": "function", "function": {k: t[k] for k in ("name", "description", "parameters",
+                                                                                "strict") if k in t}}
+                           for t in tools]
+        try:
+            resp = self.client.chat.completions.create(**kw)
+        except openai.BadRequestError as e:
+            msg = _scrub(e, self._key)
+            if "audio" in msg.lower():
+                raise AudioRejected(msg[:400]) from None
+            raise Refuse(f"Spark Open rejected the {purpose} request (HTTP 400): {msg[:400]}") from None
+        except openai.APIError as e:
+            raise Refuse(f"Spark Open {purpose} failed: {type(e).__name__}: {_scrub(e, self._key)[:400]}") from None
+        u = resp.usage
+        usage = {"input_tokens": getattr(u, "prompt_tokens", 0) or 0,
+                 "cached_tokens": getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0,
+                 "output_tokens": getattr(u, "completion_tokens", 0) or 0,
+                 "reasoning_tokens": getattr(getattr(u, "completion_tokens_details", None), "reasoning_tokens", 0)
+                 or 0}
+        usd = spark_usd(usage["input_tokens"], usage["output_tokens"], usage["cached_tokens"])
+        self.meter.charge(f"spark:{purpose}", usd, usage)
+        choice = resp.choices[0]
+        msg = choice.message
+        calls = [{"call_id": tc.id, "name": tc.function.name, "arguments": tc.function.arguments}
+                 for tc in (getattr(msg, "tool_calls", None) or [])]
+        assistant = {"role": "assistant", "content": msg.content or ""}
+        if calls:
+            assistant["tool_calls"] = [{"id": c["call_id"], "type": "function",
+                                        "function": {"name": c["name"], "arguments": c["arguments"]}} for c in calls]
+        tid = resp.id or f"spark_{uuid.uuid4().hex[:12]}"
+        self._history[tid] = messages + [assistant]
+        return Turn(id=tid, text=msg.content or "", calls=calls, usage=usage, usd=usd, source=self.label,
+                    status="incomplete" if choice.finish_reason == "length" else "completed")
+
+    def upload(self, path, purpose):
+        """No Files API on Baseten: keep the path (nothing leaves the Mac here) and inline it in `respond`."""
+        size = Path(path).stat().st_size
+        if size > SPARK_AUDIO_MAX_BYTES:
+            raise Refuse(f"{Path(path).name} is {size} bytes; Spark Open gets audio inline and this run caps it at "
+                         f"{SPARK_AUDIO_MAX_BYTES} bytes. Nothing was sent.")
+        fid = f"local-{len(self._files) + 1}"
+        self._files[fid] = str(path)
+        return fid
+
+    def transcribe(self, wav_path, keywords=None):
+        raise Refuse("Spark Open has no transcription endpoint. Run plan --brain spark-open with --no-transcribe "
+                     "(and --lyrics for the words), or transcribe on Muse Voice Transcribe first.")
+
+    def image(self, prompt):
+        raise Refuse("Spark Open drafts treatments only; worlds are built by Muse Image on the Meta Model API")
 
 
 # --------------------------------------------------------------------------------------------- fixtures

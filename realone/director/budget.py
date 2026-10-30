@@ -24,6 +24,15 @@ WONDER_CACHED_USD = 0.20 / 1e6
 WONDER_OUT_USD = 20.00 / 1e6
 VOICE_USD_PER_S = 0.18 / 3600
 
+# Muse Spark Open on Baseten (baseten.co/library/muse-spark-open, read 2026-10-30). The hackathon's open-weight bonus
+# names `meta-models/muse-spark-open-1026`; Baseten's own sample uses `meta-models/muse-spark-open`. The first keyed
+# call settles which one answers; --spark-model switches without a code change.
+SPARK_MODEL = "meta-models/muse-spark-open-1026"
+SPARK_BASE_URL = "https://inference.baseten.co/v1"
+SPARK_IN_USD = 1.25 / 1e6
+SPARK_CACHED_USD = 0.15 / 1e6
+SPARK_OUT_USD = 4.25 / 1e6
+
 # ASSUMPTIONS (UNCONFIRMED until the first keyed run reads usage; see docs/meta-api-director.md checklist 5)
 AUDIO_TOKENS_PER_S = 50     # song audio as input_audio
 VIDEO_TOKENS_PER_S = 300    # a render as input_video: sampled frames plus its embedded audio
@@ -57,15 +66,27 @@ def wonder_ceiling(kind, input_tokens):
     return wonder_usd(input_tokens, MAX_OUT[kind])
 
 
+def spark_usd(input_tokens, output_tokens, cached_tokens=0):
+    fresh = max(0, input_tokens - cached_tokens)
+    return fresh * SPARK_IN_USD + cached_tokens * SPARK_CACHED_USD + output_tokens * SPARK_OUT_USD
+
+
+BRAIN_USD = {"wonder": wonder_usd, "spark-open": spark_usd}
+BRAIN_NAME = {"wonder": "Wonder", "spark-open": "Spark Open"}
+
+
 def sam_usd(frames):
     return max(frames, SAM_MIN_FRAMES) * SAM_USD_PER_1K_FRAMES / 1000
 
 
 def quote(*, song_s, n_sections, brief_chars, audio_in=True, transcribe=True, direct=False, covered_s=(),
-          max_turns=8, driver="model", sam_s=None):
+          max_turns=8, driver="model", sam_s=None, brain="wonder"):
     """-> {"lines": [...], "ceiling_usd", "expected_usd", ...}. covered_s: seconds of each section the take covers
     (what `direct` will render, mask and watch). sam_s: seconds that still need SAM (default: all of covered_s;
-    masks already cached by the renderer cost nothing)."""
+    masks already cached by the renderer cost nothing). brain: which model writes the treatment (plan only)."""
+    if brain != "wonder" and direct:
+        raise Refuse(f"--brain {brain} drafts the treatment only (plan); direct stays on Muse Wonder")
+    brain_usd, name = BRAIN_USD[brain], BRAIN_NAME[brain]
     lines = []
 
     def add(what, ceiling, expected, n=1):
@@ -76,11 +97,11 @@ def quote(*, song_s, n_sections, brief_chars, audio_in=True, transcribe=True, di
         usd = math.floor(song_s) * VOICE_USD_PER_S
         add(f"Voice Transcribe, {song_s:.0f} s of audio", usd, usd, chunks)
     t_in = INSTRUCTION_TOKENS + text_tokens(brief_chars) + (int(song_s * AUDIO_TOKENS_PER_S) if audio_in else 0)
-    add("Wonder treatment" + (" (+ song audio, ASSUMED tokens/s)" if audio_in else ""),
-        wonder_ceiling("treatment", t_in), wonder_usd(t_in, TYPICAL_OUT["treatment"]))
-    add("Wonder repair turn (only if the JSON fails validation)", wonder_ceiling("treatment_repair", t_in + 1000), 0.0)
-    add("Wonder guard re-ask (only if a world_prompt is literal)",
-        wonder_ceiling("guard_reask", t_in + MAX_OUT["treatment"] + 800), 0.0)
+    add(f"{name} treatment" + (" (+ song audio, ASSUMED tokens/s)" if audio_in else ""),
+        brain_usd(t_in, MAX_OUT["treatment"]), brain_usd(t_in, TYPICAL_OUT["treatment"]))
+    add(f"{name} repair turn (only if the JSON fails validation)", brain_usd(t_in + 1000, MAX_OUT["treatment_repair"]), 0.0)
+    add(f"{name} guard re-ask (only if a world_prompt is literal)",
+        brain_usd(t_in + MAX_OUT["treatment"] + 800, MAX_OUT["guard_reask"]), 0.0)
     if direct:
         n_cov = len(covered_s)
         if driver == "model":
@@ -145,6 +166,15 @@ def require_key():
         raise Refuse("MODEL_API_KEY is not set, and this run needs the Meta Model API (Muse Wonder, Voice "
                      "Transcribe, Muse Image, SAM 3.1). Nothing was called. Offline run: --dry-run (FIXTURE "
                      "responses, never real model output).")
+    return key
+
+
+def require_baseten_key():
+    """Spark Open's key gate: BASETEN_API_KEY, checked before any work, never printed."""
+    key = os.environ.get("BASETEN_API_KEY") or None
+    if not key:
+        raise Refuse("BASETEN_API_KEY is not set, and --brain spark-open runs Muse Spark Open on Baseten. Nothing "
+                     "was called. The key comes with the Baseten hackathon credits; it lives outside the repo.")
     return key
 
 
