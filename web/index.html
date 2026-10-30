@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" data-test="0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Real One</title>
+<meta name="description" content="A phone performance becomes a music video. The artist is filmed, never generated. Only the world is made.">
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="watch.css">
+</head>
+<body>
+<!-- TEST_BANNER -->
+
+<main class="hero">
+  <section class="intro" aria-labelledby="title">
+    <h1 id="title" class="display"><span class="l">Real</span> <span class="l">One<span class="accent">.</span></span></h1>
+    <p class="lede">Phone performance in, music video out. The artist is filmed, never generated. Only the world is made.</p>
+    <p class="lede-2">On the hook the world freezes mid-air while the artist keeps moving. Cuts land on downbeats.</p>
+
+    <div class="slip" id="slip" aria-live="off">
+      <div class="slip-head">
+        <span class="slip-title">REAL RECEIPT</span>
+        <span class="slip-look mono" id="slip-look">COLLAGE</span>
+      </div>
+      <p class="slip-render mono" id="render-name"></p>
+      <div class="slip-rule"></div>
+      <div class="row mono"><span>FRAME</span><i></i><span id="r-frame">0000</span></div>
+      <div class="row mono"><span>TIME</span><i></i><span id="r-time">00:00.00</span></div>
+      <div class="slip-rule"></div>
+      <div class="row mono big"><span>FILMED</span><i></i><span id="r-filmed" class="filmed">00.0%</span></div>
+      <div class="row mono big"><span>GENERATED</span><i></i><span id="r-gen">00.0%</span></div>
+      <div class="bar" aria-hidden="true"><span id="r-bar"></span></div>
+      <div class="slip-rule"></div>
+      <p class="slip-sub mono">WHOLE VIDEO</p>
+      <div class="row mono"><span>FILMED</span><i></i><span id="w-filmed">00.0%</span></div>
+      <div class="row mono"><span>GENERATED</span><i></i><span id="w-gen">00.0%</span></div>
+      <div class="slip-rule dashed"></div>
+      <p class="slip-foot mono">FILMED = THE ARTIST'S OWN PIXELS AFTER THE REFRAME. GENERATED = EVERYTHING ELSE: WORLD, PARTICLES, PAPER.</p>
+    </div>
+    <p class="keys mono"><kbd>SPACE</kbd> PLAY / PAUSE <kbd>R</kbd> REAL RECEIPT</p>
+  </section>
+
+  <section class="watch" aria-label="The video">
+    <div class="stage" id="stage">
+      <video id="v-finished" class="v" playsinline preload="auto" aria-label="Finished look"></video>
+      <video id="v-receipt" class="v v-receipt" playsinline muted preload="auto" aria-hidden="true"></video>
+      <div class="stage-tag mono" id="stage-tag" hidden>TEST RENDER</div>
+      <div class="stage-readout mono" aria-hidden="true"><span>FILMED <b id="o-filmed">00.0%</b></span><span>GENERATED <b id="o-gen">00.0%</b></span></div>
+      <button class="stage-play" id="stage-play" type="button" aria-label="Play"><span></span></button>
+    </div>
+    <div class="controls">
+      <button class="btn-play" id="btn-play" type="button" aria-label="Play">PLAY</button>
+      <span class="clock mono" id="clock">00:00.00 / 00:00.00</span>
+      <button class="btn-receipt" id="btn-receipt" type="button" aria-pressed="false">REAL RECEIPT <span class="state mono" id="receipt-state">OFF</span></button>
+    </div>
+    <div class="strip" id="strip">
+      <div class="strip-sections" id="strip-sections"></div>
+      <div class="strip-rail" id="strip-rail" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+        <div class="strip-freezes" id="strip-freezes"></div>
+        <div class="strip-cuts" id="strip-cuts"></div>
+        <div class="strip-head" id="strip-head"></div>
+      </div>
+      <div class="strip-bars mono" id="strip-bars" aria-hidden="true"></div>
+      <p class="strip-legend mono"><span class="lg lg-cut"></span>CUT ON A DOWNBEAT <span class="lg lg-freeze"></span>HOOK FREEZE</p>
+    </div>
+  </section>
+
+  <section class="director" id="director" aria-label="The director's treatment" hidden>
+    <div class="dir-head">
+      <span class="label mono">DIRECTOR</span>
+      <span class="label mono" id="dir-section"></span>
+      <span class="fixture mono" id="dir-fixture" hidden>FIXTURE</span>
+    </div>
+    <div class="dir-col">
+      <span class="label mono">THE LYRIC SAYS</span>
+      <ol class="lyric" id="dir-lyric"></ol>
+    </div>
+    <div class="dir-col">
+      <span class="label mono">THE DIRECTOR HEARD</span>
+      <p class="subtext" id="dir-subtext"></p>
+    </div>
+    <div class="dir-col">
+      <span class="label mono">SO THE WORLD IS</span>
+      <p class="world" id="dir-world"></p>
+      <p class="why mono" id="dir-why"></p>
+    </div>
+    <div class="dir-col rejected" id="dir-rejected" hidden>
+      <span class="label mono" id="dir-rejected-label">FIRST PASS, REJECTED AS LITERAL</span>
+      <p class="struck" id="dir-rejected-text"></p>
+    </div>
+    <p class="dir-note mono" id="dir-note" hidden></p>
+  </section>
+</main>
+
+<section class="made" id="made" aria-labelledby="made-title" hidden>
+  <div class="made-head">
+    <h2 id="made-title" class="display">How it was made</h2>
+    <p class="made-status mono" id="made-status"></p>
+  </div>
+  <div class="made-grid" id="made-models"></div>
+  <div class="made-code">
+    <span class="label mono">OUR CODE (PYTHON)</span>
+    <ul id="made-code"></ul>
+  </div>
+  <p class="made-total mono" id="made-total"></p>
+</section>
+
+<footer class="foot mono">
+  <span>FOOTAGE AND SONG ARE THE ARTIST'S OWN.</span>
+  <a href="https://github.com/DareDev256/real-one">GITHUB.COM/DAREDEV256/REAL-ONE</a>
+</footer>
+
+<noscript><p class="mono noscript">This page needs JavaScript to play the two looks in sync.</p></noscript>
+<script src="watch.js" defer></script>
+</body>
+</html>

@@ -53,6 +53,11 @@ New in 0.2.0, all optional: `--freeze [SECTION]` and `--freeze-bars N`; `--world
 First keyed runs: `scripts/first_keyed_run.sh probe` (SAM 3.1 + Muse Image on the synthetic take, cap US$0.50,
 settles the API shapes still marked UNCONFIRMED), then `scripts/first_keyed_run.sh real CLIP SONG` (one hook,
 collage, Hook Freeze, receipt counter, cap US$1). The key is read from `~/.secrets/meta-model-api` and never printed.
+Watch page (the link a judge opens): `.venv/bin/python scripts/build_watch_page.py --tag TAG --section SECTION
+[--treatment out/..._treatment.json] [--credits credits.json]` builds `web/dist/` from a render made with
+`--look collage,receipt` (the two looks in sync, the Real Receipt toggle, the filmed share per frame, the sections,
+the director's treatment, the Meta models used); `scripts/serve_watch_page.py` serves it on 127.0.0.1. Test renders
+carry a TEST banner.
 Every render writes `out/<tag>_<section>_<look>.mp4`, its contact sheet, `_shots.json`, `_run.json` and
 `_receipt.json`. Keyless test runs, tests and the full pipeline: `docs/implementation-notes.md`.
 

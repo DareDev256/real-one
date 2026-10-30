@@ -1,6 +1,39 @@
 # Changelog
 
 ## Unreleased
+- **Watch page (`web/`, `scripts/build_watch_page.py`)**: the link a judge opens. One static page (index.html,
+  watch.css, watch.js; no framework, no build step, Google Fonts only) that loads a `data/` folder written by the
+  build script from one render's own files. Two `<video>`s of the same cut (the finished look with the sound, the
+  receipt look muted on top); the Real Receipt toggle (button or R) cross-fades between them at the same frame
+  (instant under prefers-reduced-motion). The follower is held on the master's clock: it waits while the master's
+  clock is stuck (audio start, a stall after a seek), jumps when it is off by 2.5 frames or more (aimed ahead by a
+  learned seek lead), and otherwise takes a rare rate nudge (WebKit drops about a frame on every rate change).
+  A till-receipt counter (FILMED / GENERATED for the frame on screen, from `_receipt.json` at currentTime x fps, plus
+  the whole video), a section strip from the song's timeline (click a section for its start, click or drag the
+  track below it to scrub; cuts on downbeats and the Hook Freeze marked, bar numbers on the events), the director's
+  treatment beside the lyric (the current line lit from the lyrics file's timings; the guard's rejected first
+  pass struck through; hidden when no treatment is given), and "How it was made" from `data/credits.json`.
+  Space plays and pauses.
+- The build script copies and re-encodes the two looks for the web (H.264 high, yuv420p, faststart, 1 s GOP, at
+  most 1080x1920, crf 22 capped at 6 Mb/s; the receipt look without audio), probes them after encoding and refuses
+  when they are not fit for the web or their frame counts disagree with each other or with the receipt. It also
+  refuses a missing file, a render with no receipt look, a tag that matches both a real and a TEST_LOCAL_ render,
+  any input or output under `footage/own/` (as given, through symlinks, in any case), a treatment for another song
+  or other section timings, a real render with no `--credits` file, a credits file that claims a Meta model ran on
+  a test render, and an `--out` folder it did not make. A TEST banner is written into index.html itself whenever
+  the tag starts with TEST_LOCAL_, the masks were local, the worlds are the test plates or the treatment is a
+  FIXTURE; a test render's credits are generated with every model `ran: false` and US$0.00. Local paths are
+  stripped from every json it copies. `scripts/serve_watch_page.py` serves the build on 127.0.0.1 with byte ranges
+  (the stock http.server has none, and WebKit will not play a video without them).
+- 27 tests (`tests/test_build_watch_page.py`, fake encoder, no ffmpeg); 22 mutations of the script's guards, each
+  red, the file restored byte-identical by sha256.
+- Sample build from a keyless render (`--section bars:11-20 --look collage,receipt --mask local --local-plate
+  --freeze hook --tag web_sample`; 661 frames, cuts 3/3, freeze OK) with the director dry-run treatment
+  (`TEST_LOCAL_director_integ02`, sections 1 and 2 line up). Driven with Playwright on Chromium 1440, WebKit 1440 and
+  WebKit iPhone 13 (play, toggle mid-play, seek by section and by the track): the two videos within 0.2 to 0.9
+  frames in play and through the toggle, up to 3 frames for about half a second after a seek in WebKit, then under
+  1; the counter changes with the frame; no horizontal scroll at 390 px. Screenshots:
+  `docs/screenshots/2026-10-29_watch-page-{desktop,mobile}.png`. `web/dist/` is build output and is ignored.
 - **Hook Freeze v2, `--freeze-style bullet` (the new default; `still` keeps the 0.2.0 freeze for A/B).** The owner
   watched the 0.2.0 freeze on his phone and called it "pretty meh": with the camera stopped too, the world is a still
   image behind a moving person (green screen), and nothing in the frame proves time stopped. Now, in a render with a
