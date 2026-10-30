@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- README rewritten for a judge with two minutes, after a blind critic ranked it last of four (no visible proof, and a
+  `[~]` checklist that read as "not built"). It now leads with the concept line, a Hook Freeze GIF and a Real Receipt
+  still (stamped TEST RENDER until the first keyed render), a model table, what it does and the engineering. The
+  status checklist moved to `docs/status.md`; the local key path and diary phrasing are gone.
+  `scripts/readme_media.py --tag --section` regenerates both images from any render; it stamps TEST RENDER on a
+  TEST_LOCAL tag, a local mask mode or a test mask engine, and refuses footage/own/ and missing looks. 7 tests,
+  3 mutations red.
 - **Watch page (`web/`, `scripts/build_watch_page.py`)**: the link a judge opens. One static page (index.html,
   watch.css, watch.js; no framework, no build step, Google Fonts only) that loads a `data/` folder written by the
   build script from one render's own files. Two `<video>`s of the same cut (the finished look with the sound, the
