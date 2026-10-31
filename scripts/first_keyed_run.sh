@@ -55,7 +55,7 @@ case "${1:-}" in
     "$PY" -m realone render --clip footage/perf_test.mp4 --song footage/test_song.wav --section hook \
       --mask sam --look collage --tag KEYED_PROBE \
       --world "a neon alley at night, wet asphalt, magenta and cyan tubes" \
-      --freeze --max-usd 0.50
+      --freeze --max-usd 0.50 --max-minutes 45
     echo "stage 1 done: out/KEYED_PROBE_hook_collage.mp4 + contact sheet; masks and world cached under out/"
     ;;
   real)
@@ -68,7 +68,7 @@ case "${1:-}" in
       --world "a rooftop in Toronto at dusk, the CN Tower far off, wind" \
       --world "an empty subway platform at 2am, fluorescent light, tiles" \
       --world "a neon alley at night, wet asphalt, magenta and cyan tubes" \
-      --freeze hook --receipt-counter --max-usd 1.00
+      --freeze hook --receipt-counter --max-usd 1.00 --max-minutes 45
     echo "stage 2 done: out/REAL_FIRST_hook_collage.mp4 + contact sheet + receipt json"
     ;;
   *)
