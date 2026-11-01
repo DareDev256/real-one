@@ -68,6 +68,18 @@
   - 7 tests (`tests/test_moves.py`), 7 guards mutation-red. A centre clamp in the crash zoom was found
     unnecessary (zooming in about a point inside the frame cannot show a border) and removed.
 - `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own (what the dolly uses).
+- **SAM 3.1 masks decode ~100x faster** (`realone/samcodec.py`). Meta's parser validates every mask by decoding
+  and re-encoding it in pure Python, and the pipeline then decoded it again: about 456k Python calls per mask. A
+  numba port of the same range coder (SAM License permits derivative works) is installed into the parser for the
+  parse and used for the decode.
+  - On real SAM 3.1 output (a 150-frame take, 629 masks), parsing went from 134 s to 4 s, decoding from 104 to
+    2.2 ms per mask, and the whole decode from 435 s to 4.5 s. The masks are byte-identical (same md5).
+  - Tests pin it to the reference: the same payload gives the same raster and the same raster the same payload
+    on 4 synthetic masks, 40 real masks match, and 154 corrupt or truncated payloads give the same result or the
+    same error. 5 guards mutation-red.
+  - The reference's clamp of the decoded value is left out, because it cannot change a bit (the value is only
+    compared with zero <= total - 1).
+  - Without numba, the parser's own codec runs unchanged.
 - **The director places the moves.** The treatment schema gains a required `move` per section (none, dolly,
   crash, swap). Muse Wonder's instructions say when each is earned: a dolly once, at the moment the ground shifts;
   a crash for emphasis or confrontation; a swap for restlessness. The semantic rules refuse a second dolly and a

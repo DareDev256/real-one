@@ -1,6 +1,7 @@
 """Artist masks: Meta SAM 3.1 (keyed, the real path) or Apple Vision (TEST ONLY). Factored from
 spike/freeze_test.py; the SAM wire handling is unchanged from the spike and still unproven against a live key."""
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -171,7 +172,12 @@ def parse_sam_text(text):
         # UNCONFIRMED: whether the stream's deltas carry the newline between frame lines (the parser needs one).
         # If they do not, restore it at each `|><Nf>` boundary (a record terminator followed by a frame marker).
         text = re.sub(r"(?<=\|>)(<\d+f>)", r"\n\1", text)
-    res = asyncio.run(_parse_async(text))
+    try:  # the parser validates each mask by decoding and re-encoding it; the compiled codec does it ~30x faster
+        from realone.samcodec import fast_codec
+    except ImportError:  # numba missing: Meta's own pure-Python codec, same result, slower
+        fast_codec = contextlib.nullcontext
+    with fast_codec():
+        res = asyncio.run(_parse_async(text))
     if res.diagnostics:
         print(f"SAM parser: {len(res.diagnostics)} diagnostics (first: {res.diagnostics[0]})")
     out = []
@@ -188,7 +194,10 @@ def _decode_job(job):
     enc, payload, w, h = job
     import meta_sam_parser as m
     if enc == "one_bit":
-        try:  # same decoder, minus the canonical re-encode check (which doubles the time)
+        try:  # the compiled port of the same decoder (realone/samcodec.py, bit-exact), no re-encode check
+            from realone.samcodec import fast_decode_raster
+            raster = fast_decode_raster(payload, w, h)
+        except ImportError:
             from meta_sam_parser import _mask_codec as mc
             raster = mc._decode_raster(payload, w, h)
         except Exception:
