@@ -13,11 +13,12 @@ import re
 
 LOOKS = ("clean", "collage", "receipt")  # realone/composite.py LOOKS (not imported: cv2 is not needed here)
 ENERGIES = ("low", "mid", "high")
+MOVES = ("none", "dolly", "crash", "swap")  # realone/stage/moves.py KINDS, plus none
 
 SECTION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["index", "subtext", "world_prompt", "palette", "camera_energy", "look", "freeze", "why"],
+    "required": ["index", "subtext", "world_prompt", "palette", "camera_energy", "look", "freeze", "move", "why"],
     "properties": {
         "index": {"type": "integer", "minimum": 0,
                   "description": "the section index from the timeline, unchanged"},
@@ -32,6 +33,9 @@ SECTION_SCHEMA = {
         "camera_energy": {"type": "string", "enum": list(ENERGIES)},
         "look": {"type": "string", "enum": list(LOOKS)},
         "freeze": {"type": "boolean", "description": "true on exactly one hook section, false everywhere else"},
+        "move": {"type": "string", "enum": list(MOVES),
+                 "description": "the camera move for this section: none (most sections), dolly (at most once), "
+                                "crash or swap"},
         "why": {"type": "string", "minLength": 8, "maxLength": 240, "description": "one line"},
     },
 }
@@ -223,6 +227,14 @@ def semantic_errors(treatment, sections):
         if who:
             errs.append(f"$.sections[{i}].world_prompt: describes people ({', '.join(who)}); the filmed artist is the "
                         f"only person in frame, so the world must be empty of people")
+    dollies = [s.get("index") for s in got if s.get("move") == "dolly"]
+    if len(dollies) > 1:
+        errs.append(f"$.sections: move dolly at most once in a song (it is the one moment the ground shifts); "
+                    f"dolly now on sections {dollies}")
+    for i, s in enumerate(got):
+        if s.get("move") == "swap" and s.get("freeze") is True:
+            errs.append(f"$.sections[{i}].move: swap on the frozen hook; the freeze holds one world, so a swap "
+                        f"there cannot happen (pick none, dolly or crash)")
     on_hooks = [f for f in frozen if f in hook]
     if hook and len(on_hooks) != 1:
         errs.append(f"$.sections: freeze must be true on exactly one hook section (hooks: {sorted(hook)}); "

@@ -102,9 +102,11 @@ class Renderer:
     """Builds and runs `python -m realone render` for one section. Uses only flags that exist in realone 0.1.0,
     plus a freeze flag found in `--help` at runtime."""
 
-    def __init__(self, clip, song, *, dry_run, max_minutes=20.0, sync_near=None, runner=None, help_text=None):
+    def __init__(self, clip, song, *, dry_run, max_minutes=20.0, sync_near=None, runner=None, help_text=None,
+                 stage=False):
         self.clip, self.song = str(clip), str(song)
         self.dry_run = dry_run
+        self.stage = stage  # keyed renders through the tracked stage (needed for a dolly)
         self.max_minutes = max_minutes
         self.sync_near = sync_near
         self.runner = runner or self._run
@@ -117,7 +119,7 @@ class Renderer:
             self._help = p.stdout
         return self._help
 
-    def argv(self, section, look, freeze, world_prompt, tag, max_usd):
+    def argv(self, section, look, freeze, world_prompt, tag, max_usd, move="none"):
         a = [sys.executable, "-m", "realone", "render", "--clip", self.clip, "--song", self.song,
              "--section", f"#{section}", "--look", look, "--tag", tag, "--max-minutes", f"{self.max_minutes:g}"]
         if self.sync_near is not None:
@@ -126,9 +128,20 @@ class Renderer:
             a += ["--mask", "local", "--local-plate"]
         else:
             a += ["--mask", "sam", "--world", world_prompt, "--max-usd", f"{max_usd:.4f}"]
+            if self.stage:
+                a += ["--stage", "tracked"]
         flag, note = detect_freeze(self.help_text())
         if freeze and flag:
             a.append(flag)
+        self.move_note = "no move"
+        if move and move != "none":
+            if "--move" not in self.help_text():
+                self.move_note = f"{move}: this renderer has no --move"
+            elif move == "dolly" and (self.dry_run or not self.stage):
+                self.move_note = "dolly skipped: it needs the tracked stage (a keyed render with --stage)"
+            else:
+                a += ["--move", f"{move}@#{section}"]
+                self.move_note = move
         return a, (note if freeze else "no freeze on this section")
 
     def _run(self, argv):
@@ -242,7 +255,8 @@ class Tools:
         if self.meter and not st.dry_run:
             self.meter.before(f"render section {section} (SAM 3.1; the renderer quotes and caps its own spend)", 0.0)
         max_usd = self.meter.remaining() if self.meter else 0.0
-        argv, freeze_note = self.renderer.argv(section, look, freeze, plan["world_prompt"], tag, max_usd)
+        argv, freeze_note = self.renderer.argv(section, look, freeze, plan["world_prompt"], tag, max_usd,
+                                               move=plan.get("move", "none"))
         print(f"director: rendering section {section} ({sec['role']}, {look}{', freeze' if freeze else ''}) ...")
         rc, tail = self.renderer.runner(argv)
         if rc != 0:
@@ -259,7 +273,8 @@ class Tools:
         if self.meter and not st.dry_run:
             self.meter.charge("render:sam+image", float(run.get("billed_usd", 0.0)), {"section": section})
         rec = {"section": section, "video": lk["video"], "look": look, "freeze_requested": freeze,
-               "freeze": freeze_note if freeze else "off", "tag": tag, "run_json": str(rj),
+               "freeze": freeze_note if freeze else "off", "move": getattr(self.renderer, "move_note", "no move"),
+               "tag": tag, "run_json": str(rj),
                "contact_sheet": lk.get("contact_sheet"), "duration_s": round(sec["end_s"] - sec["start_s"], 3),
                "measured": {"spec_ok": lk.get("spec_ok"), "cuts_on_plan": lk.get("cuts_on_plan"),
                             "cuts_off_plan": lk.get("cuts_off_plan"),

@@ -136,3 +136,32 @@ def test_wire_schema_keeps_structure_only():
 def test_people_words():
     assert people_in("an empty hotel lobby nobody checks into") == []
     assert people_in("a woman waiting at a bus stop") == ["woman"]
+
+
+def test_moves_are_part_of_every_section_and_follow_the_rules():
+    t = fixture_treatment()
+    secs = sections()
+    ok, errs = check_treatment(copy.deepcopy(t), secs)
+    base = len(errs)
+    # a missing move is a schema error
+    t2 = copy.deepcopy(t)
+    del t2["sections"][0]["move"]
+    _, e2 = check_treatment(t2, secs)
+    assert any("move" in e for e in e2) and len(e2) > base
+    # at most one dolly in a song
+    t3 = copy.deepcopy(t)
+    for s in t3["sections"][:2]:
+        s["move"] = "dolly"
+    _, e3 = check_treatment(t3, secs)
+    assert any("dolly at most once" in e for e in e3)
+    # never a swap on the frozen hook
+    t4 = copy.deepcopy(t)
+    frozen = next(i for i, s in enumerate(t4["sections"]) if s.get("freeze") is True)
+    t4["sections"][frozen]["move"] = "swap"
+    _, e4 = check_treatment(t4, secs)
+    assert any("swap on the frozen hook" in e for e in e4)
+    # an unknown move is refused by the schema
+    t5 = copy.deepcopy(t)
+    t5["sections"][0]["move"] = "orbit"
+    _, e5 = check_treatment(t5, secs)
+    assert any("move" in e for e in e5) and len(e5) > base

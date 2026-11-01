@@ -235,3 +235,17 @@ def test_code_driver_does_the_same_job(tmp_path):
     assert loop.run_code(fb, tools, st) == "finished"
     assert [x["look"] for x in st.renders[2]] == ["collage", "receipt"]
     assert [q["purpose"] for q in fb.requests] == ["watch", "decide", "watch"]
+
+
+def test_render_passes_the_section_move_and_skips_a_dolly_without_the_stage(tmp_path):
+    help_text = HELP_010 + "\n  --move KIND[:BARS]@SECTION\n  --stage {off,tracked}\n"
+    r = Renderer(tmp_path / "take.mp4", tmp_path / "song.wav", dry_run=False, help_text=help_text, stage=True)
+    a, _ = r.argv(2, "clean", False, "a flooded parking garage at dawn", "t", 0.5, move="crash")
+    assert a[a.index("--move") + 1] == "crash@#2" and "--stage" in a
+    a, _ = r.argv(2, "clean", False, "a flooded parking garage at dawn", "t", 0.5, move="dolly")
+    assert a[a.index("--move") + 1] == "dolly@#2"
+    dry = Renderer(tmp_path / "take.mp4", tmp_path / "song.wav", dry_run=True, help_text=help_text)
+    a, _ = dry.argv(2, "clean", False, "x" * 30, "t", 0.0, move="dolly")
+    assert "--move" not in a and "dolly skipped" in dry.move_note
+    a, _ = dry.argv(2, "clean", False, "x" * 30, "t", 0.0, move="none")
+    assert "--move" not in a

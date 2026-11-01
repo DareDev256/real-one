@@ -195,3 +195,11 @@ removed from the CLI; M7 guard re-ask allowed to change unflagged sections; M8 n
   top of the guard's first-pass prompts, which are already kept in the treatment file.
 - More than one take per run (the renderer takes one `--clip`).
 - Spark Open in `direct` (the loop and the watch stay on Muse Wonder).
+
+## Camera moves (added 2026-11-01)
+
+Every section of the treatment carries a `move`: none, dolly (at most once in a song), crash or swap (never on the
+frozen hook). The director picks it from what the section means, the same way it picks the world. Renders pass it
+to `realone render --move` (see docs/stage.md); a dolly needs the tracked stage (`direct --stage`).
+`realone render --moves-from <treatment.json>` takes the moves for a whole-song render.
+

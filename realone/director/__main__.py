@@ -62,6 +62,9 @@ def build_parser():
     di.add_argument("--max-turns", type=int, default=8, help="cap on Wonder turns in the model driver")
     di.add_argument("--sync-near", type=float, help="song time (s) the take starts near (passed to the renderer)")
     di.add_argument("--render-minutes", type=float, default=20.0, help="per-render time limit")
+    di.add_argument("--stage", action="store_true",
+                    help="keyed renders through the tracked stage (the world filmed through the take's camera; "
+                         "needed for a dolly move)")
     rv = sub.add_parser("review", help="watch one render against its treatment")
     rv.add_argument("--render", required=True, help="an MP4 under out/")
     rv.add_argument("--treatment", required=True, help="the treatment file it was made from")
@@ -214,7 +217,8 @@ def main(argv=None):
                          f"{tpath} and re-run direct with --treatment {tpath}")
         state = State(timeline=timeline, lyrics=lyr.lines_by_index(ly), treatment=res["treatment"],
                       covered=covered, tag=f"director_{a.tag}", dry_run=a.dry_run)
-        renderer = Renderer(a.clip, a.song, dry_run=a.dry_run, max_minutes=a.render_minutes, sync_near=a.sync_near)
+        renderer = Renderer(a.clip, a.song, dry_run=a.dry_run, max_minutes=a.render_minutes, sync_near=a.sync_near,
+                            stage=getattr(a, "stage", False))
         tools = Tools(backend, state, renderer, meter)
         print(f"director: driver = {a.driver} ({'Muse Wonder calls the tools' if a.driver == 'model' else 'our loop'}"
               f"{'; FIXTURE turns' if a.dry_run else ''})")

@@ -39,6 +39,12 @@ For every section of the timeline (same index, same order) return:
   about what is real).
 - freeze: true on exactly ONE hook section, false everywhere else. On that hook the whole world stops and only the
   artist keeps moving. Choose the hook that earns it.
+- move: the camera move, timed to the bars. none on most sections (the camera simply follows the phone).
+  dolly at most ONCE in the song: a dolly zoom, the artist keeps their size while the world stretches behind them;
+  the moment the ground shifts (a realisation, a drop, a turn). crash: a snap zoom to the artist's face on every
+  downbeat; emphasis, confrontation, a punchline section. swap: a new place on every bar (the song's other
+  worlds); restlessness, no home, a montage of everywhere. Never swap on the frozen hook. A move is earned by what
+  the section means, the same as its world.
 - why: one line, the directing reason.
 Also song_subtext: the through-line of the whole song.
 Sections with no lyric are instrumental: direct them from the music. If audio is attached, listen for energy and
@@ -167,7 +173,7 @@ def from_record(rec, timeline, lyrics):
     """Re-check a treatment file (hand-edited or from an earlier run): schema, semantics, guard. No model call."""
     tr = {"song_subtext": rec.get("song_subtext", ""),
           "sections": [{k: r[k] for k in ("index", "subtext", "world_prompt", "palette", "camera_energy", "look",
-                                           "freeze", "why") if k in r} for r in rec.get("sections", [])]}
+                                           "freeze", "move", "why") if k in r} for r in rec.get("sections", [])]}
     tr, errs = check_treatment(tr, timeline["sections"])
     if errs:
         raise Refuse("the treatment file does not validate against this song's timeline: " + "; ".join(errs[:8]))

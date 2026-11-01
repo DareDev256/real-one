@@ -87,3 +87,16 @@ def test_designed_changes_cover_every_snap_and_swap():
     ch = MV.designed_changes(ms)
     assert all(d + k in ch for d in ms[0]["downbeat_frames"] for k in range(MV.CRASH_FRAMES + 1))
     assert {_f(b) for b in range(8, 16)} <= ch
+
+
+def test_moves_come_from_a_treatment_for_the_rendered_sections_only(tmp_path):
+    import json
+    t = {"song_subtext": "x" * 20, "sections": [{"index": 0, "move": "swap"}, {"index": 1, "move": "dolly"},
+                                                {"index": 2, "move": "none"}]}
+    p = tmp_path / "t.json"
+    p.write_text(json.dumps({"treatment": t}))
+    assert MV.specs_from_treatment(p, [{"index": 1}, {"index": 2}]) == ["dolly@#1"]
+    t["sections"][2]["move"] = "orbit"
+    p.write_text(json.dumps(t))
+    with pytest.raises(Refuse, match="unknown move"):
+        MV.specs_from_treatment(p, [{"index": 2}])

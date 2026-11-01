@@ -68,6 +68,14 @@
   - 7 tests (`tests/test_moves.py`), 7 guards mutation-red. A centre clamp in the crash zoom was found
     unnecessary (zooming in about a point inside the frame cannot show a border) and removed.
 - `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own (what the dolly uses).
+- **The director places the moves.** The treatment schema gains a required `move` per section (none, dolly,
+  crash, swap). Muse Wonder's instructions say when each is earned: a dolly once, at the moment the ground shifts;
+  a crash for emphasis or confrontation; a swap for restlessness. The semantic rules refuse a second dolly and a
+  swap on the frozen hook. The director's section renders pass `--move kind@#index`; `plan`/`direct --stage`
+  runs keyed renders through the tracked stage, and a dolly in a dry run (procedural plates, no depth) is skipped
+  with a note. `realone render --moves-from TREATMENT` takes the moves for the rendered sections. A swap on a
+  section with one world cycles every world in the render. 3 tests, 6 guards mutation-red; suite 240/240.
+  `--moves-from` is not yet run end to end (needs a take that covers a whole section).
   - **Tests:** `tests/test_stage.py` has 14 tests. They include a camera solve against a synthetic floor filmed by a
     KNOWN dolly-back camera, which catches the sign twin that reads a dolly back as a dolly in. 14 guards were broken
     on purpose and all went red. The mutation pass also caught a real bug: the drop shadow was cast toward the lens.

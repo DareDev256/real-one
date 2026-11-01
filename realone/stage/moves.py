@@ -74,6 +74,26 @@ def resolve(tl, specs, rendered, plan, freezes=()):
     return sorted(out, key=lambda m: (m["start_frame"], m["kind"]))
 
 
+def specs_from_treatment(path, rendered):
+    """A director treatment (realone/director: sections[].move) -> --move specs for the sections being rendered.
+    Accepts the treatment itself or a director record that holds it under "treatment"."""
+    import json
+    from pathlib import Path
+    obj = json.loads(Path(path).read_text())
+    t = obj.get("treatment", obj)
+    if not isinstance(t, dict) or not isinstance(t.get("sections"), list):
+        raise Refuse(f"--moves-from {path}: not a treatment (no sections list)")
+    inside = {s.get("index") for s in rendered}
+    out = []
+    for s in t["sections"]:
+        mv = s.get("move", "none")
+        if mv not in ("none",) + KINDS:
+            raise Refuse(f"--moves-from {path}: section {s.get('index')} has an unknown move {mv!r}")
+        if mv != "none" and s.get("index") in inside:
+            out.append(f"{mv}@#{s['index']}")
+    return out
+
+
 def _ease(u):
     u = np.clip(u, 0, 1)
     return u * u * u * (u * (6 * u - 15) + 10)  # smootherstep: no velocity step at either end

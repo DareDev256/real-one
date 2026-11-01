@@ -206,7 +206,10 @@ def render(a):
     plan["freeze_style"] = style if plan["freezes"] else None
     plan["freeze_lead_in"] = lead_in
     from realone.stage import moves as MV
-    moves = MV.resolve(tl, getattr(a, "move", None), secs, plan, plan["freezes"])
+    move_specs = list(getattr(a, "move", None) or [])
+    if getattr(a, "moves_from", None):
+        move_specs += MV.specs_from_treatment(a.moves_from, secs)
+    moves = MV.resolve(tl, move_specs, secs, plan, plan["freezes"])
     if any(m["kind"] == "dolly" for m in moves) and getattr(a, "stage", "off") != "tracked":
         raise Refuse("--move dolly needs --stage tracked: a dolly zoom stretches the world by its depth, and only "
                      "the tracked stage has the world's depth and the take's camera")
@@ -362,8 +365,10 @@ def render(a):
         arrays["grade"], arrays["punch"], arrays["flash"] = FZ.hit_profile(n, plan["freezes"])
     if any(m["kind"] == "swap" for m in moves):
         shot_w = np.array([sh["world"] for sh in plan["shots"]])[shot_of]
-        arrays["frame_world"] = MV.swap_worlds(
-            n, moves, shot_w, lambda f: per_section[plan["shots"][shot_of[f]]["section_pos"]])
+        def swap_ids(f):  # the section's own worlds; with only one, every world in the render (a montage)
+            ids = per_section[plan["shots"][shot_of[f]]["section_pos"]]
+            return ids if len(set(ids)) >= 2 else sorted(set(range(len(worlds))))
+        arrays["frame_world"] = MV.swap_worlds(n, moves, shot_w, swap_ids)
     if any(m["kind"] == "crash" for m in moves):
         sc, fx, fy = MV.crash_profile(n, moves, boxes)
         ox, oy = np.empty(n), np.empty(n)
