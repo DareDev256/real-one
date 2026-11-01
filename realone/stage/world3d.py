@@ -134,7 +134,7 @@ class World3D:
         M = R if normal is None else R + np.outer(t, normal) / dist
         return self.K @ M @ np.linalg.inv(self.KS)
 
-    def render(self, R_t, t_t, correction=np.eye(3)):
+    def render(self, R_t, t_t, correction=np.eye(3), virtual=None):
         """R_t, t_t: the frame's camera relative to the ANCHOR camera (X_t = R_t X_anchor + t_t).
         correction: a homography applied after every layer (pins the floor to the tracked floor).
         -> (rgb float32 0..255 (H, W, 3), zinv float32 (H, W) the world's inverse depth seen from this frame,
@@ -143,8 +143,21 @@ class World3D:
         out = np.zeros((H, W, 3), np.float32)
         zbuf = np.zeros((H, W), np.float32)
         floor_vis = np.zeros((H, W), np.float32)
+        if virtual is not None:  # a camera move on top of the phone's own: (t_v, f_scale) -> X_v = X + t_v, f' = f*s
+            t_v, fs = virtual
+            Kv = self.K.copy()
+            Kv[0, 0] *= fs
+            Kv[1, 1] *= fs
+            Z = Kv @ np.linalg.inv(self.K)
+            correction = Z @ correction @ np.linalg.inv(Z)
         for k, (rgb, alpha, normal, dist) in enumerate(self.layers):
-            Hm = correction @ self.plane_h(R, t_t, normal, dist)
+            if virtual is None:
+                Hm = correction @ self.plane_h(R, t_t, normal, dist)
+            else:
+                M = R if normal is None else R + np.outer(t_t, normal) / dist
+                if normal is not None:
+                    M = M + np.outer(np.asarray(t_v, float), normal) / dist
+                Hm = correction @ Kv @ M @ np.linalg.inv(self.KS)
             border = cv2.BORDER_REPLICATE if k == 0 else cv2.BORDER_CONSTANT  # the backdrop is never empty
             a = cv2.warpPerspective(alpha, Hm, (W, H), flags=cv2.INTER_LINEAR, borderMode=border)
             if not a.any():

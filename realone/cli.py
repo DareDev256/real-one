@@ -75,6 +75,10 @@ def build_parser():
                         "off: the 0.2.0 still world")
     r.add_argument("--lens-mm", type=float,
                    help="35 mm-equivalent focal length of the take (default: the phone's main camera, 26)")
+    r.add_argument("--contact", choices=("synthetic", "real"), default="synthetic",
+                   help="--stage tracked contact shadow: synthetic occlusion + a cast shadow (default; the blind "
+                        "gauntlet's winner), or real: the artist's own shadow lifted from the take (correct under a "
+                        "lifted foot, weaker under a planted one)")
     r.add_argument("--figure-m", type=float, default=1.75,
                    help="the artist's height in metres (sizes the camera height from the figure on the floor)")
 

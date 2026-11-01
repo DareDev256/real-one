@@ -18,6 +18,10 @@ MIN_SAMPLES = 3
 EDGE_PX = 10          # only matte pixels within this distance of the matte's edge may be removed
 DIFF_FLOOR = 18.0     # 0..255 colour distance under which a matte pixel is the clean floor
 GUARD_PX = 25         # neighbours' artist masks are dilated by this before they vote
+SHADOW_SCALE = 4      # real shadows are stored at 1/4 resolution (they are soft): 270 x 480 per frame
+SHADOW_LEAN = 0.08    # a shadow darkens every channel alike; anything else (a reflection, a misregistration) is not
+SHADOW_FLOOR = 0.35   # never darker than this: a black hole is a tracking error, not a shadow
+FEATHER_PX = 60       # the real shadow fades to nothing over this many px toward its capture window's edge
 
 
 def foot_roi(mask, contact_y, pad=150):
@@ -77,6 +81,46 @@ class CleanPlate:
         valid = V.sum(0) >= MIN_SAMPLES
         return np.nan_to_num(clean), valid
 
+    def shadow(self, i, frame, mask, contact_y):
+        """His REAL shadow on the real floor, from the take: the frame over the clean floor (the same floor with
+        nobody there), where it darkens all channels alike, outside his matte. -> float32 (H/4, W/4) multiplier
+        1 = no shadow, or None. Laid on the world as is: the world's floor is pinned to this floor."""
+        out = np.ones((H // SHADOW_SCALE, W // SHADOW_SCALE), np.float32)
+        if not mask.any():
+            return out
+        roi = foot_roi(mask, contact_y, pad=220)
+        got = self.floor_at(i, roi)
+        if got is None:
+            return out
+        clean, valid = got
+        x0, y0, x1, y1 = roi
+        a = cv2.GaussianBlur(frame[y0:y1, x0:x1].astype(np.float32), (0, 0), 2.0) + 4
+        b = cv2.GaussianBlur(clean, (0, 0), 2.0) + 4
+        ratio = a / b
+        lum = ratio.mean(2)
+        lean = np.abs(ratio - lum[..., None]).max(2)
+        outside = ~(cv2.dilate(mask[y0:y1, x0:x1].astype(np.uint8), np.ones((3, 3), np.uint8)) > 0)
+        ok = valid & outside & (lean < SHADOW_LEAN) & (b.mean(2) > 25)
+        known = (valid & outside).astype(np.float32)        # measured: a shadow value, or "lit" (1)
+        r = np.where(ok, np.clip(lum, SHADOW_FLOOR, 1.0), 1.0).astype(np.float32) * known
+        # fill what the matte hides (the strip right under a sole) from the measured floor around it, not from
+        # "lit": a normalized blur, so the real pocket under the foot is not washed out at its edge
+        num = cv2.GaussianBlur(r, (0, 0), 4.0)
+        den = cv2.GaussianBlur(known, (0, 0), 4.0)
+        r = np.where(den > 0.05, num / np.maximum(den, 1e-6), 1.0).astype(np.float32)
+        r = cv2.GaussianBlur(r, (0, 0), 2.0)
+        # feather to "no shadow" toward the window's edges: the capture window must never show (gauntlet r6)
+        hh, ww = r.shape
+        fy = np.minimum(np.arange(hh), np.arange(hh)[::-1]) / FEATHER_PX
+        fx = np.minimum(np.arange(ww), np.arange(ww)[::-1]) / FEATHER_PX
+        win = np.clip(np.minimum(fy[:, None], fx[None, :]), 0, 1).astype(np.float32)
+        if y1 >= H:  # the frame's own bottom edge is not a window edge
+            fy2 = np.minimum(np.arange(hh) / FEATHER_PX, 1.0)
+            win = np.clip(np.minimum(fy2[:, None], fx[None, :]), 0, 1).astype(np.float32)
+        full = np.ones((H, W), np.float32)
+        full[y0:y1, x0:x1] = 1 - (1 - np.minimum(r, 1.0)) * win
+        return cv2.resize(full, (W // SHADOW_SCALE, H // SHADOW_SCALE), interpolation=cv2.INTER_AREA)
+
     def refine(self, i, frame, mask, contact_y):
         """-> (mask with real-floor pixels removed at its edge, pixels removed)."""
         if not mask.any():
@@ -112,13 +156,17 @@ class CleanPlate:
 
 def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print):
     """One pass over the take: every frame's matte with the real floor taken out at its feet, written as a packed
-    mask file in the same format as the input (np.packbits rows). -> (path, removed px per frame)."""
+    mask file in the same format as the input (np.packbits rows), plus <out>_shadow.npy: his real shadow per frame
+    (uint8, 255 = none, 1/4 resolution). -> (path, removed px per frame)."""
     from pathlib import Path
 
     from realone.media import read_frames
     out_path = Path(out_path)
     tmp = out_path.with_suffix(".tmp.npy")
     packed = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.uint8, shape=(n, W * H // 8))
+    sh_path = out_path.with_name(out_path.stem + "_shadow.npy")
+    shadows = np.lib.format.open_memmap(sh_path, mode="w+", dtype=np.uint8,
+                                        shape=(n, H // SHADOW_SCALE, W // SHADOW_SCALE))
     cp = CleanPlate(H_to0)
     lag = max(OFFSETS)
     pending = collections.deque()
@@ -134,6 +182,7 @@ def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print):
             r, k = cp.refine(j, fr, m, cy)
             packed[j] = np.packbits(r)
             removed[j] = k
+            shadows[j] = np.round(cp.shadow(j, fr, r, cy) * 255).astype(np.uint8)
 
     for i, fr in enumerate(read_frames(proxy)):
         if i >= n:
@@ -144,7 +193,8 @@ def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print):
         flush(i - lag)
     flush(n)
     packed.flush()
-    del packed
+    shadows.flush()
+    del packed, shadows
     tmp.rename(out_path)
     log(f"stage: clean-plate feet: {int((removed > 0).sum())}/{n} frames had real floor in the matte, "
         f"{int(removed.sum())} px removed (median {int(np.median(removed[removed > 0])) if removed.any() else 0}"

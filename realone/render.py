@@ -366,6 +366,8 @@ def render(a):
                                       Path(str(mpath)).with_name(Path(str(mpath)).stem + "_stagefeet.npy"))
         masks = np.load(mpath, mmap_mode="r")
         stage_rep["feet_px_removed"] = {"frames": int((removed > 0).sum()), "total": int(removed.sum())}
+        if getattr(a, "contact", "synthetic") == "real":
+            stage_rep["shadow_path"] = str(Path(str(mpath)).with_name(Path(str(mpath)).stem + "_shadow.npy"))
         plan["stage"] = {k: v for k, v in stage_rep.items() if k != "K"}
     write_json(shots_path, plan)  # again: now with each shot's counter place and collage ink
     np.savez(seg_dir / "arrays.npz", **arrays)

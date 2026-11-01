@@ -152,10 +152,8 @@ def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m
             f"({look['focus_comp']}), shadow {np.round(look['sun_dir'], 2).tolist()}")
     # the floor's own motion between frames: the world is motion-blurred along it (exposure, not a filter)
     st_G = np.array([np.eye(3)] + [np.linalg.inv(Hs[i]) @ Hs[i - 1] for i in range(1, n)])
-    from realone.stage.integrate import planted_from_track
-    st_planted = planted_from_track(track["contact"], Hs)
     arrays = dict(stage_R=st_R, stage_t=st_t, stage_corr=st_corr, stage_contact=track["contact"], stage_G=st_G,
-                  stage_H=Hs, stage_planted=st_planted)
+                  stage_H=Hs)
     report = dict(lens_mm=lens_mm, vfov_deg=round(vfov_916(lens_mm), 2), motion=kind, drift_px=round(drift, 1),
                   horizon_row=round(horizon, 1), camera_height_m=round(height, 3), figure_m=figure_m,
                   track_points_median=int(np.median(track["step_inliers"][1:])) if n > 1 else 0,
@@ -176,7 +174,7 @@ class StageWorlds:
         self.R, self.t, self.corr = arrays["stage_R"], arrays["stage_t"], arrays["stage_corr"]
         self.contact = arrays["stage_contact"]
         self.G = arrays.get("stage_G")
-        self.planted = arrays.get("stage_planted")
+        self.shadow = np.load(report["shadow_path"], mmap_mode="r") if report.get("shadow_path") else None
 
     def key_for(self, wid):
         """(dx, colour) for the artist's key-light ramp when the world shows a clear sun, else None."""
@@ -189,9 +187,16 @@ class StageWorlds:
         g = self.get(wid)
         w = self.rep["worlds"][str(wid)]
         img, zb, fv = g.render(self.R[i], self.t[i], self.corr[i])
-        sh = IG.contact_shadow(mask, fv, light_dir=tuple(w["sun_dir"]), length=w["sun_len"], drop=w["sun_drop"],
-                               planted=float(self.planted[i]) if self.planted is not None else 0.0)
+        # contact: the synthetic occlusion + drop (the blind gauntlet's winner, rounds 4 to 7), or with
+        # --contact real his real shadow lifted from the take (right under a LIFTED foot, but it loses the dense
+        # pocket under a planted one: gauntlet r7 scored it 5 vs 6)
+        ao = 0.0 if self.shadow is not None else 0.55
+        drop = w["sun_drop"] if w.get("sun_drop", 0) >= 0.3 or self.shadow is None else 0.0
+        sh = IG.contact_shadow(mask, fv, light_dir=tuple(w["sun_dir"]), length=w["sun_len"], ao=ao, drop=drop)
         img = img * (1 - sh[..., None])
+        if self.shadow is not None:  # his real shadow from the take, laid on the world's floor (pinned to his)
+            real = cv2.resize(self.shadow[i].astype(np.float32) / 255, (W, H), interpolation=cv2.INTER_LINEAR)
+            img = img * real[..., None]
         cx, cy = self.contact[i]
         if np.isfinite(cx):
             zf = 1.0 / max(float(zb[int(np.clip(cy - 4, 0, H - 1)), int(np.clip(cx, 0, W - 1))]), 1e-3)

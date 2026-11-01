@@ -151,7 +151,7 @@ class Ctx:
             from realone.stage.pipeline import StageWorlds
             self.stage = StageWorlds(d["stage"], d["plates"], d["stage_cache"],
                                      {k: arr[k] for k in ("stage_R", "stage_t", "stage_corr", "stage_contact",
-                                                          "stage_G", "stage_planted") if k in arr.files})
+                                                          "stage_G") if k in arr.files})
         # Hook Freeze v2 (`bullet`): the camera truck, the motion-blur clock rate and the hit, per frame
         self.bullet = "cam_dx" in arr.files
         if self.bullet:

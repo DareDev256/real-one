@@ -166,10 +166,11 @@ def test_contact_shadow_stays_on_the_floor():
     assert s[:1500].max() == 0.0
     assert s[1690:1720, 450:650].mean() > 0.1       # dark where the feet meet the floor
     assert s.max() <= 0.85
-    # the drop shadow falls AWAY from the camera (up the frame) for light from behind it, never toward the lens
+    # the drop shadow falls AWAY from the camera (up the frame) and sideways for a light behind-left, never
+    # toward the lens
     tall = np.ones((H, W), np.float32)
-    s2 = IG.contact_shadow(m, tall, ao=0.0, drop=0.5)
-    assert s2[1350:1650, 450:650].mean() > 0.2 and s2[1760:, :].max() < 0.05
+    s2 = IG.contact_shadow(m, tall, light_dir=(1.0, 1.0), ao=0.0, drop=0.5)
+    assert s2[1400:1650, 730:900].mean() > 0.1 and s2[1760:, :].max() < 0.05
 
 
 def test_clean_plate_takes_floor_out_of_the_matte_edge_and_keeps_the_artist():
@@ -229,24 +230,56 @@ def test_clean_plate_never_judges_where_no_neighbour_saw_the_floor():
     assert removed == 0 and out[m].all()
 
 
-def test_planted_feet_get_a_dense_pocket_and_lifted_feet_do_not():
-    m = np.zeros((H, W), bool)
-    m[600:1700, 450:650] = True
-    floor = np.ones((H, W), np.float32)
-    lifted = IG.contact_shadow(m, floor, planted=0.0)
-    planted = IG.contact_shadow(m, floor, planted=1.0)
-    under = (slice(1706, 1726), slice(470, 630))
-    assert planted[under].mean() > lifted[under].mean() + 0.2      # the pocket appears only when planted
-    assert planted[:1690].max() <= lifted[:1690].max() + 1e-6       # and only under the sole (blur reaches ~6 px up)
 
 
-def test_planted_is_read_from_the_tracked_floor_not_the_screen():
-    n = 12
-    # the camera moves: the floor slides 16 px a frame across the screen (a swing foot moves at least that fast)
-    H_to0 = np.array([np.array([[1, 0, 0], [0, 1, -16.0 * i], [0, 0, 1]]) for i in range(n)])
-    on_floor = np.array([[540.0, 1700.0 + 16.0 * i] for i in range(n)])  # the foot moves WITH the floor: planted
-    p = IG.planted_from_track(on_floor, H_to0)
-    assert p[2:-2].min() > 0.9
-    on_screen = np.array([[540.0, 1700.0] for i in range(n)])            # still on screen = sliding on the floor
-    # (a slide under ~6 px/frame reads as mostly planted: the contact point itself jitters about that much)
-    assert IG.planted_from_track(on_screen, H_to0)[2:-2].max() < 0.1
+def test_real_shadow_is_lifted_from_the_take_and_a_colour_change_is_not():
+    from realone.stage.cleanplate import CleanPlate
+    rng = np.random.default_rng(5)
+    tex = cv2.cvtColor(cv2.GaussianBlur((rng.random((2500, 4000)) * 200 + 40).astype(np.uint8), (0, 0), 1.2),
+                       cv2.COLOR_GRAY2BGR)
+    K = CAM.intrinsics(VFOV)
+    frames = [_floor_frame(k, tex, K, speed=0.015) for k in range(60)]
+    masks = []
+    for k, f in enumerate(frames):
+        x = 300 + 8 * k
+        body = np.zeros((H, W), bool)
+        body[1400:1700, x:x + 100] = True
+        f[body] = (200, 60, 30)
+        sh = np.zeros((H, W), bool)
+        sh[1705:1760, x + 110:x + 200] = True                       # his real shadow beside his feet: 55% light
+        sh[1765:1790, x + 110:W] = True                             # and a long one, past the capture window
+        f[sh] = (f[sh].astype(np.float32) * 0.55).astype(np.uint8)
+        tint = np.zeros((H, W), bool)
+        tint[1705:1760, x - 120:x - 30] = True                      # a coloured spill: not a shadow
+        f[tint] = np.clip(f[tint].astype(np.int16) * np.array([0.5, 1.0, 1.0]), 0, 255).astype(np.uint8)
+        masks.append(body)
+    tr = CAM.ground_track(frames, lambda i: masks[i], ground_top=0.45)
+    cp = CleanPlate(tr["H_to0"])
+    for i, f in enumerate(frames[:55]):
+        cp.feed(i, f, masks[i])
+    r = cv2.resize(cp.shadow(30, frames[30], masks[30], 1699), (W, H), interpolation=cv2.INTER_LINEAR)
+    x = 300 + 8 * 30
+    assert r[1715:1750, x + 125:x + 185].mean() < 0.75             # the shadow comes through
+    assert r[1715:1750, x - 105:x - 45].mean() > 0.9               # the colour change does not
+    assert r[1200:1300].min() > 0.99                               # nothing far from his feet
+    # no edge anywhere: the multiplier changes smoothly (a capture window must never show as a box)
+    assert np.abs(np.diff(r, axis=0)).max() < 0.05 and np.abs(np.diff(r, axis=1)).max() < 0.05
+
+
+def test_dolly_zoom_virtual_camera_keeps_the_subject_depth_still():
+    """A dolly zoom (camera back dz, focal x (Zs + dz) / Zs) leaves everything at the subject's depth where it was:
+    a still at no motion renders identically, and a card at depth Zs stays put while the far backdrop grows."""
+    still, disp = _synthetic_world()
+    K = CAM.intrinsics(VFOV)
+    n = np.array([0.0, np.cos(PITCH), np.sin(PITCH)])
+    w = World3D(still, disp, K, HEIGHT, n, still_f=K[0, 0] * 0.8)
+    a, _, _ = w.render(np.eye(3), np.zeros(3))
+    b, _, _ = w.render(np.eye(3), np.zeros(3), virtual=(np.zeros(3), 1.0))
+    assert np.abs(a - b).max() < 1e-3
+    zs, dz = 4.0, 3.0
+    nc = w.R_al.T @ np.array([0, 0, 1.0])          # a card facing the FRAME's camera, at the subject's depth
+    Hs = w.plane_h(w.R_al, np.zeros(3), nc, zs)
+    Kv = K.copy(); Kv[0, 0] *= (zs + dz) / zs; Kv[1, 1] *= (zs + dz) / zs
+    Hv = Kv @ (w.R_al + np.outer([0, 0, dz], nc) / zs) @ np.linalg.inv(w.KS)
+    p = np.float32([[[300, 800], [800, 1500]]])
+    assert np.abs(cv2.perspectiveTransform(p, Hs) - cv2.perspectiveTransform(p, Hv)).max() < 0.5

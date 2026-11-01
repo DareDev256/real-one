@@ -41,6 +41,18 @@
       the lowest sole, scaled by how planted it is. Planted is read from the contact point's motion on the
       TRACKED floor, not on screen. The pocket is tuned to the real plate's measured under/beside luminance: the
       darkest-10% frames go from 0.63 to 0.40 (the real plate reads 0.40).
+    - Round 5: the pocket LOST both pairs (6.5 vs 5, 4.5 vs 3.5). It matched the probe's number but drew a hard
+      rectangle that flicked on with each step, so it was removed.
+    - Round 6: the artist's real shadow, lifted from the take (clean-plate ratio), plus a rule against darkening
+      above the sole. Lost (4 vs 6.5): the rule's column cut-off drew a box. The rule was removed and the capture
+      window feathered.
+    - Round 7: real shadow alone vs the round-4 synthetic contact: 5 vs 6. It is right under a lifted foot but
+      loses the dense pocket under a planted one, so it ships as `--contact real` and the synthetic contact stays
+      the default. A world generated in light that matches the take (blue hour) beat the dusk world, 4 vs 3. The
+      loop stopped there: rounds 4 to 7 sit at 6 to 7 out of 10 against the real plate.
+- `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own, for a dolly zoom (camera
+  back, focal up, so everything at the subject's distance holds still). The subject's distance comes from the
+  solved floor under his contact point, smoothed. Lab prototype only; not wired to a CLI preset yet.
   - **Tests:** `tests/test_stage.py` has 14 tests. They include a camera solve against a synthetic floor filmed by a
     KNOWN dolly-back camera, which catches the sign twin that reads a dolly back as a dolly in. 14 guards were broken
     on purpose and all went red. The mutation pass also caught a real bug: the drop shadow was cast toward the lens.
