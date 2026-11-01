@@ -1,5 +1,9 @@
-"""SAM 3.1 one-bit mask codec, compiled: a numba port of the range coder in Meta's meta-sam-parser
-(`meta_sam_parser/_mask_codec.py`, SAM License, which permits modifications and derivative works).
+"""SAM 3.1 one-bit mask codec, compiled.
+
+License: this file is a derivative work of Meta's SAM Materials (meta-sam-parser, `_mask_codec.py`) and is
+distributed under the SAM License, a copy of which is in LICENSES/SAM-LICENSE.txt. The rest of the repo is MIT.
+
+A numba port of the parser's range coder (the SAM License permits modifications and derivative works).
 
 Why: the parser validates every mask by decoding it and re-encoding it in pure Python (~456k Python calls per mask,
 ~1 s each), and the pipeline then decodes it again. On a 150-frame take that was 134 s of parsing plus 417 ms per

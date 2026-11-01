@@ -61,9 +61,28 @@ Every path is wired and tested offline against the documented API shapes. SAM 3.
 - **Subtext Cut**: the director's rule, enforced in code by a literal-lyrics guard that rejects any world that just
   draws its own line.
 
+## For judges
+
+- **Watch first:** the 3-minute demo video. [PENDING: link once the video is cut from the artist's real take]
+- **What was built during the event:** everything in this repo. The repo was created on Oct 28 2026, inside the
+  event window, and the git history is the record.
+- **Run it with no key** (macOS, Python 3.12+, ffmpeg): `pip install -r requirements.txt`, then
+  `python -m realone render --clip <your take> --song <your master> --section hook --mask local --local-plate
+  --tag try`. That is a TEST render: Apple Vision masks and code-drawn worlds, no Meta model. A keyed run swaps
+  in SAM 3.1, Muse Image and the Muse Wonder director (`MODEL_API_KEY`).
+- **What a keyed 3-minute song costs** (the director's own pre-spend quote, `realone/director/budget.py`):
+  about US$2.11 expected and US$3.34 at most. SAM 3.1 on every frame is US$1.08 of that; 11 Muse Image worlds are
+  US$0.09; the Wonder treatment plus its watch-and-revise loop is the rest. Every run refuses before spending past
+  its cap.
+
+## Licenses
+
+MIT (LICENSE), except `realone/samcodec.py`, a compiled port of Meta's SAM 3.1 mask codec, which is distributed
+under the SAM License (LICENSES/SAM-LICENSE.txt).
+
 ## Engineering
 
-- 216 tests. Each guard was also broken on purpose to prove its test goes red, then restored byte-identical; the
+- 247 tests (collected 2026-11-01). Each guard was also broken on purpose to prove its test goes red, then restored byte-identical; the
   log is in `docs/implementation-notes.md` and the CHANGELOG.
 - Every render reads its own output back: cuts within 1 frame of the plan, audio within 1 frame of the master, and the
   freeze proven by hashing the world state. A failed check exits non-zero.
