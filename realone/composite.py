@@ -283,6 +283,11 @@ class Compositor:
         self.match = {look: ColorMatch(args.match) for look in LOOKS}  # one EMA per look: renders stay independent
         self.collage = Collage()
         self.counter = None
+        self.ring = None
+        if getattr(args, "stage", None):  # the tracked stage grades the artist by the light around him instead
+            from realone.stage.integrate import RingGrade
+            self.ring = RingGrade()
+        self.last_gain = None
 
     def frame(self, src_bgr, mask_bool, crop, world, front, world_stats, idx, gframe, looks, native=None,
               ns=(1.0, 1.0), counter=False, ink=None):
@@ -339,7 +344,10 @@ class Compositor:
                     self.counter = Counter()
                 inf["counter_text"] = self.counter.draw(o, filmed, int(counter))
                 inf["counter_place"] = int(counter)
-            outs[look] = self.grain.apply(o, idx, a.grain if look != "collage" else a.grain * 0.8).astype(np.uint8)
+            gr = a.grain if look != "collage" else a.grain * 0.8
+            if self.ring is not None and look == "clean":
+                gr = 0.0  # the stage gives the WORLD the take's own grain; the filmed pixels already carry theirs
+            outs[look] = self.grain.apply(o, idx, gr).astype(np.uint8)
             info[look] = inf
         return outs, info
 
@@ -351,7 +359,11 @@ class Compositor:
     def _clean(self, fg, alpha, hard, world, front, wb, wstats):
         fgd, cut, st = despill_apply(fg, self.est, wb)
         al = alpha * (1 - cut)
-        f = self.match["clean"](fgd, al, wstats)
+        if self.ring is not None:  # stage: the light around him in the take vs the world, bounded, smoothed
+            f, self.last_gain = self.ring(fgd, hard, fg, np.clip(world / 255, 0, 1), key=getattr(self, "key", None))
+            st = dict(st, graded_gain=[round(x, 4) for x in self.last_gain])
+        else:
+            f = self.match["clean"](fgd, al, wstats)
         f = self._wrap(f, al, wb)
         out = f * al[..., None] * 255 + world * (1 - al[..., None])
         return out + front * (1 - 0.35 * al[..., None]), st

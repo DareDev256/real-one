@@ -60,6 +60,9 @@ def gate(a):
     prompts = WL.prompts_in(default, per)
     if a.local_plate and not local:
         raise Refuse("--local-plate is test-only and needs --mask local")
+    if getattr(a, "stage", "off") == "tracked" and a.local_plate:
+        raise Refuse("--stage tracked films a world still through the take's camera; the procedural test plates "
+                     "have no depth to rebuild (use --world-image or a Muse Image world)")
     if getattr(a, "sam_prompt", None) and local:
         raise Refuse("--sam-prompt is for --mask sam (SAM 3.1); the local test masks take no prompt")
     if not (default or per or a.local_plate):
@@ -348,6 +351,22 @@ def render(a):
         arrays["cam_dx"], arrays["cam_zoom"] = FZ.bullet_camera(n, plan, plan["freezes"], shot_of)
         arrays["vel"] = FZ.clock_rate(n, plan["freezes"], shot_of)
         arrays["grade"], arrays["punch"], arrays["flash"] = FZ.hit_profile(n, plan["freezes"])
+    stage_rep = None
+    if getattr(a, "stage", "off") == "tracked":
+        from realone.stage import pipeline as STG
+        lens_mm, lens_src = STG.lens_for(STG.clip_tags(clip), getattr(a, "lens_mm", None))
+        st_arr, stage_rep = STG.prepare(norm, n, masks, worlds, plan, shot_of, lens_mm, OUT / "work" / "depth",
+                                        figure_m=getattr(a, "figure_m", 1.75))
+        stage_rep["lens_source"] = lens_src
+        arrays.update(st_arr)
+        # the real floor out of the matte at his feet (clean plate from the tracked floor): every later stage,
+        # the Receipt included, uses the refined matte
+        from realone.stage.cleanplate import refine_masks
+        mpath, removed = refine_masks(norm, n, masks, st_arr["stage_H"], st_arr["stage_contact"],
+                                      Path(str(mpath)).with_name(Path(str(mpath)).stem + "_stagefeet.npy"))
+        masks = np.load(mpath, mmap_mode="r")
+        stage_rep["feet_px_removed"] = {"frames": int((removed > 0).sum()), "total": int(removed.sum())}
+        plan["stage"] = {k: v for k, v in stage_rep.items() if k != "K"}
     write_json(shots_path, plan)  # again: now with each shot's counter place and collage ink
     np.savez(seg_dir / "arrays.npz", **arrays)
     units = U.make_units(plan, workers, avoid=[f["end_frame"] for f in plan["freezes"]])
@@ -358,7 +377,10 @@ def render(a):
            "plates": [str(p) for _, p, _ in worlds], "particles": [k for _, _, k in worlds], "freeze_style": style,
            "arrays": str(seg_dir / "arrays.npz"), "look_names": list(LOOKS), "outputs": looks,
            "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
-           "cv_threads": max(1, (os.cpu_count() or 4) // workers)}
+           "cv_threads": max(1, (os.cpu_count() or 4) // workers),
+           "stage": stage_rep, "stage_cache": str(OUT / "work" / "depth")}
+    if stage_rep is not None:
+        ctx["args"]["stage"] = "tracked"
     print(f"render: {n} frames, {len(plan['shots'])} shots, {len(units)} units on {workers} worker(s) ({why})")
     t0 = time.time()
     recs = run_units(ctx, units, workers, a.max_minutes * 60 - (t0 - t_start), t0, n)
@@ -417,8 +439,10 @@ def render(a):
         matched = [p for p in planned if any(abs(c - p) <= 1 for c in cuts)]
         # the bullet freeze's hit (punch + flash on its downbeat, decaying over the 3 frames after; the downbeat
         # is not a cut in `bullet`) changes the whole frame like a cut does: a detection there is the hit
-        hit = {f["start_frame"] + j for f in plan["freezes"] for j in range(0, len(FZ.FLASH) + 1)} \
-            if style == "bullet" else set()
+        hit = ({f["start_frame"] + j for f in plan["freezes"] for j in range(0, len(FZ.FLASH) + 1)}
+               | {f["end_frame"] for f in plan["freezes"]}) if style == "bullet" else set()
+        # (the release downbeat is designed too: the freeze's cool grade snaps off there, a whole-frame change the
+        # cut detector reads as a cut when the release falls inside a shot rather than on a section cut)
         extra = [c for c in cuts if not any(abs(c - p) <= 1 for p in planned)
                  and c not in hit]  # a cut off the beat grid
         out_audio = load_audio(outs[look], SYNC_SR)

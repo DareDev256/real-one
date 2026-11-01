@@ -12,8 +12,10 @@ soundfile==0.14.0
 pillow==13.0.0
 # tests
 pytest==9.2.0
-# local test segmenter only (Apple Vision); never used for the demo
+# Apple Vision: the local TEST segmenter (never the demo) and, with Core ML below, the stage's depth model (macOS)
 pyobjc-core==12.2.2; sys_platform == "darwin"
 pyobjc-framework-Cocoa==12.2.2; sys_platform == "darwin"
 pyobjc-framework-Quartz==12.2.2; sys_platform == "darwin"
 pyobjc-framework-Vision==12.2.2; sys_platform == "darwin"
+# the tracked stage: Depth Anything V2 on Core ML (realone/stage/depth.py)
+pyobjc-framework-CoreML==12.2.2; sys_platform == "darwin"

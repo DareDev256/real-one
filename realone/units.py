@@ -145,6 +145,13 @@ class Ctx:
         self.native_frames = arr["native_frames"]  # per frame: 1 if the punch-in uses the native file
         self.counter = arr["counter"] if "counter" in arr.files else np.zeros(len(self.wf), np.uint8)
         self.shot_ink = arr["shot_ink"] if "shot_ink" in arr.files else np.zeros(len(self.shot_world), np.uint8)
+        # the tracked stage (realone/stage): the world filmed through the take's own solved camera
+        self.stage = None
+        if d.get("stage"):
+            from realone.stage.pipeline import StageWorlds
+            self.stage = StageWorlds(d["stage"], d["plates"], d["stage_cache"],
+                                     {k: arr[k] for k in ("stage_R", "stage_t", "stage_corr", "stage_contact",
+                                                          "stage_G") if k in arr.files})
         # Hook Freeze v2 (`bullet`): the camera truck, the motion-blur clock rate and the hit, per frame
         self.bullet = "cam_dx" in arr.files
         if self.bullet:
@@ -191,13 +198,17 @@ def render_unit(u):
             crop = c.crops[i]
             cam = (float(c.cam_dx[i]), float(c.vel[i]), float(c.cam_zoom[i])) if c.bullet else None
             wkey = (sh_world, float(wt), float(c.pushf[i]), tuple(crop), cam)  # exactly world_layer's inputs
-            if wcache is None or wcache[0] != wkey:
-                wcache = (wkey,) + world_layer(c.plates[sh_world], c.parts[sh_world], crop, c.pushf[i],
-                                               c.args.push, wt, cam=cam)
-            _, world, front, wbase = wcache
+            m = unpack_mask(c.masks[i])
+            if c.stage is not None:  # every frame has its own camera pose: nothing to cache
+                world, front, wbase = c.stage.layer(sh_world, i, m, c.parts[sh_world], wt, cam, crop)
+                c.comp.key = c.stage.key_for(sh_world)
+            else:
+                if wcache is None or wcache[0] != wkey:
+                    wcache = (wkey,) + world_layer(c.plates[sh_world], c.parts[sh_world], crop, c.pushf[i],
+                                                   c.args.push, wt, cam=cam)
+                _, world, front, wbase = wcache
             if c.bullet and c.grade[i] > 0:  # the frozen world grades cool; the artist is composited in colour
                 world, front = grade_world(world, float(c.grade[i])), grade_world(front, float(c.grade[i]))
-            m = unpack_mask(c.masks[i])
             per_out = _looks_for(c, i)
             looks = sorted(set(per_out.values()))
             use_nat = nf if c.native_frames[i] else None

@@ -68,6 +68,15 @@ def build_parser():
                    help="draw the FILMED / GENERATED share on receipt frames (out/<tag>_receipt.json is always written)")
     r.add_argument("--no-native", action="store_true",
                    help="A/B only: punch-ins upscale the 1080 proxy (the 0.1.0 path) even when the take is bigger")
+    r.add_argument("--stage", choices=("off", "tracked"), default="off",
+                   help="tracked: track the floor the artist stood on, solve the phone's camera, rebuild each world "
+                        "in depth (Depth Anything V2 on Core ML) and film it through that camera, with a contact "
+                        "shadow, depth of field and a ring grade; refuses when the floor cannot be tracked. "
+                        "off: the 0.2.0 still world")
+    r.add_argument("--lens-mm", type=float,
+                   help="35 mm-equivalent focal length of the take (default: the phone's main camera, 26)")
+    r.add_argument("--figure-m", type=float, default=1.75,
+                   help="the artist's height in metres (sizes the camera height from the figure on the floor)")
 
     an = sub.add_parser("analyze", help="beat grid, downbeats and sections of the master -> timeline json")
     an.add_argument("--song", required=True)

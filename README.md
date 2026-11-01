@@ -36,8 +36,8 @@ you stay in colour.
 | **Muse Voice Transcribe** | Lyrics from the master, placed by section; the artist's own lyric sheet outranks it. |
 | **Muse Spark Open** (Baseten) | The open-weight brain: writes the same song's treatment through the same guard, so the two directors can be compared side by side (`plan --brain spark-open`). |
 
-Every path is wired and tested offline against the documented API shapes. None has run with a key yet; the first
-keyed run is `scripts/first_keyed_run.sh probe`.
+Every path is wired and tested offline against the documented API shapes. SAM 3.1 and Muse Image have run with a key
+(the first keyed probe, 2026-10-30); the director models have not yet.
 
 ## What it does
 
@@ -45,6 +45,11 @@ keyed run is `scripts/first_keyed_run.sh probe`.
 - **Sync** of the phone's own mic to the master, refusing a weak or ambiguous match instead of guessing.
 - **Cuts on downbeats** with wide, medium and close reframes; close-ups come from the phone's native 4K frame; iPhone
   HDR clips are tone-mapped and turned upright.
+- **Tracked stage** (`--stage tracked`, [how it works](docs/stage.md)): the floor you stood on is tracked, the phone's
+  camera is solved from it, and each world is rebuilt in depth (Depth Anything V2 on the Mac's Neural Engine) and
+  filmed through that same camera. Your feet stay planted: floor slip near the feet drops from 6.3 to 0.4 px a frame
+  against a still world. A contact shadow cast from the world's own sun, depth of field matched to the take's, and a
+  grade from the light around you finish it.
 - **Hook Freeze**: on the hook's downbeat, rain at three depths hangs mid-air, the camera keeps sliding through it, the
   world drains cool and the artist keeps performing in full colour. The same world falls, hangs and resumes.
 - **Real Receipt**: the filmed share of every frame, measured from the masks; `--receipt-reveal` flips a section to

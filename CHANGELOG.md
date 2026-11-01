@@ -1,6 +1,46 @@
 # Changelog
 
 ## Unreleased
+- **The tracked stage, `--stage tracked`** (docs/stage.md). The world is rebuilt in depth and filmed through the
+  phone's own solved camera, instead of a still sliding behind a cut-out.
+  - **Camera:** a planar track of the floor the artist stood on, with him masked out; a camera solve from the floor
+    homographies (normal held fixed, Procrustes per frame, low-parallax frames skipped); the horizon from the floor's
+    vanishing line; the camera height from the figure standing on the floor.
+  - **World:** Depth Anything V2 Small on the Neural Engine through Core ML (Apache-2.0, sha256-pinned). Each still
+    splits into a backdrop at infinity, a fitted floor plane and up to 8 depth cards with inpainted backs. Every layer
+    is warped by its plane homography, and the floor is pinned to the tracked floor every frame.
+  - **Integration:**
+    - a contact shadow, on the floor only, cast from the sun the world still shows;
+    - depth of field calibrated to the take: the take's background/performer focus ratio is measured (0.75 on
+      the test plate) and the world's thin-lens blur is chosen to match. A median-based probe read every focus as
+      equal (8-bit steps); the trimmed mean replaced it and was checked against a background blurred on purpose;
+    - motion blur along the floor's own motion between frames;
+    - the take's grain given to the world, after any punch-in;
+    - a ring grade split into light level and colour lean (a dark warm world can still warm him), plus a key
+      ramp toward the world's sun (filmed + graded in the Receipt, never generated);
+    - clean-plate feet: the real floor, rebuilt from 6 tracked neighbours, takes floor pixels out of the matte's
+      outer 10 px at his feet, only in regions that touch the edge (never adds, never touches the interior); the
+      Receipt counts the refined matte.
+  - **Refusals:** a floor with too few features, too little parallax to see the floor's slope, an artist never seen
+    head to feet, or a still that no lens can stretch over the camera's view.
+  - **Measured (lab, moving-camera plate):** floor slip near the feet falls from 6.31 to 0.38 px/frame median, and
+    from 814 to 59 px over 5 s. The probe reads rendered pixels only and was checked against the plate itself (0.00)
+    and a known shift.
+  - **End to end:** `TEST_LOCAL_stage1` and a stage Hook Freeze render pass every existing render check (frames
+    220/220, cuts on plan, audio +0.5 ms, freeze state identical on all 74 frozen frames). The freeze release
+    downbeat is now counted as a designed whole-frame change: the cool grade snapping off read as an off-plan cut
+    when a freeze ended inside a shot (also true without the stage).
+  - **Blind gauntlet (a fresh critic each round, the real plate as the bar):**
+    - Round 1: the 0.2.0 composite 2/10, the stage 6/10.
+    - Round 2: focus calibrated; the next gap was test-matte leaks at the feet.
+    - Round 3: SAM 3.1 mattes plus the clean-plate feet beat round 2 in both worlds (6 vs 4.5, 4.5 vs 3.5). Its gap
+      was the refiner eating a floor-coloured stripe on the shoes. Fixed: a 10 px band, regions must touch the
+      matte's edge; the critic's own pass test went from 12 frames to 1 (by our reproduction).
+  - **Tests:** `tests/test_stage.py` has 12 tests. They include a camera solve against a synthetic floor filmed by a
+    KNOWN dolly-back camera, which catches the sign twin that reads a dolly back as a dolly in. 12 guards were broken
+    on purpose and all went red. The mutation pass also caught a real bug: the drop shadow was cast toward the lens.
+  - **Credits:** techniques harvested from the #OpenSourceHiggsfield entries pickups, platelock, hero-frame-rig,
+    ReAngle, hack-comfy, swapjutsu and shotcheck; listed in docs/stage.md.
 - **Muse Spark Open on Baseten as a second director brain** (`plan --brain spark-open`, for the open-weight bonus).
   `SparkOpenBackend` in `realone/director/backend.py` implements the same four methods as the Wonder backend over
   OpenAI-compatible chat completions: instructions as a system message, the treatment schema as a strict
