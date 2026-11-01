@@ -50,6 +50,10 @@ Every path is wired and tested offline against the documented API shapes. SAM 3.
   filmed through that same camera. Your feet stay planted: floor slip near the feet drops from 6.3 to 0.4 px a frame
   against a still world. A contact shadow cast from the world's own sun, depth of field matched to the take's, and a
   grade from the light around you finish it.
+- **Camera moves on the beat** (`--move`): a **dolly zoom** on the hook drop (the world stretches behind you while
+  you keep your size, because the stage knows the world's depth and the phone's camera), a **crash zoom** toward
+  your face on every downbeat, and a **world swap** every bar with the floor locked under your feet. All of them
+  run on Meta's worlds and your own filmed pixels.
 - **Hook Freeze**: on the hook's downbeat, rain at three depths hangs mid-air, the camera keeps sliding through it, the
   world drains cool and the artist keeps performing in full colour. The same world falls, hangs and resumes.
 - **Real Receipt**: the filmed share of every frame, measured from the masks; `--receipt-reveal` flips a section to

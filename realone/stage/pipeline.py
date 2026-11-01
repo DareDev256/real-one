@@ -84,7 +84,8 @@ def _measure_look(proxy, frames, masks, world_full, R, t, corr, contact):
                 sun_len=float(sun_len), sun_drop=float(sun_drop))
 
 
-def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m=1.75, log=print):
+def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m=1.75, log=print, world_of=None,
+            dolly_dz=None):
     """-> (arrays dict for arrays.npz, report dict). worlds: [(name, still path, particles)]."""
     t0 = time.time()
     track = CAM.ground_track(read_frames(proxy), lambda i: _mask(masks, i))
@@ -114,8 +115,9 @@ def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m
     log(f"stage: floor tracked on {n} frames (median {int(np.median(track['step_inliers'][1:]))} points), "
         f"{kind} camera, lens {lens_mm:g} mm, horizon row {horizon:.0f}, camera {height:.2f} m above the floor")
 
-    shot_world = np.array([sh["world"] for sh in plan["shots"]])
-    world_of = shot_world[shot_of]
+    if world_of is None:
+        world_of = np.array([sh["world"] for sh in plan["shots"]])[shot_of]
+    world_of = np.asarray(world_of)
     st_R = np.zeros((n, 3, 3))
     st_t = np.zeros((n, 3))
     st_corr = np.zeros((n, 3, 3))
@@ -154,11 +156,32 @@ def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m
     st_G = np.array([np.eye(3)] + [np.linalg.inv(Hs[i]) @ Hs[i - 1] for i in range(1, n)])
     arrays = dict(stage_R=st_R, stage_t=st_t, stage_corr=st_corr, stage_contact=track["contact"], stage_G=st_G,
                   stage_H=Hs)
+    dolly_info = None
+    if dolly_dz is not None and np.any(dolly_dz > 0):
+        # the subject's distance per frame: where the ray through his contact point meets the solved floor,
+        # smoothed like a focus pull (the lowest matte pixel hops between feet; a raw distance makes the zoom pop)
+        from scipy.ndimage import gaussian_filter1d, median_filter
+        Ki = np.linalg.inv(K)
+        zs = np.full(n, np.nan)
+        for i in range(n):
+            cx, cy = track["contact"][i]
+            if np.isfinite(cx):
+                zs[i] = height / float((R[i] @ n0) @ (Ki @ np.array([cx, cy, 1.0])))
+        good = np.isfinite(zs) & (zs > 0.3)
+        if not good.any():
+            raise Refuse("--move dolly: the artist's distance could not be read off the floor on any frame")
+        zs = np.where(good, zs, np.median(zs[good]))
+        arrays["stage_zs"] = gaussian_filter1d(median_filter(zs, size=31, mode="nearest"), 8, mode="nearest")
+        arrays["stage_dz"] = np.asarray(dolly_dz, float)
+        dolly_info = dict(max_m=float(np.max(dolly_dz)), subject_m=[round(float(arrays["stage_zs"].min()), 2),
+                                                                   round(float(arrays["stage_zs"].max()), 2)])
     report = dict(lens_mm=lens_mm, vfov_deg=round(vfov_916(lens_mm), 2), motion=kind, drift_px=round(drift, 1),
                   horizon_row=round(horizon, 1), camera_height_m=round(height, 3), figure_m=figure_m,
                   track_points_median=int(np.median(track["step_inliers"][1:])) if n > 1 else 0,
                   floor_reproj_px_before_pin=[round(x, 2) for x in CAM.floor_reproj_err(Hs, K, R, t, n0, height)],
                   worlds=per_world, K=K.tolist(), height=height, seconds=round(time.time() - t0, 1))
+    if dolly_info:
+        report["dolly"] = dolly_info
     return arrays, report
 
 
@@ -173,6 +196,8 @@ class StageWorlds:
         self.built = {}
         self.R, self.t, self.corr = arrays["stage_R"], arrays["stage_t"], arrays["stage_corr"]
         self.contact = arrays["stage_contact"]
+        self.dz = arrays.get("stage_dz")
+        self.zs = arrays.get("stage_zs")
         self.G = arrays.get("stage_G")
         self.shadow = np.load(report["shadow_path"], mmap_mode="r") if report.get("shadow_path") else None
 
@@ -186,7 +211,11 @@ class StageWorlds:
         from realone.stage import integrate as IG
         g = self.get(wid)
         w = self.rep["worlds"][str(wid)]
-        img, zb, fv = g.render(self.R[i], self.t[i], self.corr[i])
+        virt = None
+        if self.dz is not None and self.dz[i] > 0:  # the dolly zoom: back dz, lens x (zs + dz) / zs
+            dz, zs = float(self.dz[i]), float(self.zs[i])
+            virt = (np.array([0.0, 0.0, dz]), (zs + dz) / zs)
+        img, zb, fv = g.render(self.R[i], self.t[i], self.corr[i], virtual=virt)
         # contact: the synthetic occlusion + drop (the blind gauntlet's winner, rounds 4 to 7), or with
         # --contact real his real shadow lifted from the take (right under a LIFTED foot, but it loses the dense
         # pocket under a planted one: gauntlet r7 scored it 5 vs 6)

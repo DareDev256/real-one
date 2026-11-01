@@ -47,6 +47,15 @@ Only the ring grade and the light wrap change his filmed pixels. They stay filme
 never generated; the gain is logged per frame). The clean-plate step only removes floor from the matte, and the
 Receipt counts the refined matte.
 
+## Camera moves on the beat (`--move`, `realone/stage/moves.py`)
+
+The stage knows the world's depth and the phone's camera, so it can move a virtual camera on top of the real one.
+
+- **dolly** (the Vertigo shot): back 3 m while zooming so the artist's distance keeps its scale. That distance
+  is read every frame off the solved floor and smoothed.
+- **crash**: a snap zoom to the face on each downbeat, with zoom blur.
+- **swap**: a new world each bar on the same tracked floor.
+
 ## Measured (lab, 150 frames of a moving-camera test plate, the same world)
 
 | | floor slip near the feet (px/frame, median) | total drift over 5 s |

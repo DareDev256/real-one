@@ -75,6 +75,11 @@ def build_parser():
                         "off: the 0.2.0 still world")
     r.add_argument("--lens-mm", type=float,
                    help="35 mm-equivalent focal length of the take (default: the phone's main camera, 26)")
+    r.add_argument("--move", action="append", metavar="KIND[:BARS]@SECTION",
+                   help="a camera move on the beat (repeatable): dolly[:BARS]@SECTION (dolly zoom: the world "
+                        "stretches behind you while you keep your size; needs --stage tracked), crash@SECTION (a "
+                        "snap zoom toward your face on every downbeat), swap@SECTION (a new world every bar, the "
+                        "floor locked under you). SECTION: hook, hook:2, #3, bars:A-B, verse")
     r.add_argument("--contact", choices=("synthetic", "real"), default="synthetic",
                    help="--stage tracked contact shadow: synthetic occlusion + a cast shadow (default; the blind "
                         "gauntlet's winner), or real: the artist's own shadow lifted from the take (correct under a "

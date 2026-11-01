@@ -50,9 +50,24 @@
       loses the dense pocket under a planted one, so it ships as `--contact real` and the synthetic contact stays
       the default. A world generated in light that matches the take (blue hour) beat the dusk world, 4 vs 3. The
       loop stopped there: rounds 4 to 7 sit at 6 to 7 out of 10 against the real plate.
-- `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own, for a dolly zoom (camera
-  back, focal up, so everything at the subject's distance holds still). The subject's distance comes from the
-  solved floor under his contact point, smoothed. Lab prototype only; not wired to a CLI preset yet.
+- **Camera moves on the beat, `--move KIND[:BARS]@SECTION`** (`realone/stage/moves.py`). Higgsfield-style
+  presets, done on Meta's worlds with the artist's filmed pixels:
+  - `dolly[:BARS]@SECTION`: a dolly zoom from the section's first downbeat. The world's camera goes back 3 m
+    while its lens zooms by (zs + dz) / zs, so everything at the artist's distance (zs) holds still and the world
+    behind him stretches. zs is read every frame off the solved floor under his contact point and smoothed like
+    a focus pull; without that, the lowest matte pixel hopping between feet made 15 px pops. It holds to the
+    next cut, then resets. Needs `--stage tracked`, and refuses without it.
+  - `crash@SECTION`: a snap zoom toward his face (box top + 12%, smoothed) on every downbeat, x1.28 over 4
+    frames with a 3-sample zoom blur on the snap, held to the next downbeat.
+  - `swap@SECTION`: a new world every bar, cycling the section's world list, with the framing uninterrupted.
+    Under the stage every world is pinned to the same tracked floor. It refuses with one world, and refuses
+    inside a Hook Freeze.
+  - Crash snaps and swap downbeats are designed whole-frame changes, so the cut detector does not count them.
+  - End to end on the test clip (`--mask local`): dolly, and swap + crash together, both pass every render
+    check (frames, cuts on plan, audio +0.5 ms).
+  - 7 tests (`tests/test_moves.py`), 7 guards mutation-red. A centre clamp in the crash zoom was found
+    unnecessary (zooming in about a point inside the frame cannot show a border) and removed.
+- `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own (what the dolly uses).
   - **Tests:** `tests/test_stage.py` has 14 tests. They include a camera solve against a synthetic floor filmed by a
     KNOWN dolly-back camera, which catches the sign twin that reads a dolly back as a dolly in. 14 guards were broken
     on purpose and all went red. The mutation pass also caught a real bug: the drop shadow was cast toward the lens.

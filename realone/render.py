@@ -16,7 +16,7 @@ from realone import receipt as R
 from realone import units as U
 from realone import worldlist as WL
 from realone.audio import analyze, pick_section
-from realone.common import FPS, LOCAL_PREFIX, OUT, Refuse, file_md5, unpack_mask, write_json
+from realone.common import FPS, LOCAL_PREFIX, OUT, Refuse, file_md5, unpack_mask, write_json, W
 from realone.composite import LIGHT_SHARE, LOOKS, border_ink, crop_matrix, is_identity
 from realone.encode import detect_cuts, verify_output
 from realone.masks import sam_cost, sam_masks_cached, sam_masks_union, sam_uncached, vision_masks
@@ -205,6 +205,15 @@ def render(a):
                       force_cuts=[b for pair in reveal_bars for b in pair], freeze_style=style)
     plan["freeze_style"] = style if plan["freezes"] else None
     plan["freeze_lead_in"] = lead_in
+    from realone.stage import moves as MV
+    moves = MV.resolve(tl, getattr(a, "move", None), secs, plan, plan["freezes"])
+    if any(m["kind"] == "dolly" for m in moves) and getattr(a, "stage", "off") != "tracked":
+        raise Refuse("--move dolly needs --stage tracked: a dolly zoom stretches the world by its depth, and only "
+                     "the tracked stage has the world's depth and the take's camera")
+    plan["moves"] = [{k: v for k, v in m.items() if k != "downbeat_frames"} for m in moves]
+    for m in moves:
+        print(f"move: {m['kind']} on the {m['role']}, bars {m['start_bar']}-{m['end_bar']} = frames "
+              f"{m['start_frame']}-{m['end_frame']}")
     for f in plan["freezes"]:
         print(f"freeze: {f['role']} bars {f['start_bar']}-{f['end_bar']} = frames {f['start_frame']}-"
               f"{f['end_frame'] - 1} ({f['frames'] / FPS:.2f}s): the world holds, the artist keeps moving"
@@ -351,12 +360,26 @@ def render(a):
         arrays["cam_dx"], arrays["cam_zoom"] = FZ.bullet_camera(n, plan, plan["freezes"], shot_of)
         arrays["vel"] = FZ.clock_rate(n, plan["freezes"], shot_of)
         arrays["grade"], arrays["punch"], arrays["flash"] = FZ.hit_profile(n, plan["freezes"])
+    if any(m["kind"] == "swap" for m in moves):
+        shot_w = np.array([sh["world"] for sh in plan["shots"]])[shot_of]
+        arrays["frame_world"] = MV.swap_worlds(
+            n, moves, shot_w, lambda f: per_section[plan["shots"][shot_of[f]]["section_pos"]])
+    if any(m["kind"] == "crash" for m in moves):
+        sc, fx, fy = MV.crash_profile(n, moves, boxes)
+        ox, oy = np.empty(n), np.empty(n)
+        for i in range(n):  # the face point in OUTPUT space (after the shot's reframe)
+            x0, y0, cw, ch = crops[i]
+            ox[i], oy[i] = (fx[i] - x0) * W / cw, (fy[i] - y0) * W / cw
+        arrays["crash_scale"], arrays["crash_cx"], arrays["crash_cy"] = sc, ox, oy
     stage_rep = None
     if getattr(a, "stage", "off") == "tracked":
         from realone.stage import pipeline as STG
         lens_mm, lens_src = STG.lens_for(STG.clip_tags(clip), getattr(a, "lens_mm", None))
         st_arr, stage_rep = STG.prepare(norm, n, masks, worlds, plan, shot_of, lens_mm, OUT / "work" / "depth",
-                                        figure_m=getattr(a, "figure_m", 1.75))
+                                        figure_m=getattr(a, "figure_m", 1.75),
+                                        world_of=arrays.get("frame_world"),
+                                        dolly_dz=MV.dolly_profile(n, moves, [sh["start_frame"] for sh in
+                                                                             plan["shots"]]))
         stage_rep["lens_source"] = lens_src
         arrays.update(st_arr)
         # the real floor out of the matte at his feet (clean plate from the tracked floor): every later stage,
@@ -443,6 +466,7 @@ def render(a):
         # is not a cut in `bullet`) changes the whole frame like a cut does: a detection there is the hit
         hit = ({f["start_frame"] + j for f in plan["freezes"] for j in range(0, len(FZ.FLASH) + 1)}
                | {f["end_frame"] for f in plan["freezes"]}) if style == "bullet" else set()
+        hit |= MV.designed_changes(moves)  # a crash snap or a world swap changes the whole frame on purpose
         # (the release downbeat is designed too: the freeze's cool grade snaps off there, a whole-frame change the
         # cut detector reads as a cut when the release falls inside a shot rather than on a section cut)
         extra = [c for c in cuts if not any(abs(c - p) <= 1 for p in planned)

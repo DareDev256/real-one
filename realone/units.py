@@ -151,7 +151,10 @@ class Ctx:
             from realone.stage.pipeline import StageWorlds
             self.stage = StageWorlds(d["stage"], d["plates"], d["stage_cache"],
                                      {k: arr[k] for k in ("stage_R", "stage_t", "stage_corr", "stage_contact",
-                                                          "stage_G") if k in arr.files})
+                                                          "stage_G", "stage_dz", "stage_zs") if k in arr.files})
+        # camera moves on the beat (realone/stage/moves.py): a world per frame (swap), a crash zoom per frame
+        self.frame_world = arr["frame_world"] if "frame_world" in arr.files else None
+        self.crash = (arr["crash_scale"], arr["crash_cx"], arr["crash_cy"]) if "crash_scale" in arr.files else None
         # Hook Freeze v2 (`bullet`): the camera truck, the motion-blur clock rate and the hit, per frame
         self.bullet = "cam_dx" in arr.files
         if self.bullet:
@@ -193,7 +196,7 @@ def render_unit(u):
         for i in range(start, f1):
             fr = next(prox)
             nf = next(nat) if nat is not None else None
-            sh_world = int(c.shot_world[c.shot_of[i]])
+            sh_world = int(c.shot_world[c.shot_of[i]] if c.frame_world is None else c.frame_world[i])
             wt = s0 + c.wf[i] / FPS
             crop = c.crops[i]
             cam = (float(c.cam_dx[i]), float(c.vel[i]), float(c.cam_zoom[i])) if c.bullet else None
@@ -231,6 +234,11 @@ def render_unit(u):
             prev_thumb = th
             if c.bullet:  # the punch and the flash on the freeze downbeat, once per look
                 frames = {lk: apply_hit(fr_, float(c.punch[i]), float(c.flash[i])) for lk, fr_ in frames.items()}
+            if c.crash is not None and c.crash[0][i] > 1.0001:  # the crash zoom: the whole finished frame
+                from realone.stage.moves import apply_crash
+                sc, cx, cy = c.crash
+                frames = {lk: apply_crash(fr_, float(sc[i]), float(cx[i]), float(cy[i]),
+                                          float(sc[i - 1]) if i > 0 else 1.0) for lk, fr_ in frames.items()}
             for out, look in per_out.items():
                 encs[out].stdin.write(frames[look].tobytes())
                 rec["filmed"][out][j] = inf[look].get("filmed", np.nan)
