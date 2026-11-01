@@ -36,8 +36,13 @@
     - Round 3: SAM 3.1 mattes plus the clean-plate feet beat round 2 in both worlds (6 vs 4.5, 4.5 vs 3.5). Its gap
       was the refiner eating a floor-coloured stripe on the shoes. Fixed: a 10 px band, regions must touch the
       matte's edge; the critic's own pass test went from 12 frames to 1 (by our reproduction).
-  - **Tests:** `tests/test_stage.py` has 12 tests. They include a camera solve against a synthetic floor filmed by a
-    KNOWN dolly-back camera, which catches the sign twin that reads a dolly back as a dolly in. 12 guards were broken
+    - Round 4: the fix won both worlds (7 vs 5, 5 vs 3.5). The next gap: the feet float, because the real
+      plate's floor under a planted sole is about half as bright as beside it. Fixed with a contact pocket under
+      the lowest sole, scaled by how planted it is. Planted is read from the contact point's motion on the
+      TRACKED floor, not on screen. The pocket is tuned to the real plate's measured under/beside luminance: the
+      darkest-10% frames go from 0.63 to 0.40 (the real plate reads 0.40).
+  - **Tests:** `tests/test_stage.py` has 14 tests. They include a camera solve against a synthetic floor filmed by a
+    KNOWN dolly-back camera, which catches the sign twin that reads a dolly back as a dolly in. 14 guards were broken
     on purpose and all went red. The mutation pass also caught a real bug: the drop shadow was cast toward the lens.
   - **Credits:** techniques harvested from the #OpenSourceHiggsfield entries pickups, platelock, hero-frame-rig,
     ReAngle, hack-comfy, swapjutsu and shotcheck; listed in docs/stage.md.

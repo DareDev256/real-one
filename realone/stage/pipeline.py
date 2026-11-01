@@ -152,8 +152,10 @@ def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m
             f"({look['focus_comp']}), shadow {np.round(look['sun_dir'], 2).tolist()}")
     # the floor's own motion between frames: the world is motion-blurred along it (exposure, not a filter)
     st_G = np.array([np.eye(3)] + [np.linalg.inv(Hs[i]) @ Hs[i - 1] for i in range(1, n)])
+    from realone.stage.integrate import planted_from_track
+    st_planted = planted_from_track(track["contact"], Hs)
     arrays = dict(stage_R=st_R, stage_t=st_t, stage_corr=st_corr, stage_contact=track["contact"], stage_G=st_G,
-                  stage_H=Hs)
+                  stage_H=Hs, stage_planted=st_planted)
     report = dict(lens_mm=lens_mm, vfov_deg=round(vfov_916(lens_mm), 2), motion=kind, drift_px=round(drift, 1),
                   horizon_row=round(horizon, 1), camera_height_m=round(height, 3), figure_m=figure_m,
                   track_points_median=int(np.median(track["step_inliers"][1:])) if n > 1 else 0,
@@ -174,6 +176,7 @@ class StageWorlds:
         self.R, self.t, self.corr = arrays["stage_R"], arrays["stage_t"], arrays["stage_corr"]
         self.contact = arrays["stage_contact"]
         self.G = arrays.get("stage_G")
+        self.planted = arrays.get("stage_planted")
 
     def key_for(self, wid):
         """(dx, colour) for the artist's key-light ramp when the world shows a clear sun, else None."""
@@ -186,7 +189,8 @@ class StageWorlds:
         g = self.get(wid)
         w = self.rep["worlds"][str(wid)]
         img, zb, fv = g.render(self.R[i], self.t[i], self.corr[i])
-        sh = IG.contact_shadow(mask, fv, light_dir=tuple(w["sun_dir"]), length=w["sun_len"], drop=w["sun_drop"])
+        sh = IG.contact_shadow(mask, fv, light_dir=tuple(w["sun_dir"]), length=w["sun_len"], drop=w["sun_drop"],
+                               planted=float(self.planted[i]) if self.planted is not None else 0.0)
         img = img * (1 - sh[..., None])
         cx, cy = self.contact[i]
         if np.isfinite(cx):

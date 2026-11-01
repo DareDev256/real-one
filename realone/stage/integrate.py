@@ -132,7 +132,46 @@ def add_grain(world255, sigma01, seed):
     return world255 + n[..., None]
 
 
-def contact_shadow(mask, floor_frame, light_dir=(0.0, 1.0), length=0.35, ao=0.55, drop=0.35):
+def planted_from_track(contact, H_to0, still_px=4.0, moving_px=14.0):
+    """-> float (n,) 0..1: how planted the lowest foot is, from how fast its contact point moves ON THE TRACKED
+    FLOOR (frame-0 floor px per frame; a planted sole is still there while the camera moves). 1 below still_px,
+    0 above moving_px, smooth between, lightly smoothed over 3 frames. A slide slower than ~6 px/frame reads as
+    mostly planted: the lowest matte pixel jitters about that much, so slow foot slides are not told apart."""
+    n = len(contact)
+    fl = np.full((n, 2), np.nan)
+    for i in range(n):
+        if np.isfinite(contact[i][0]):
+            fl[i] = cv2.perspectiveTransform(np.float32([[contact[i]]]), H_to0[i])[0, 0]
+    v = np.full(n, moving_px)
+    v[1:] = np.linalg.norm(np.diff(fl, axis=0), axis=1)
+    v[~np.isfinite(v)] = moving_px
+    p = np.clip((moving_px - v) / (moving_px - still_px), 0, 1)
+    p = p * p * (3 - 2 * p)
+    return np.convolve(np.pad(p, 1, mode="edge"), np.ones(3) / 3, mode="valid")
+
+
+def contact_pocket(mask, planted, depth_px=None, strength=0.5):
+    """The dense dark pocket right under a planted sole (gauntlet r4: the real plate's floor under a planted sole
+    is about half as bright as beside it; it fades as the heel lifts). Drawn under the lowest foot's columns only,
+    `planted` 0..1 scales it. -> float32 (H, W) 0..strength."""
+    ys, xs = np.nonzero(mask)
+    out = np.zeros((H, W), np.float32)
+    if not len(ys) or planted <= 0.01:
+        return out
+    yb, hgt = ys.max(), max(1, ys.max() - ys.min())
+    depth = int(depth_px or max(10, 0.035 * hgt))
+    low = ys >= yb - max(6, int(0.02 * hgt))
+    for x in np.unique(xs[low]):
+        col = np.nonzero(mask[:, x])[0]
+        sy = int(col.max())
+        y1 = min(H, sy + depth)
+        if y1 > sy + 1:
+            out[sy + 1:y1, x] = np.linspace(1.0, 0.0, y1 - sy - 1, dtype=np.float32) ** 0.6
+    out = cv2.GaussianBlur(out, (0, 0), 2.5)
+    return np.clip(out * 1.6, 0, 1) * strength * float(planted)
+
+
+def contact_shadow(mask, floor_frame, light_dir=(0.0, 1.0), length=0.35, ao=0.2, drop=0.35, planted=0.0):
     """-> float32 (H, W) shadow amount 0..1 on the floor only.
     ao: occlusion right where the body meets the floor (the lowest mask pixels of every column, a squashed
     copy of the body's footprint). drop: the body flattened onto the floor along light_dir (image-space (dx, dy)
@@ -156,7 +195,7 @@ def contact_shadow(mask, floor_frame, light_dir=(0.0, 1.0), length=0.35, ao=0.55
     M = np.float32([[1, -dx * length, dx * length * yb], [0, length * dy, yb * (1 - length * dy)]])
     d = cv2.warpAffine(m, M, (W, H), flags=cv2.INTER_LINEAR, borderValue=0)
     d = cv2.GaussianBlur(d, (0, 0), 0.02 * hgt)
-    s = np.clip(ao * a + drop * d, 0, 0.85)
+    s = np.clip(ao * a + drop * d + contact_pocket(mask, planted), 0, 0.85)
     return s * floor_frame
 
 

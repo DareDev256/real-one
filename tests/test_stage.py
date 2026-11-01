@@ -227,3 +227,26 @@ def test_clean_plate_never_judges_where_no_neighbour_saw_the_floor():
     cp.floor_at = lambda i, roi: (np.zeros(roi_shape(roi) + (3,), np.float32), np.zeros(roi_shape(roi), bool))
     out, removed = cp.refine(1, frame, m, 1699)
     assert removed == 0 and out[m].all()
+
+
+def test_planted_feet_get_a_dense_pocket_and_lifted_feet_do_not():
+    m = np.zeros((H, W), bool)
+    m[600:1700, 450:650] = True
+    floor = np.ones((H, W), np.float32)
+    lifted = IG.contact_shadow(m, floor, planted=0.0)
+    planted = IG.contact_shadow(m, floor, planted=1.0)
+    under = (slice(1706, 1726), slice(470, 630))
+    assert planted[under].mean() > lifted[under].mean() + 0.2      # the pocket appears only when planted
+    assert planted[:1690].max() <= lifted[:1690].max() + 1e-6       # and only under the sole (blur reaches ~6 px up)
+
+
+def test_planted_is_read_from_the_tracked_floor_not_the_screen():
+    n = 12
+    # the camera moves: the floor slides 16 px a frame across the screen (a swing foot moves at least that fast)
+    H_to0 = np.array([np.array([[1, 0, 0], [0, 1, -16.0 * i], [0, 0, 1]]) for i in range(n)])
+    on_floor = np.array([[540.0, 1700.0 + 16.0 * i] for i in range(n)])  # the foot moves WITH the floor: planted
+    p = IG.planted_from_track(on_floor, H_to0)
+    assert p[2:-2].min() > 0.9
+    on_screen = np.array([[540.0, 1700.0] for i in range(n)])            # still on screen = sliding on the floor
+    # (a slide under ~6 px/frame reads as mostly planted: the contact point itself jitters about that much)
+    assert IG.planted_from_track(on_screen, H_to0)[2:-2].max() < 0.1
