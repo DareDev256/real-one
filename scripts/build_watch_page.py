@@ -44,7 +44,7 @@ if str(REPO) not in sys.path:
 from realone.common import LOCAL_PREFIX, Refuse  # noqa: E402
 
 WEB = REPO / "web"
-PAGE_FILES = ("index.html", "watch.css", "watch.js")
+PAGE_FILES = ("index.html", "watch.css", "watch.js", "vercel.json")
 BANNER_MARK = "<!-- TEST_BANNER -->"
 DIST_MARK = ".realone-watch"
 FINISHED_LOOKS = ("collage", "clean")
