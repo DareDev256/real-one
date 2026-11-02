@@ -46,6 +46,14 @@
     (`docs/screenshots/2026-11-01_watch-live-*`).
   - Costs under a dime keep a third decimal; the phone banner is shorter.
   - 7 tests; 17 mutations of the new guards, all red, file restored byte-identical.
+  - **Round 2 (a fresh blind critic, same rubric, Nov 1 23:30): Ansatz 7/9/9/8, ours 4/3/5/6.** Its gap for us is
+    still the stand-in footage. Two of its readings were our copy: "Real Meta model output here: ..." read as "the
+    output goes here" (so not on this page), and Voice Transcribe was credited although it heard no words in the
+    synthetic song (every section's `heard` is empty; the lyric shown is the sheet). Now a model counts as output
+    on the page only with evidence (Voice: a transcript that heard words); the banner names what each one made
+    ("SAM 3.1 (the cut-out), Muse Wonder (the direction and its review), Muse Image (the world)"); Voice's card
+    says it ran and heard nothing; the receipt panel says FILMED is the inside of SAM 3.1's cut-out. 4 mutations,
+    all red.
 - **Muse Glimmer, wired, not yet run.** `plan --brain glimmer` sends the treatment through the same schema, guard and
   validation as Wonder, to Muse Glimmer 30B (Apache-2.0, Meta's Q4_K_M GGUF) on a llama.cpp server we host. It reads
   the lyrics and the beat grid (no audio input). `scripts/glimmer_pod.py run -- <command>` rents one 24 GB GPU on

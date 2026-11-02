@@ -326,6 +326,10 @@
         const s = document.createElement("p"); s.className = "stand";
         s.innerHTML = "<b>STAND-IN</b> "; s.appendChild(document.createTextNode(m.stand_in)); el.appendChild(s);
       }
+      if (m.ran && m.note) {
+        const s = document.createElement("p"); s.className = "stand";
+        s.innerHTML = "<b>NOTE</b> "; s.appendChild(document.createTextNode(m.note)); el.appendChild(s);
+      }
       grid.appendChild(el);
     });
     const ul = $("made-code");
@@ -333,6 +337,11 @@
       li.innerHTML = "<b></b>"; li.querySelector("b").textContent = k.name;
       li.appendChild(document.createTextNode(k.did)); ul.appendChild(li); });
     $("made-total").textContent = "BILLED FOR THIS RENDER " + money(c.total_usd) + (test ? "  ·  TEST" : "");
+    const sam = c.models.find((m) => m.name === "SAM 3.1");
+    if (sam && sam.ran) {  // the receipt's colour region is SAM's output: say so where the numbers are
+      $("slip-foot").textContent = "FILMED = PIXELS INSIDE SAM 3.1'S CUT-OUT OF THE PERFORMER, NEVER GENERATED. " +
+        "GENERATED = EVERYTHING ELSE: WORLD, PARTICLES, PAPER. TOGGLE THE RECEIPT TO SEE THE CUT-OUT IN COLOUR.";
+    }
     $("made").hidden = false;
   }
 

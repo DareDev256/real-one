@@ -64,6 +64,9 @@ META_MODELS = [
                                                          "cut and revises once."},
     {"id": "muse-image", "name": "Muse Image", "did": "Builds one world per section, 9:16, no people in frame."},
 ]
+# What each model's output IS on this page (the banner names it, so a judge knows where to look)
+MADE = {"sam-3.1": "the cut-out", "muse-image": "the world", "muse-wonder": "the direction and its review",
+        "voice-transcribe": "the lyric timing"}
 OUR_CODE = [
     {"name": "Beat grid + sync", "did": "Downbeats and sections from the master; the phone mic synced to it."},
     {"name": "Compositor", "did": "Reframe, edge despill, colour match, grain; cuts land on downbeats."},
@@ -165,18 +168,20 @@ def test_reasons(stem, run, shots, treatment=None, repo=REPO, stand_in=None):
     return reasons
 
 
-def banner_html(reasons, ran=()):
-    """The TEST banner. It says what stood in (the reasons) and, separately, which Meta models really produced
-    output here, so a judge can tell a stand-in clip from a stand-in model."""
+def banner_html(reasons, made=()):
+    """The TEST banner. It says what stood in (the reasons) and, separately, which Meta models' real output is on
+    the page and what that output is, so a judge can tell a stand-in clip from a stand-in model. `made` holds
+    (name, what it made) pairs. A blind critic read the earlier "output here" as "output goes here", so the copy
+    names the thing on screen."""
     items = "".join(f"<li>{_esc(r)}</li>" for r in reasons)
-    said = (f"Stand-ins listed below. Real Meta model output here: {', '.join(ran)}." if ran
-            else "Not the film. No Meta model ran.")
+    said = ("What stood in is listed below. Real Meta model output on this page: "
+            + ", ".join(f"{n} ({w})" for n, w in made) + "." if made else "Not the film. No Meta model ran.")
     return ('<aside class="test-banner" id="test-banner" role="note" aria-label="Test render">'
             f'<strong>TEST RENDER</strong><span>{_esc(said)}</span>'
             f'<ul>{items}</ul></aside>')
 
 
-def models_that_ran(run, shots, treatment, out_dir, loop_ledger=()):
+def models_that_ran(run, shots, treatment, out_dir, loop_ledger=(), lyrics=None):
     """Which Meta models really produced something on this page, from evidence only: SAM 3.1 when the masks are
     not the local test engine; Muse Image when a world came from a prompt with a Muse Image file behind it
     (out/worlds/muse_*.json); Muse Wonder and Voice Transcribe when the treatment is a keyed run whose spend
@@ -207,6 +212,12 @@ def models_that_ran(run, shots, treatment, out_dir, loop_ledger=()):
             if rows:
                 got[mid] = {"calls": len(rows), "frames": None,
                             "usd": round(sum(float(x.get("usd", 0) or 0) for x in rows), nd)}
+    if "voice-transcribe" in got:  # a call is not output: the page shows words only if the transcript heard some
+        heard = any(sec.get("heard") for sec in (lyrics or {}).get("sections", []))
+        if not heard:
+            got["voice-transcribe"].update(output=False, note="Ran, and heard no words in this song (the stand-in "
+                                                               "is synthetic), so the lyric shown is the artist's "
+                                                               "sheet.")
     return got
 
 
@@ -228,14 +239,16 @@ def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None):
             "muse-image": "three procedural test plates (TEST ONLY)",
         }
         ran = ran or {}
-        real = [m["name"] for m in META_MODELS if m["id"] in ran]
+        made = [m["name"] for m in META_MODELS if m["id"] in ran and ran[m["id"]].get("output", True)]
+        silent = [m["name"] for m in META_MODELS if m["id"] in ran and not ran[m["id"]].get("output", True)]
+        rest = ("the footage and song are the stand-ins." if len(ran) == len(META_MODELS)
+                else "the rest were stood in for.")
+        said = ((", ".join(made) + " made what you see here" if made else "No model's output is on this page")
+                + ("; " + ", ".join(silent) + " ran and returned nothing shown here" if silent else "")
+                + "; " + rest)
         return {
             "status": "TEST",
-            "statement": ("A test render. Each line below names what the model does in Real One and whether it "
-                          "ran here: " + ((", ".join(real) + (" did; the footage and song are the stand-ins."
-                                                               if len(real) == len(META_MODELS)
-                                                               else " did; the rest were stood in for."))
-                                          if real else "none did.")),
+            "statement": "A test render. " + said,
             "models": [dict(m, ran=m["id"] in ran, stand_in=None if m["id"] in ran else stand_in[m["id"]],
                             **(ran[m["id"]] if m["id"] in ran else {"calls": 0, "frames": 0, "usd": 0.0}))
                        for m in META_MODELS],
@@ -507,7 +520,7 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
             reasons = reasons + ["Director review: a FIXTURE (dry) run, not Muse Wonder output"]
     loop_ledger = ((load_json(direct_log, "director log", repo).get("spend") or {}).get("ledger", [])
                    if review is not None and review["mode"] == "keyed" else [])
-    ran = models_that_ran(run, shots, treatment, out_dir, loop_ledger) if reasons else {}
+    ran = models_that_ran(run, shots, treatment, out_dir, loop_ledger, lyrics) if reasons else {}
     credits = build_credits(reasons, run, credits_path, repo, ran=ran)
 
     template = (web / "index.html").read_text()
@@ -560,7 +573,8 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
     }
     dump(data / "manifest.json", manifest)
 
-    page = template.replace(BANNER_MARK, banner_html(reasons, [m["name"] for m in META_MODELS if m["id"] in ran])
+    page = template.replace(BANNER_MARK, banner_html(reasons, [(m["name"], MADE[m["id"]]) for m in META_MODELS
+                                                               if m["id"] in ran and ran[m["id"]].get("output", True)])
                             if reasons else "")
     page = page.replace('data-test="0"', f'data-test="{1 if reasons else 0}"')
     if FOOT_MARK not in page:

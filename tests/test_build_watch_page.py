@@ -317,8 +317,17 @@ def test_a_test_render_credits_exactly_the_models_that_ran(repo):
     assert (img["calls"], img["frames"], img["usd"]) == (1, None, 0.01)       # one world, priced per image
     assert next(x for x in c["models"] if x["name"] == "SAM 3.1")["calls"] == 0  # stood in: nothing ran
     html = (out / "index.html").read_text()
-    assert "Real Meta model output here: Voice Transcribe, Muse Wonder, Muse Image." in html
+    assert ("Real Meta model output on this page: Muse Wonder (the direction and its review), Muse Image (the "
+            "world).") in html                                          # Voice ran but no transcript is shown
     assert "No Meta model ran" not in html
+    voice = next(x for x in c["models"] if x["name"] == "Voice Transcribe")
+    assert voice["ran"] and voice["output"] is False and "heard no words" in voice["note"]
+    assert "Voice Transcribe ran and returned nothing shown here" in c["statement"]
+    (repo / "out" / "tr_lyrics.json").write_text(json.dumps(
+        {"sections": [{"index": 2, "lines": ["a line"], "heard": ["a line"]}]}))
+    out, m = build(repo, treatment_path=tp)
+    html = (out / "index.html").read_text()
+    assert "Voice Transcribe (the lyric timing), Muse Wonder" in html     # words heard: its output is on the page
 
 
 def test_a_dry_run_treatment_is_never_credited_as_a_model_run(repo):
