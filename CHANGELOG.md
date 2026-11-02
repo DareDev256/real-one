@@ -63,6 +63,21 @@
   architecture, the vision projector and the chat template (read in its source, Nov 1). 2 tests.
 - **README:** the Muse Spark Open row said it writes treatments; it never ran with a key. It now says "wired, not
   yet run".
+- **First real artist footage (Nov 2): Savv4x's own reel.** A handheld ultra-wide phone performance of his song
+  (34.5 s, 143.6 BPM), the master taken from the reel's own audio (sync +0.0 ms, r = 1.00). What it taught:
+  - The tracked stage refused it, as it should: at frame 71 the floor leaves the frame and only 38 floor points
+    survive (it needs 40). The 2D world path renders it.
+  - **The render's cut check refused a correct render.** Every frame of busy handheld footage changes a lot
+    (median frame difference 8.4), so the planned cuts, each the sharpest change around it, measured only 2.0 to
+    3.0x the median against a 6x rule, and the check found 0 of 4. A planned cut is now confirmed by the strict
+    global rule OR as a clear local peak (`encode.planned_cut_found`: the largest change within +-1 frame is the
+    peak of its +-3 frames and at least 2.5x the median of the second around it; 2x where a crash snap shares the
+    downbeat, since the snap and the cut are then the same frame). Unplanned cuts are still judged by the strict
+    rule, so a stray cut still fails the render. The stand-in renders still pass the strict rule (3/3). 3 tests;
+    3 mutations, all red.
+  - Voice Transcribe heard real words for the first time (3 turns). The verse is explicit gun violence with a
+    slur: flagged as a judging risk (the call on using it is James's and the artist's); its lyrics never go on
+    screen.
 - **Lyrics in the world, `--lyrics-in-world` (Nov 2).** James asked for the on-screen lyrics viral music clips carry
   (he named Evan Blum's videos for Lay Bankz), then asked for them "3d tracked to the environment ... angled".
   Real One writes each section's lyric lines INTO the scene behind the artist, a word on each beat. On the tracked

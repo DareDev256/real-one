@@ -56,6 +56,23 @@ def verify_output(path, want_s):
     return rep, good
 
 
+def planned_cut_found(d, p, tol=1, ratio=2.5, win=15):
+    """Is there a cut at planned frame p in the frame-difference curve d (from detect_cuts)? A busy handheld take
+    (Savv's reel, Nov 2: median frame difference 8.4, real cuts only 2.8 to 4.6x it) never reaches the global 6x
+    rule, yet each cut is still the sharpest change around it. So: the largest difference within +-tol of p must
+    be the peak of its +-3 frame neighbourhood and at least `ratio` times the median of the second around it.
+    Used only to confirm PLANNED cuts; an unplanned cut is still judged by the strict global rule."""
+    import numpy as np
+    d = np.asarray(d, float)
+    if p <= 0 or p >= len(d):
+        return False
+    lo, hi = max(1, p - tol), min(len(d), p + tol + 1)
+    k = lo + int(np.argmax(d[lo:hi]))
+    near = d[max(1, k - 3):min(len(d), k + 4)]
+    local = d[max(1, k - win):min(len(d), k + win + 1)]
+    return bool(d[k] >= near.max() and d[k] >= ratio * (np.median(local) + 1e-6) and d[k] > 6.0)
+
+
 def detect_cuts(path, min_ratio=6.0):
     """Find hard cuts in the rendered video itself: frames whose difference from the previous frame stands far
     above the clip's typical frame-to-frame change. Returns frame indices (the first frame of each new shot).

@@ -19,7 +19,7 @@ from realone import worldlist as WL
 from realone.audio import analyze, pick_section
 from realone.common import FPS, LOCAL_PREFIX, OUT, Refuse, file_md5, unpack_mask, write_json, W
 from realone.composite import LIGHT_SHARE, LOOKS, border_ink, crop_matrix, is_identity
-from realone.encode import detect_cuts, verify_output
+from realone.encode import detect_cuts, planned_cut_found, verify_output
 from realone.masks import sam_cost, sam_masks_cached, sam_masks_union, sam_uncached, vision_masks
 from realone.media import count_frames, load_audio, load_audio_native, probe, stream, write_wav
 from realone.meta_api import IMAGE_USD, USD_TO_CAD, make_client, require_key
@@ -544,13 +544,16 @@ def render(a):
     for look in looks:
         rep, good = verify_output(outs[look], dur)
         frames_out = count_frames(outs[look])
-        cuts, _ = detect_cuts(outs[look])
-        matched = [p for p in planned if any(abs(c - p) <= 1 for c in cuts)]
+        cuts, diffs = detect_cuts(outs[look])
         # the bullet freeze's hit (punch + flash on its downbeat, decaying over the 3 frames after; the downbeat
         # is not a cut in `bullet`) changes the whole frame like a cut does: a detection there is the hit
         hit = ({f["start_frame"] + j for f in plan["freezes"] for j in range(0, len(FZ.FLASH) + 1)}
                | {f["end_frame"] for f in plan["freezes"]}) if style == "bullet" else set()
         hit |= MV.designed_changes(moves)  # a crash snap or a world swap changes the whole frame on purpose
+        # a planned cut is confirmed by the strict global rule, or (busy handheld takes) as a clear local peak;
+        # where a crash snap lands on the same downbeat the neighbourhood is busier still, and 2x is the bar
+        matched = [p for p in planned if any(abs(c - p) <= 1 for c in cuts)
+                   or planned_cut_found(diffs, p, ratio=2.0 if p in hit else 2.5)]
         # (the release downbeat is designed too: the freeze's cool grade snaps off there, a whole-frame change the
         # cut detector reads as a cut when the release falls inside a shot rather than on a section cut)
         extra = [c for c in cuts if not any(abs(c - p) <= 1 for p in planned)
