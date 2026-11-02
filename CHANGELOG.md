@@ -63,6 +63,14 @@
   architecture, the vision projector and the chat template (read in its source, Nov 1). 2 tests.
 - **README:** the Muse Spark Open row said it writes treatments; it never ran with a key. It now says "wired, not
   yet run".
+- **Monday's chain, walked before the take exists.** Every flag in the edit kit checked against `--help`. Two real
+  gaps found and closed: `direct` without `--treatment` would have re-planned (a different treatment from the
+  full render's), so the kit now passes it; and the watch page refused a real render without a hand-written
+  credits file. Credits are now generated from evidence for every render, marked REAL when nothing stood in
+  (a model that did not run reads "not used on this render"; the statement says the footage and song are the
+  artist's own only then), with `--credits FILE` still taking precedence. The total is what the models' output on
+  the page cost, summed from the same evidence. `--direct-log` now works on a full-song render (it shows the
+  section the director watched). 1 test; 6 mutations, all red.
 - **README media from the real pipeline.** The hero GIF and receipt image were a drawn figure with no Meta model.
   They now come from `showcase3`: the stand-in stock clip with SAM 3.1 masks, the Muse Image world from Wonder's
   prompt, the tracked stage and a Hook Freeze with rain (all checks pass: world identical on all 147 frozen frames,

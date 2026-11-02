@@ -336,7 +336,7 @@
     (c.code || []).forEach((k) => { const li = document.createElement("li");
       li.innerHTML = "<b></b>"; li.querySelector("b").textContent = k.name;
       li.appendChild(document.createTextNode(k.did)); ul.appendChild(li); });
-    $("made-total").textContent = "BILLED FOR THIS RENDER " + money(c.total_usd) + (test ? "  ·  TEST" : "");
+    $("made-total").textContent = "META MODEL COST OF WHAT YOU SEE " + money(c.total_usd) + (test ? "  ·  TEST" : "");
     const sam = c.models.find((m) => m.name === "SAM 3.1");
     if (sam && sam.ran) {  // the receipt's colour region is SAM's output: say so where the numbers are
       $("slip-foot").textContent = "FILMED = PIXELS INSIDE SAM 3.1'S CUT-OUT OF THE PERFORMER, NEVER GENERATED. " +

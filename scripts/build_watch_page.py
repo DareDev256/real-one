@@ -16,10 +16,11 @@ videos the run json names) and writes `<out>/index.html`, `watch.css`, `watch.js
 
 Refuses (exit 2, one clear line) rather than guessing: a missing file, a render without a receipt look, a tag that
 matches both a real and a TEST_LOCAL render, any input under footage/own/, a treatment for another song or other
-section timings, videos whose frame counts disagree, a credits file that claims a Meta model ran on a test render,
-and a real render with no credits file (the page will not invent calls or dollars).
+section timings, videos whose frame counts disagree, and a credits file that claims a Meta model ran on a test render.
 
---credits FILE (required for a real render; a test render gets TEST credits generated, every model ran=false):
+Credits are generated from evidence for every render (models_that_ran: the mask engine, the Muse Image files, the
+keyed ledgers, the transcript); a number nobody measured is null, never 0. A real render's credits say REAL.
+--credits FILE overrides them (a hand-written file, checked):
   {"status": "REAL", "statement": "...", "total_usd": 0.0,
    "models": [{"name": "SAM 3.1", "did": "...", "ran": true, "calls": 0, "frames": 0, "usd": 0.0}, ...],
    "code": [{"name": "...", "did": "..."}]}
@@ -226,12 +227,10 @@ def _esc(s):
 
 
 def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None):
-    """credits.json for the page. A test render gets TEST credits generated here (no model ran, US$0.00 billed);
-    a real render must bring its own file with the real calls, frames and US$."""
+    """credits.json for the page, generated from evidence (`ran`, from models_that_ran) unless a hand-written file
+    is given. TEST when there are reasons, REAL otherwise. The total is what the Meta models' output on this page
+    cost, summed from the same evidence (a cached render bills US$0.00 itself)."""
     if credits_file is None:
-        if not reasons:
-            raise Refuse("a real render needs --credits FILE with the real calls, frames and US$ per Meta model; "
-                         "the page will not invent them (shape: this script's docstring)")
         stand_in = {
             "sam-3.1": "Apple Vision on this Mac (TEST ONLY)",
             "voice-transcribe": "not run; the lyric beside the video is a FIXTURE",
@@ -239,21 +238,24 @@ def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None):
             "muse-image": "three procedural test plates (TEST ONLY)",
         }
         ran = ran or {}
+        if not reasons:  # a real render: nothing stood in, so a model that did not run was simply not used
+            stand_in = {k: "not used on this render" for k in stand_in}
         made = [m["name"] for m in META_MODELS if m["id"] in ran and ran[m["id"]].get("output", True)]
         silent = [m["name"] for m in META_MODELS if m["id"] in ran and not ran[m["id"]].get("output", True)]
-        rest = ("the footage and song are the stand-ins." if len(ran) == len(META_MODELS)
+        rest = ("the footage and song are the artist's own." if not reasons
+                else "the footage and song are the stand-ins." if len(ran) == len(META_MODELS)
                 else "the rest were stood in for.")
         said = ((", ".join(made) + " made what you see here" if made else "No model's output is on this page")
                 + ("; " + ", ".join(silent) + " ran and returned nothing shown here" if silent else "")
                 + "; " + rest)
         return {
-            "status": "TEST",
-            "statement": "A test render. " + said,
+            "status": "TEST" if reasons else "REAL",
+            "statement": ("A test render. " if reasons else "") + said,
             "models": [dict(m, ran=m["id"] in ran, stand_in=None if m["id"] in ran else stand_in[m["id"]],
                             **(ran[m["id"]] if m["id"] in ran else {"calls": 0, "frames": 0, "usd": 0.0}))
                        for m in META_MODELS],
             "code": OUR_CODE,
-            "total_usd": float(run.get("billed_usd", 0.0) or 0.0),
+            "total_usd": round(sum(float(v.get("usd") or 0) for v in ran.values()), 4),
         }
     doc = load_json(credits_file, "credits file", repo)
     check_credits(doc, reasons)
@@ -512,15 +514,18 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
     reasons = test_reasons(stem, run, shots, treatment, repo=repo, stand_in=stand_in)
     review = review_worlds = None
     if direct_log:
-        idx = (shots.get("sections") or [{}])[0].get("index") if len(shots.get("sections") or []) == 1 else None
-        if idx is None:
-            raise Refuse("--direct-log needs a render of exactly one song section (the one the director watched)")
+        inside = {sec.get("index") for sec in shots.get("sections") or []}
+        watched = [w.get("section") for w in load_json(direct_log, "director log", repo).get("watches", [])
+                   if w.get("section") in inside]
+        if not watched:
+            raise Refuse("the director log watched no section of this render; nothing to show")
+        idx = watched[0]  # a full-song render shows the review of the section the director watched
         review, review_worlds = director_review(direct_log, idx, repo)
         if review["mode"] != "keyed":
             reasons = reasons + ["Director review: a FIXTURE (dry) run, not Muse Wonder output"]
     loop_ledger = ((load_json(direct_log, "director log", repo).get("spend") or {}).get("ledger", [])
                    if review is not None and review["mode"] == "keyed" else [])
-    ran = models_that_ran(run, shots, treatment, out_dir, loop_ledger, lyrics) if reasons else {}
+    ran = models_that_ran(run, shots, treatment, out_dir, loop_ledger, lyrics)
     credits = build_credits(reasons, run, credits_path, repo, ran=ran)
 
     template = (web / "index.html").read_text()

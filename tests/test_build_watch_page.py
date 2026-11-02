@@ -249,10 +249,20 @@ def test_real_render_has_no_banner(repo):
     assert m["test"] is False
 
 
-def test_real_render_without_credits_refuses(repo):
+def test_a_real_render_gets_real_credits_from_evidence(repo):
+    """Monday's real take must not wait on a hand-written credits file: the credits come from the same evidence
+    as a test render's, say REAL, credit only what ran, and never call a stand-in a stand-in."""
     make_render(repo, stem="t_hook", local=False, plates=False)
-    with pytest.raises(Refuse, match="needs --credits"):
-        build(repo)
+    out, m = build(repo)
+    c = json.loads((out / "data" / "credits.json").read_text())
+    html = (out / "index.html").read_text()
+    assert c["status"] == "REAL" and m["test"] is False and 'id="test-banner"' not in html
+    models = {x["name"]: x for x in c["models"]}
+    assert models["SAM 3.1"]["ran"] and models["SAM 3.1"]["frames"] == m["frames"]
+    assert not models["Muse Wonder"]["ran"] and models["Muse Wonder"]["stand_in"] == "not used on this render"
+    assert c["statement"].endswith("the footage and song are the artist's own.") and "test" not in c["statement"].lower()
+    assert c["total_usd"] == models["SAM 3.1"]["usd"]
+    assert bw.FOOT_REAL in html
 
 
 def test_test_render_with_credits_claiming_a_model_ran_refuses(repo):
@@ -323,6 +333,7 @@ def test_a_test_render_credits_exactly_the_models_that_ran(repo):
     voice = next(x for x in c["models"] if x["name"] == "Voice Transcribe")
     assert voice["ran"] and voice["output"] is False and "heard no words" in voice["note"]
     assert "Voice Transcribe ran and returned nothing shown here" in c["statement"]
+    assert "artist's own" not in c["statement"]                         # a test render never says so
     (repo / "out" / "tr_lyrics.json").write_text(json.dumps(
         {"sections": [{"index": 2, "lines": ["a line"], "heard": ["a line"]}]}))
     out, m = build(repo, treatment_path=tp)
@@ -421,7 +432,7 @@ def test_the_directors_own_review_goes_on_the_page_verbatim(repo):
 
 def test_a_review_that_is_not_there_or_not_real_is_refused_or_labelled(repo):
     make_render(repo, local=False, plates=False)
-    with pytest.raises(bw.Refuse, match="no watch of section 2"):
+    with pytest.raises(bw.Refuse, match="watched no section of this render"):
         build(repo, stand_in="stock", direct_log=direct_log(repo, section=3), thumber=fake_thumb)
     out, m = build(repo, stand_in="stock", direct_log=direct_log(repo, mode="DRY RUN"), thumber=fake_thumb)
     assert "Director review: a FIXTURE (dry) run, not Muse Wonder output" in m["test_reasons"]
