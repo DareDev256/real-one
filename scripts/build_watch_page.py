@@ -42,10 +42,14 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from realone.common import LOCAL_PREFIX, Refuse  # noqa: E402
+from realone.meta_api import IMAGE_USD, SAM_MIN_FRAMES, SAM_USD_PER_1K_FRAMES  # noqa: E402
 
 WEB = REPO / "web"
 PAGE_FILES = ("index.html", "watch.css", "watch.js", "vercel.json")
 BANNER_MARK = "<!-- TEST_BANNER -->"
+FOOT_MARK = "<!-- FOOT_SOURCE -->"
+FOOT_REAL = "FOOTAGE AND SONG ARE THE ARTIST'S OWN."
+FOOT_TEST = "TEST RENDER: THE FOOTAGE AND SONG HERE ARE STAND-INS."
 DIST_MARK = ".realone-watch"
 FINISHED_LOOKS = ("collage", "clean")
 MAX_W, MAX_H = 1080, 1920
@@ -129,9 +133,26 @@ def load_json(path, what, repo=REPO):
 
 # ---------------------------------------------------------------- truth
 
-def test_reasons(stem, run, shots, treatment=None):
-    """Why this build is TEST output (empty list = a real render). Any one reason puts the banner on the page."""
+TEST_SONG = "footage/test_song.wav"  # the repo's synthetic song: never the artist's master
+
+
+def _sha(path):
+    import hashlib
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def test_reasons(stem, run, shots, treatment=None, repo=REPO, stand_in=None):
+    """Why this build is TEST output (empty list = a real render). Any one reason puts the banner on the page.
+    The song is compared by content with the repo's synthetic test song, so a renamed copy is still caught;
+    `stand_in` names footage that is not the artist's own take (a stock clip), which no file can tell us."""
     reasons = []
+    if stand_in:
+        reasons.append(f"Footage: {stand_in}")
+    song, test_song = run.get("song"), Path(repo) / TEST_SONG
+    if song and test_song.is_file():
+        sp = Path(song) if Path(song).is_absolute() else Path(repo) / song
+        if sp.is_file() and _sha(sp) == _sha(test_song):
+            reasons.append("Song: the repo's synthetic test song, not the artist's master")
     if stem.startswith(LOCAL_PREFIX):
         reasons.append("Tag TEST_LOCAL_")
     engine = str(run.get("engine", ""))
@@ -145,22 +166,29 @@ def test_reasons(stem, run, shots, treatment=None):
 
 
 def banner_html(reasons, ran=()):
+    """The TEST banner. It says what stood in (the reasons) and, separately, which Meta models really produced
+    output here, so a judge can tell a stand-in clip from a stand-in model."""
     items = "".join(f"<li>{_esc(r)}</li>" for r in reasons)
-    said = f"Real model output here: {', '.join(ran)}." if ran else "No Meta model ran."
+    said = (f"Stand-ins listed below. Real Meta model output here: {', '.join(ran)}." if ran
+            else "Not the film. No Meta model ran.")
     return ('<aside class="test-banner" id="test-banner" role="note" aria-label="Test render">'
-            f'<strong>TEST RENDER</strong><span>Not the film. {_esc(said)}</span>'
+            f'<strong>TEST RENDER</strong><span>{_esc(said)}</span>'
             f'<ul>{items}</ul></aside>')
 
 
-def models_that_ran(run, shots, treatment, out_dir):
+def models_that_ran(run, shots, treatment, out_dir, loop_ledger=()):
     """Which Meta models really produced something on this page, from evidence only: SAM 3.1 when the masks are
     not the local test engine; Muse Image when a world came from a prompt with a Muse Image file behind it
     (out/worlds/muse_*.json); Muse Wonder and Voice Transcribe when the treatment is a keyed run whose spend
-    ledger names them. -> {model id: US$ or None}."""
+    ledger names them. -> {model id: {"calls", "frames", "usd"}}; a number nobody measured is None (the page shows
+    n/a), never 0. SAM 3.1: one streamed request per take, one mask per frame on this page, priced per 1,000 frames
+    (realone/meta_api.py). Muse Image: one call per world, priced per image. Wonder and Voice: the keyed ledger."""
     got = {}
     engine = str(run.get("engine", ""))
     if engine and "Apple Vision" not in engine and "TEST ONLY" not in engine and run.get("mode") != "local test":
-        got["sam-3.1"] = None
+        n = int(shots.get("n_frames") or 0) or None
+        got["sam-3.1"] = {"calls": 1, "frames": n,
+                          "usd": round(max(n, SAM_MIN_FRAMES) * SAM_USD_PER_1K_FRAMES / 1000, 4) if n else None}
     names = [w for src in shots.get("world_sources", []) for w in src.get("worlds", [])]
     metas = []
     for f in sorted((Path(out_dir) / "worlds").glob("muse_*.json")):
@@ -168,16 +196,17 @@ def models_that_ran(run, shots, treatment, out_dir):
             metas.append(json.loads(f.read_text()).get("prompt", ""))
         except (OSError, ValueError):
             pass
-    if names and any(any(m.startswith(n) for m in metas) for n in names):
-        got["muse-image"] = None
-    if treatment is not None and str(treatment.get("mode", "")).lower() == "keyed":
-        ledger = (treatment.get("spend") or {}).get("ledger", [])
-        w = sum(float(x.get("usd", 0) or 0) for x in ledger if str(x.get("kind", "")).startswith("wonder"))
-        v = sum(float(x.get("usd", 0) or 0) for x in ledger if str(x.get("kind", "")).startswith("voice"))
-        if any(str(x.get("kind", "")).startswith("wonder") for x in ledger):
-            got["muse-wonder"] = round(w, 4)
-        if any(str(x.get("kind", "")).startswith("voice") for x in ledger):
-            got["voice-transcribe"] = round(v, 5)
+    hits = [n for n in dict.fromkeys(names) if any(m.startswith(n) for m in metas)]
+    if hits:
+        got["muse-image"] = {"calls": len(hits), "frames": None, "usd": round(len(hits) * IMAGE_USD, 4)}
+    keyed = treatment is not None and str(treatment.get("mode", "")).lower() == "keyed"
+    if keyed or loop_ledger:  # the treatment's own calls, plus the director loop's (a keyed --direct-log)
+        ledger = list((treatment.get("spend") or {}).get("ledger", []) if keyed else []) + list(loop_ledger)
+        for mid, pre, nd in (("muse-wonder", "wonder", 4), ("voice-transcribe", "voice", 5)):
+            rows = [x for x in ledger if str(x.get("kind", "")).startswith(pre)]
+            if rows:
+                got[mid] = {"calls": len(rows), "frames": None,
+                            "usd": round(sum(float(x.get("usd", 0) or 0) for x in rows), nd)}
     return got
 
 
@@ -203,10 +232,13 @@ def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None):
         return {
             "status": "TEST",
             "statement": ("A test render. Each line below names what the model does in Real One and whether it "
-                          "ran here: " + (", ".join(real) + " did; the rest were stood in for." if real else
-                                          "none did.")),
-            "models": [dict(m, ran=m["id"] in ran, stand_in=None if m["id"] in ran else stand_in[m["id"]], calls=0,
-                            frames=0, usd=float(ran.get(m["id"]) or 0.0)) for m in META_MODELS],
+                          "ran here: " + ((", ".join(real) + (" did; the footage and song are the stand-ins."
+                                                               if len(real) == len(META_MODELS)
+                                                               else " did; the rest were stood in for."))
+                                          if real else "none did.")),
+            "models": [dict(m, ran=m["id"] in ran, stand_in=None if m["id"] in ran else stand_in[m["id"]],
+                            **(ran[m["id"]] if m["id"] in ran else {"calls": 0, "frames": 0, "usd": 0.0}))
+                       for m in META_MODELS],
             "code": OUR_CODE,
             "total_usd": float(run.get("billed_usd", 0.0) or 0.0),
         }
@@ -336,6 +368,47 @@ def poster(src, dst, t):
                     "-q:v", "3", str(dst)], check=True)
 
 
+# ---------------------------------------------------------------- the director's review of its own cut
+
+def director_review(log_path, section, repo=REPO):
+    """The `direct` run's own record (out/director_<tag>_log.json) -> what the page shows of the loop: Wonder's
+    verbatim notes on each cut it watched, the one revision it made, and the same moment of cut 1 and cut 2 side by
+    side (whatever the change was: a world, a look, the particles). Refuses a log for another section or with no
+    watch; a FIXTURE (dry-run) log is labelled by the caller. -> (review dict, [(render video, seconds)])."""
+    log = load_json(log_path, "director log", repo)
+    mode = str(log.get("mode", "")).lower()
+    watches = [w for w in log.get("watches", []) if w.get("section") == section]
+    if not watches:
+        raise Refuse(f"the director log has no watch of section {section}; nothing to show")
+    renders = [r for r in (log.get("renders") or {}).get(str(section), []) if r.get("video")]
+    pick = [renders[0], renders[-1]] if len(renders) > 1 else renders[:1]
+    first = watches[0].get("notes") or []
+    hot = [n for n in first if n.get("severity") == "high"] or first
+    dur = float((pick[0] if pick else {}).get("duration_s") or 0)
+    t = round(min(max(float(hot[0].get("t_s", 0)) + 1.0, 0.5), max(0.5, dur - 0.5)), 2) if hot else 1.0
+    changes = [c for c in (log.get("revision") or {}).get("changes", []) if c.get("section") == section]
+    spend = log.get("spend") or {}
+    review = {
+        "mode": "keyed" if mode == "keyed" else "FIXTURE",
+        "model": log.get("model"), "section": section,
+        "cuts": [{"cut": i + 1, "source": w.get("source"), "verdict": w.get("verdict"),
+                  "notes": [{k: n.get(k) for k in ("t_s", "against", "severity", "note")} for n in w.get("notes", [])],
+                  "suggestion": w.get("suggestion")} for i, w in enumerate(watches)],
+        "changes": [{k: c.get(k) for k in ("field", "old", "new", "because")} for c in changes],
+        "stills": (["cut1.jpg", "cut2.jpg"] if len(pick) > 1 else ["cut1.jpg"]) if pick else [], "still_t_s": t,
+        "spend": {"calls": spend.get("calls"), "usd": spend.get("spent_usd")},
+        "finished": log.get("ended") is not None or bool(log.get("finished")),
+    }
+    return review, [((Path(r["video"]) if Path(r["video"]).is_absolute() else Path(repo) / r["video"]), t)
+                    for r in pick]
+
+
+def still_at(src, dst, t, width=540):
+    """One frame of a render at t seconds, 540 px wide JPEG."""
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.3f}", "-i", str(src), "-frames:v", "1", "-vf",
+                    f"scale={width}:-2", "-q:v", "4", str(dst)], check=True)
+
+
 # ---------------------------------------------------------------- json hygiene
 
 def scrub(o, repo=REPO):
@@ -373,7 +446,8 @@ def prepare_out(out):
 
 
 def build(tag, section, treatment_path=None, credits_path=None, out=None, look=None, out_dir=None, repo=REPO,
-          web=WEB, encoder=encode, prober=probe, posterer=poster, log=print):
+          web=WEB, encoder=encode, prober=probe, posterer=poster, log=print, stand_in=None, direct_log=None,
+          thumber=still_at):
     out_dir = Path(out_dir or repo / "out")
     out = Path(out or web / "dist")
     refuse_own(out, repo)
@@ -422,8 +496,18 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
             refuse_own(lp, repo)
             lyrics = json.loads(lp.read_text())
 
-    reasons = test_reasons(stem, run, shots, treatment)
-    ran = models_that_ran(run, shots, treatment, out_dir) if reasons else {}
+    reasons = test_reasons(stem, run, shots, treatment, repo=repo, stand_in=stand_in)
+    review = review_worlds = None
+    if direct_log:
+        idx = (shots.get("sections") or [{}])[0].get("index") if len(shots.get("sections") or []) == 1 else None
+        if idx is None:
+            raise Refuse("--direct-log needs a render of exactly one song section (the one the director watched)")
+        review, review_worlds = director_review(direct_log, idx, repo)
+        if review["mode"] != "keyed":
+            reasons = reasons + ["Director review: a FIXTURE (dry) run, not Muse Wonder output"]
+    loop_ledger = ((load_json(direct_log, "director log", repo).get("spend") or {}).get("ledger", [])
+                   if review is not None and review["mode"] == "keyed" else [])
+    ran = models_that_ran(run, shots, treatment, out_dir, loop_ledger) if reasons else {}
     credits = build_credits(reasons, run, credits_path, repo, ran=ran)
 
     template = (web / "index.html").read_text()
@@ -454,6 +538,12 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
         dump(data / "treatment.json", treatment)
     if lyrics is not None:
         dump(data / "lyrics.json", lyrics)
+    if review is not None:
+        for (src, t), name in zip(review_worlds, review["stills"]):
+            if not Path(src).is_file():
+                raise Refuse(f"the director log names a render that is not on disk: {Path(src).name}")
+            thumber(src, data / name, t)
+        dump(data / "review.json", review)
     manifest = {
         "built": dt.datetime.now().isoformat(timespec="seconds"),
         "render": stem, "section": section, "version": run.get("version"),
@@ -464,7 +554,8 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
         "files": {"receipt": "receipt.json", "shots": "shots.json", "run": "run.json", "credits": "credits.json",
                   "timeline": "timeline.json" if timeline is not None else None,
                   "treatment": "treatment.json" if treatment is not None else None,
-                  "lyrics": "lyrics.json" if lyrics is not None else None},
+                  "lyrics": "lyrics.json" if lyrics is not None else None,
+                  "review": "review.json" if review is not None else None},
         "test": bool(reasons), "test_reasons": reasons,
     }
     dump(data / "manifest.json", manifest)
@@ -472,6 +563,10 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
     page = template.replace(BANNER_MARK, banner_html(reasons, [m["name"] for m in META_MODELS if m["id"] in ran])
                             if reasons else "")
     page = page.replace('data-test="0"', f'data-test="{1 if reasons else 0}"')
+    if FOOT_MARK not in page:
+        raise Refuse(f"web/index.html has lost its {FOOT_MARK} marker; the footer would claim the footage is the "
+                     f"artist's own on a test render")
+    page = page.replace(FOOT_MARK, FOOT_TEST if reasons else FOOT_REAL)
     (out / "index.html").write_text(page)
     for f in PAGE_FILES[1:]:
         shutil.copy2(web / f, out / f)
@@ -489,9 +584,14 @@ def main(argv=None):
     p.add_argument("--credits", help="credits.json with the real calls, frames and US$ (required for a real render)")
     p.add_argument("--look", choices=list(FINISHED_LOOKS), help="the finished look to pair with the receipt")
     p.add_argument("--out", default=str(WEB / "dist"))
+    p.add_argument("--stand-in", help="names footage that is not the artist's own take, e.g. 'Mixkit stock clip "
+                                      "9146 (free license)'; puts it on the TEST banner")
+    p.add_argument("--direct-log", help="out/director_<tag>_log.json from `direct`: shows Wonder's notes on its own "
+                                        "cut, the revision, and the world before and after")
     a = p.parse_args(argv)
     try:
-        build(a.tag, a.section, a.treatment, a.credits, a.out, a.look)
+        build(a.tag, a.section, a.treatment, a.credits, a.out, a.look, stand_in=a.stand_in,
+              direct_log=a.direct_log)
     except Refuse as e:
         print(f"build_watch_page: REFUSED: {e}", file=sys.stderr)
         return 2

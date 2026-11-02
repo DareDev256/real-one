@@ -24,6 +24,11 @@ What the docs confirm and what they do not: `docs/meta-api-director.md`.
 .venv/bin/python -m realone.director plan --brain spark-open --no-transcribe --song footage/master.wav \
     --lyrics lyrics.txt --tag spark
 
+# the same treatment from Muse Glimmer 30B (open weights, Apache-2.0) on a GPU rented for the length of the command:
+# the pod is created, the model loads, the plan runs, the pod is deleted (refuses a RunPod balance under US$1)
+scripts/glimmer_pod.py run -- .venv/bin/python -m realone.director plan --brain glimmer --no-transcribe --no-audio \
+    --song footage/master.wav --lyrics lyrics.txt --tag glimmer
+
 .venv/bin/python -m pytest -q tests/test_director*.py
 ```
 
@@ -125,6 +130,20 @@ own files: `out/<p>director_<tag>_r<n>_s<section>_<look>.mp4` plus its `_run.jso
     2026-10-30). UNCONFIRMED until the first keyed call: the model slug (`-1026` from the hackathon rules vs the
     library page's bare `muse-spark-open`; `--spark-model` switches), the audio part shape, and strict
     `json_schema` support (a failed parse still gets the one repair turn).
+20. **Muse Glimmer, self-hosted** (2026-11-01, wired, not yet run). `GlimmerBackend` is the Spark Open backend pointed
+    at a llama.cpp server (`GLIMMER_BASE_URL`, the pod's `/v1`), so the treatment goes through the same schema,
+    guard and validation. Glimmer is image-text-to-text: no audio input (the backend refuses one before sending),
+    so `--no-audio --no-transcribe` and the lyric sheet; Wonder hears the song, Glimmer reads it. The weights are
+    Meta's official GGUF (`meta-models/Muse-Glimmer-30B-GGUF`, Q4_K_M, 16.8 GB; a dense 30B, so it cannot load on a
+    16 GB Mac), served by llama.cpp's CUDA image on one 24 GB GPU; llama.cpp's source has the architecture, the
+    vision projector and the chat template. Strict `json_schema` becomes a llama.cpp grammar. A call meters US$0:
+    the GPU bills by the hour, and `scripts/glimmer_pod.py` reports that cost when it deletes the pod. Submission
+    wording: "self-hosted on a rented GPU", never "own hardware".
+21. **The watch is told what it cannot see** (2026-11-01). The first keyed watch called a working dolly zoom "not
+    visible" and asked a world prompt to remove our dust overlay. `watch` now sends the move with its seconds in the
+    clip and its on-screen signature (a dolly's background magnification, (z + dz) / z, from the solved subject
+    distance), and names the particles as our overlay; `revise` can change them (`particles`: dust, rain, embers,
+    none). `particles` is local-only in the section schema (never in the strict schema sent to Wonder).
 
 ## Dry run on the synthetic test song (2026-10-29)
 
@@ -194,7 +213,8 @@ removed from the CLI; M7 guard re-ask allowed to change unflagged sections; M8 n
 - A "literal" toggle (render the wristwatch version for laughs, side by side). Cheap to add on
   top of the guard's first-pass prompts, which are already kept in the treatment file.
 - More than one take per run (the renderer takes one `--clip`).
-- Spark Open in `direct` (the loop and the watch stay on Muse Wonder).
+- Spark Open or Glimmer in `direct` (the loop and the watch stay on Muse Wonder). Glimmer could watch a
+  contact sheet as an image with `--driver code`; not built.
 
 ## Camera moves (added 2026-11-01)
 

@@ -36,10 +36,11 @@ you stay in colour.
 | **Muse Wonder** | Hears the song as audio, reads the lyrics and the beat grid, and writes a treatment per section from what the song means, not what the words say. Then watches its own render as video and gives notes for one revision pass. |
 | **Muse Image** | Builds one vertical world per section from the director's world prompt. |
 | **Muse Voice Transcribe** | Lyrics from the master, placed by section; the artist's own lyric sheet outranks it. |
-| **Muse Spark Open** (Baseten) | The open-weight brain: writes the same song's treatment through the same guard, so the two directors can be compared side by side (`plan --brain spark-open`). |
+| **Muse Spark Open** (Baseten) | Wired, not yet run: an open-weight brain that writes the same song's treatment through the same guard, so two directors can be compared side by side (`plan --brain spark-open`). Tested offline against fixture responses only; it has never run with a key. |
 
-Every path is wired and tested offline against the documented API shapes. SAM 3.1 and Muse Image have run with a key
-(the first keyed probe, 2026-10-30); the director models have not yet.
+Every path is tested offline against the documented API shapes, and four of the five have run with a key: SAM 3.1
+and Muse Image (2026-10-30), then Muse Wonder and Voice Transcribe (2026-11-01: a treatment, and the director's whole
+loop, render, watch, revise, re-render, on a stand-in clip). Muse Glimmer and Spark Open are wired, not yet run.
 
 ## What it does
 
@@ -66,6 +67,10 @@ Every path is wired and tested offline against the documented API shapes. SAM 3.
 ## For judges
 
 - **Watch first:** the 3-minute demo video. [PENDING: link once the video is cut from the artist's real take]
+- **Open now:** [real-one-watch.vercel.app](https://real-one-watch.vercel.app), the watch page. Play the cut, toggle
+  the Real Receipt (generated pixels go grey, the filmed artist stays in colour, with the filmed share per frame),
+  and read the director watching its own cut: Muse Wonder's notes with timestamps, verbatim, and the one change it
+  made. Until the artist's take is filmed it runs on a stand-in (a stock clip and a synthetic song), and says so.
 - **What was built during the event:** everything in this repo. The repo was created on Oct 28 2026, inside the
   event window, and the git history is the record.
 - **Run it with no key** (macOS, Python 3.12+, ffmpeg): `pip install -r requirements.txt`, then
@@ -116,8 +121,8 @@ Flags: `--section hook|verse|hook:2|bars:A-B|#i|all`, `--look clean|collage|rece
   `--look collage,receipt`; `scripts/serve_watch_page.py` serves it locally. Test renders carry a TEST banner.
 - **README media:** `scripts/readme_media.py --tag TAG --section SECTION` regenerates the two images above. Test
   renders are stamped TEST RENDER.
-- **Director:** `python -m realone.director plan|direct|review`; `plan --brain spark-open` writes the treatment on
-  Muse Spark Open (Baseten) instead of Muse Wonder; see `docs/director.md`.
+- **Director:** `python -m realone.director plan|direct|review`; `plan --brain spark-open` is wired to write the
+  treatment on Muse Spark Open (Baseten) instead of Muse Wonder, not yet run with a key; see `docs/director.md`.
 
 Every render writes `out/<tag>_<section>_<look>.mp4`, its contact sheet, `_shots.json`, `_run.json` and
 `_receipt.json`. Keyless test runs and the full pipeline: `docs/implementation-notes.md`.

@@ -181,14 +181,19 @@ SPARK_AUDIO_MAX_BYTES = 20 << 20  # inlined as base64 in one request; a 3 min mo
 class SparkOpenBackend:
     fixture = False
 
-    def __init__(self, key, meter, model=SPARK_MODEL, client=None):
+    name, kind, host, base_url, audio = "Spark Open", "spark", "Baseten", SPARK_BASE_URL, True
+
+    def _usd(self, *a):
+        return spark_usd(*a)
+
+    def __init__(self, key, meter, model=SPARK_MODEL, client=None, base_url=None):
         self._key = key
         self.meter = meter
         self.model = model
-        self.label = f"{model} (Baseten)"
+        self.label = f"{model} ({self.host})"
         if client is None:
             from openai import OpenAI
-            client = OpenAI(base_url=SPARK_BASE_URL, api_key=key, timeout=1800.0)
+            client = OpenAI(base_url=base_url or self.base_url, api_key=key, timeout=1800.0)
         self.client = client
         self._files = {}
         self._history = {}
@@ -198,6 +203,9 @@ class SparkOpenBackend:
         if t == "input_text":
             return {"type": "text", "text": p["text"]}
         if t == "input_audio":
+            if not self.audio:
+                raise Refuse(f"{self.name} takes no audio input; run with --no-audio (it reads the lyrics and the beat "
+                             f"grid). Nothing was sent.")
             path = self._files.get(p.get("file_id"))
             if path is None:
                 raise Refuse(f"input_audio names {p.get('file_id')!r}, which this Spark Open run never uploaded")
@@ -224,7 +232,7 @@ class SparkOpenBackend:
             raise Refuse(f"previous_id {previous_id!r} is not a turn of this Spark Open run; nothing was called")
         messages = list(self._history[previous_id]) if previous_id else [{"role": "system", "content": instructions}]
         messages += self._messages(input)
-        self.meter.before(f"Muse Spark Open ({purpose})", spark_usd(est_input_tokens, max_out))
+        self.meter.before(f"Muse {self.name} ({purpose})", self._usd(est_input_tokens, max_out))
         kw = {"model": self.model, "messages": messages, "max_tokens": max_out}
         if schema is not None:
             kw["response_format"] = {"type": "json_schema", "json_schema": {
@@ -248,8 +256,8 @@ class SparkOpenBackend:
                  "output_tokens": getattr(u, "completion_tokens", 0) or 0,
                  "reasoning_tokens": getattr(getattr(u, "completion_tokens_details", None), "reasoning_tokens", 0)
                  or 0}
-        usd = spark_usd(usage["input_tokens"], usage["output_tokens"], usage["cached_tokens"])
-        self.meter.charge(f"spark:{purpose}", usd, usage)
+        usd = self._usd(usage["input_tokens"], usage["output_tokens"], usage["cached_tokens"])
+        self.meter.charge(f"{self.kind}:{purpose}", usd, usage)
         choice = resp.choices[0]
         msg = choice.message
         calls = [{"call_id": tc.id, "name": tc.function.name, "arguments": tc.function.arguments}
@@ -279,6 +287,23 @@ class SparkOpenBackend:
 
     def image(self, prompt):
         raise Refuse("Spark Open drafts treatments only; worlds are built by Muse Image on the Meta Model API")
+
+
+class GlimmerBackend(SparkOpenBackend):
+    """Muse Glimmer 30B, open weights (Apache-2.0), on a llama.cpp server we host (scripts/glimmer_pod.py). Same
+    chat-completions shape as Spark Open, so the treatment goes through the same schema, guard and validation.
+    No audio input (Glimmer reads images and text), no per-token bill (the GPU is billed by the hour)."""
+    name, kind, host, audio = "Glimmer", "glimmer", "self-hosted, llama.cpp", False
+
+    def _usd(self, *a):
+        from realone.director.budget import glimmer_usd
+        return glimmer_usd(*a)
+
+    def __init__(self, meter, base_url, model=None, client=None):
+        from realone.director.budget import GLIMMER_MODEL
+        import os  # the one-run key scripts/glimmer_pod.py gave the server (its proxy URL is public)
+        super().__init__(os.environ.get("GLIMMER_API_KEY") or "none", meter, model or GLIMMER_MODEL, client=client,
+                         base_url=base_url)
 
 
 # --------------------------------------------------------------------------------------------- fixtures

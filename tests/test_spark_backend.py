@@ -208,3 +208,41 @@ def test_plan_spark_open_refuses_with_transcription_on(junk_song):
     p = run(["plan", "--brain", "spark-open", "--song", junk_song], {"BASETEN_API_KEY": KEY})
     assert p.returncode == 2, p.stderr
     assert "--no-transcribe" in p.stderr and KEY not in p.stderr + p.stdout
+
+
+# ----------------------------------------------------------------------------------- Muse Glimmer (self-hosted)
+
+def test_glimmer_uses_the_same_wire_meters_zero_and_refuses_audio():
+    """Glimmer on our own llama.cpp server: the same chat-completions request as Spark Open, labelled as
+    self-hosted, metered at US$0 (the GPU bills by the hour, not the token), and an audio part is refused before
+    anything is sent (Glimmer reads text and images only)."""
+    from realone.director.backend import GlimmerBackend
+    fc = FakeClient([reply(json.dumps({"ok": True}))])
+    b = GlimmerBackend(budget.Meter(0.5, 10), "https://pod-8080.proxy.runpod.net/v1", client=fc)
+    turn = b.respond(purpose="treatment", instructions="BRIEF", input=[user(text_part("hello"))],
+                     schema={"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]},
+                     schema_name="real_one_treatment", est_input_tokens=1000)
+    assert fc.calls[0]["model"] == budget.GLIMMER_MODEL
+    assert fc.calls[0]["response_format"]["json_schema"]["strict"] is True
+    assert turn.usd == 0.0 and turn.source == f"{budget.GLIMMER_MODEL} (self-hosted, llama.cpp)"
+    assert b.meter.ledger[-1]["kind"] == "glimmer:treatment"
+    fid = "local-1"
+    b._files[fid] = str(REPO / "footage" / "test_song.wav")
+    with pytest.raises(Refuse, match="no audio input"):
+        b.respond(purpose="treatment", instructions="x", input=[user({"type": "input_audio", "file_id": fid})])
+    assert len(fc.calls) == 1                                            # nothing sent
+
+
+def test_glimmer_cli_gate_refuses_before_any_work(monkeypatch, capsys):
+    from realone.director.__main__ import main
+    monkeypatch.delenv("GLIMMER_BASE_URL", raising=False)
+    song = str(REPO / "footage" / "test_song.wav")
+    lyr = str(REPO / "tests" / "fixtures" / "director" / "test_song_lyrics.txt")
+    assert main(["plan", "--brain", "glimmer", "--song", song, "--lyrics", lyr, "--tag", "g"]) == 2
+    assert "--no-transcribe and --no-audio" in capsys.readouterr().err
+    assert main(["plan", "--brain", "glimmer", "--no-transcribe", "--no-audio", "--song", song, "--lyrics", lyr,
+                 "--tag", "g"]) == 2
+    assert "GLIMMER_BASE_URL is not set" in capsys.readouterr().err
+    monkeypatch.setenv("GLIMMER_BASE_URL", "http://insecure.example/v1")
+    assert main(["plan", "--brain", "glimmer", "--no-transcribe", "--no-audio", "--song", song, "--lyrics", lyr,
+                 "--tag", "g"]) == 2

@@ -313,8 +313,11 @@ def test_a_test_render_credits_exactly_the_models_that_ran(repo):
     ran = {x["name"]: x["ran"] for x in c["models"]}
     assert ran == {"SAM 3.1": False, "Voice Transcribe": True, "Muse Wonder": True, "Muse Image": True}
     assert next(x for x in c["models"] if x["name"] == "Muse Wonder")["usd"] == 0.1
+    img = next(x for x in c["models"] if x["name"] == "Muse Image")
+    assert (img["calls"], img["frames"], img["usd"]) == (1, None, 0.01)       # one world, priced per image
+    assert next(x for x in c["models"] if x["name"] == "SAM 3.1")["calls"] == 0  # stood in: nothing ran
     html = (out / "index.html").read_text()
-    assert "Real model output here: Voice Transcribe, Muse Wonder, Muse Image." in html
+    assert "Real Meta model output here: Voice Transcribe, Muse Wonder, Muse Image." in html
     assert "No Meta model ran" not in html
 
 
@@ -327,3 +330,106 @@ def test_a_dry_run_treatment_is_never_credited_as_a_model_run(repo):
     out, m = build(repo, treatment_path=tp)
     c = json.loads((out / "data" / "credits.json").read_text())
     assert not next(x for x in c["models"] if x["name"] == "Muse Wonder")["ran"]
+
+
+def test_credits_count_what_ran_and_say_n_a_for_what_nobody_measured(repo):
+    """The Nov 1 live page showed CALLS 0 and FRAMES 0 under models it marked RAN: YES (a blind critic read that as
+    the Meta-tooling claim failing). Counts now come from the evidence: SAM 3.1 one request and one mask per frame
+    on the page, priced per 1,000 frames; Wonder the ledger's calls; anything unmeasured is None (n/a), never 0."""
+    make_render(repo, local=False, plates=False)
+    tp = treatment_file(repo, fixture=False)
+    t = json.loads(tp.read_text())
+    t["mode"] = "keyed"
+    t["spend"] = {"ledger": [{"kind": "wonder:loop", "usd": 0.01}, {"kind": "wonder:watch", "usd": 0.004},
+                             {"kind": "files:upload", "usd": 0.0}]}
+    tp.write_text(json.dumps(t))
+    out, _ = build(repo, treatment_path=tp, stand_in="a stock clip")
+    c = {x["name"]: x for x in json.loads((out / "data" / "credits.json").read_text())["models"]}
+    n = json.loads((repo / "out" / "TEST_LOCAL_t_hook_shots.json").read_text())["n_frames"]
+    assert (c["SAM 3.1"]["ran"], c["SAM 3.1"]["calls"], c["SAM 3.1"]["frames"]) == (True, 1, n)
+    assert c["SAM 3.1"]["usd"] == round(max(n, bw.SAM_MIN_FRAMES) * bw.SAM_USD_PER_1K_FRAMES / 1000, 4)
+    assert (c["Muse Wonder"]["calls"], c["Muse Wonder"]["frames"], c["Muse Wonder"]["usd"]) == (2, None, 0.014)
+    assert not c["Voice Transcribe"]["ran"] and c["Voice Transcribe"]["calls"] == 0
+
+
+def test_the_test_song_and_named_stand_in_footage_make_a_test_render(repo):
+    """A keyed render can still be a stand-in: the repo's synthetic song (caught by content, so a renamed copy
+    counts) and a stock clip named with --stand-in. Without the tag prefix, both reasons still put the banner up."""
+    import shutil as sh
+    (repo / "footage").mkdir(exist_ok=True)
+    sh.copy2(REPO / bw.TEST_SONG, repo / bw.TEST_SONG)
+    sh.copy2(REPO / bw.TEST_SONG, repo / "footage" / "renamed.wav")
+    run = {"engine": "SAM 3.1", "mode": "demo", "song": "footage/renamed.wav"}
+    r = bw.test_reasons("real_tag", run, {"world_sources": []}, None, repo=repo, stand_in="Mixkit stock clip")
+    assert r == ["Footage: Mixkit stock clip", "Song: the repo's synthetic test song, not the artist's master"]
+    (repo / "footage" / "master.wav").write_bytes(b"RIFF not the test song")
+    run["song"] = "footage/master.wav"
+    assert bw.test_reasons("real_tag", run, {"world_sources": []}, None, repo=repo) == []
+
+
+def direct_log(repo, mode="keyed", section=2, watches=2):
+    worlds = repo / "out" / "worlds"
+    worlds.mkdir(parents=True, exist_ok=True)
+    (worlds / "muse_a.png").write_bytes(b"png a")
+    (worlds / "muse_b.png").write_bytes(b"png b")
+    note = {"t_s": 0.5, "against": "camera", "severity": "high", "note": "the dolly does not read before 4.9 s"}
+    log = {"mode": mode, "model": "muse-wonder-1.0", "ended": "2026-11-01T23:30:00",
+           "watches": [{"section": section, "source": "muse-wonder-1.0", "verdict": v, "notes": [note],
+                        "suggestion": {"field": "none", "value": "", "why": "x"}}
+                       for v in ("revise", "keep")[:watches]],
+           "renders": {str(section): [{"video": str(worlds / "muse_a.png"), "duration_s": 19.6},
+                                      {"video": str(worlds / "muse_b.png"), "duration_s": 19.6}]},
+           "revision": {"changes": [{"section": section, "field": "world_prompt", "old": "a garage",
+                                     "new": "a garage before dawn", "because": "no refused exit"}]},
+           "spend": {"calls": 19, "spent_usd": 0.52,
+                     "ledger": [{"kind": "wonder:loop", "usd": 0.01}, {"kind": "wonder:watch", "usd": 0.02}]}}
+    p = repo / "out" / "director_x_log.json"
+    p.write_text(json.dumps(log))
+    return p
+
+
+def fake_thumb(src, dst, t, width=540):
+    Path(dst).write_bytes(b"thumb of " + Path(src).read_bytes() + f" at {t}".encode())
+
+
+def test_the_directors_own_review_goes_on_the_page_verbatim(repo):
+    """The `direct` log's watch notes, its one revision and the world before and after reach the page as written;
+    no local path leaks, and the second watch is kept."""
+    make_render(repo, local=False, plates=False)
+    out, m = build(repo, stand_in="stock", direct_log=direct_log(repo), thumber=fake_thumb)
+    r = json.loads((out / "data" / "review.json").read_text())
+    assert r["mode"] == "keyed" and [c["verdict"] for c in r["cuts"]] == ["revise", "keep"]
+    assert r["cuts"][0]["notes"][0]["note"] == "the dolly does not read before 4.9 s"
+    assert r["changes"] == [{"field": "world_prompt", "old": "a garage", "new": "a garage before dawn",
+                             "because": "no refused exit"}]
+    assert r["stills"] == ["cut1.jpg", "cut2.jpg"] and r["still_t_s"] == 1.5     # the high note's time + 1 s
+    assert (out / "data" / "cut1.jpg").read_bytes() == b"thumb of png a at 1.5"
+    assert (out / "data" / "cut2.jpg").read_bytes() == b"thumb of png b at 1.5"
+    assert m["files"]["review"] == "review.json" and "/Users/" not in json.dumps(r)
+    c = {x["name"]: x for x in json.loads((out / "data" / "credits.json").read_text())["models"]}
+    assert (c["Muse Wonder"]["ran"], c["Muse Wonder"]["calls"], c["Muse Wonder"]["usd"]) == (True, 2, 0.03)
+
+
+def test_a_review_that_is_not_there_or_not_real_is_refused_or_labelled(repo):
+    make_render(repo, local=False, plates=False)
+    with pytest.raises(bw.Refuse, match="no watch of section 2"):
+        build(repo, stand_in="stock", direct_log=direct_log(repo, section=3), thumber=fake_thumb)
+    out, m = build(repo, stand_in="stock", direct_log=direct_log(repo, mode="DRY RUN"), thumber=fake_thumb)
+    assert "Director review: a FIXTURE (dry) run, not Muse Wonder output" in m["test_reasons"]
+    c = {x["name"]: x for x in json.loads((out / "data" / "credits.json").read_text())["models"]}
+    assert not c["Muse Wonder"]["ran"]                                 # a dry log's ledger credits nobody
+    lp = direct_log(repo)
+    (repo / "out" / "worlds" / "muse_b.png").unlink()
+    with pytest.raises(bw.Refuse, match="not on disk"):
+        build(repo, stand_in="stock", direct_log=lp, thumber=fake_thumb)
+
+
+def test_the_footer_never_calls_stand_in_footage_the_artists_own(repo):
+    """Until Nov 1 the footer said 'FOOTAGE AND SONG ARE THE ARTIST'S OWN.' on a stock clip and a synthetic song."""
+    make_render(repo)
+    out, _ = build(repo)
+    html = (out / "index.html").read_text()
+    assert bw.FOOT_TEST in html and bw.FOOT_REAL not in html and bw.FOOT_MARK not in html
+    (repo / "web" / "index.html").write_text((repo / "web" / "index.html").read_text().replace(bw.FOOT_MARK, "x"))
+    with pytest.raises(bw.Refuse, match="FOOT_SOURCE"):
+        build(repo)

@@ -22,8 +22,14 @@ record of what shipped.
   depth on Core ML, filmed through the take's camera; blind critic 2/10 -> 7/10 against real footage (lab plate)
 - [x] Camera moves on the beat (Nov 1, `--move`, `--moves-from`, `--from-treatment`): dolly zoom, crash zoom, world
   swap; the director places them per section
-- [x] First keyed Muse Wonder treatment (Nov 1, test song): US$0.15, audio in, moves placed; the keyed `direct` loop
-  (render, watch, revise) is next
+- [x] First keyed Muse Wonder treatment (Nov 1, test song): US$0.15, audio in, moves placed
+- [x] The director's loop keyed end to end (Nov 1, stand-in clip): generate, render through the stage with SAM 3.1,
+  watch, revise, re-render, watch again (run 2: US$0.28, 19 calls; it judged the dolly "reads clearly" and turned
+  the dust overlay off itself). Its first run exposed what the watch was not told (the move, the overlay): fixed
+- [x] Live watch page (Nov 1, real-one-watch.vercel.app): the stand-in render, the Real Receipt, Wonder's verbatim
+  review of its own cut, credits counted from evidence, stand-ins named on the banner and the footer
+- [~] Muse Glimmer 30B treatment (open weights, self-hosted on a rented GPU): wired and tested offline; not run (the
+  RunPod balance is under US$1)
 - [x] SAM 3.1 decode ~100x faster (Nov 1, compiled codec, byte-identical)
 - [ ] The artist's real take
 - [ ] 3-minute demo video (the edit kit is in the application folder)

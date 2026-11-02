@@ -15,6 +15,10 @@ LOOKS = ("clean", "collage", "receipt")  # realone/composite.py LOOKS (not impor
 ENERGIES = ("low", "mid", "high")
 MOVES = ("none", "dolly", "crash", "swap")  # realone/stage/moves.py KINDS, plus none
 
+# Section fields only the revision pass writes (never asked of the model in the treatment): allowed when a saved
+# treatment is read back, left out of the strict schema sent to Wonder (strict mode needs every property required).
+LOCAL_ONLY = {"particles"}
+
 SECTION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -36,6 +40,8 @@ SECTION_SCHEMA = {
         "move": {"type": "string", "enum": list(MOVES),
                  "description": "the camera move for this section: none (most sections), dolly (at most once), "
                                 "crash or swap"},
+        "particles": {"type": "string", "enum": ["dust", "rain", "embers", "none"],
+                      "description": "the particle overlay, set only by a revision"},
         "why": {"type": "string", "minLength": 8, "maxLength": 240, "description": "one line"},
     },
 }
@@ -80,15 +86,15 @@ NOTES_SCHEMA = {
                 "t_s": {"type": "number", "minimum": 0, "description": "seconds from the start of this render"},
                 "against": {"type": "string", "enum": ["subtext", "world", "look", "freeze", "camera", "edit"]},
                 "severity": {"type": "string", "enum": ["low", "mid", "high"]},
-                "note": {"type": "string", "minLength": 8, "maxLength": 300},
+                "note": {"type": "string", "minLength": 8, "maxLength": 500},
             }}},
         "suggestion": {
             "type": "object", "additionalProperties": False,
             "required": ["field", "value", "why"],
             "properties": {
-                "field": {"type": "string", "enum": ["none", "world_prompt", "look", "freeze"]},
+                "field": {"type": "string", "enum": ["none", "world_prompt", "look", "particles", "freeze"]},
                 "value": {"type": "string", "maxLength": 600},
-                "why": {"type": "string", "maxLength": 240},
+                "why": {"type": "string", "maxLength": 500},
             }},
     },
 }
@@ -103,7 +109,7 @@ DECISION_SCHEMA = {
             "required": ["section", "field", "value", "because"],
             "properties": {
                 "section": {"type": "integer", "minimum": 0},
-                "field": {"type": "string", "enum": ["world_prompt", "look", "freeze"]},
+                "field": {"type": "string", "enum": ["world_prompt", "look", "particles", "freeze"]},
                 "value": {"type": "string", "maxLength": 600},
                 "because": {"type": "string", "minLength": 8, "maxLength": 300},
             }}},
@@ -126,7 +132,7 @@ def wire_schema(schema):
         if k not in _WIRE_KEYS:
             continue
         if k == "properties":
-            out[k] = {name: wire_schema(sub) for name, sub in v.items()}
+            out[k] = {name: wire_schema(sub) for name, sub in v.items() if name not in LOCAL_ONLY}
         elif k == "items":
             out[k] = wire_schema(v)
         else:

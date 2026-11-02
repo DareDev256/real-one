@@ -30,8 +30,9 @@ section, only covered sections render, a literal world_prompt is refused. Call s
 do not depend on each other. Keep text short; the tools do the work."""
 
 DECIDE_INSTRUCTIONS = f"""You are the director. Below are your treatment and your notes from watching each rendered
-section. Decide the ONE revision pass: up to {MAX_REVISIONS} changes (world_prompt, look, or freeze moved to another
-hook with value "true"), or none if every section serves its subtext. A new world_prompt is a place with no people
+section. Decide the ONE revision pass: up to {MAX_REVISIONS} changes (world_prompt, look, particles (dust, rain,
+embers or none: an overlay drawn over the world, never in the world image), or freeze moved to another hook with
+value "true"), or none if every section serves its subtext. A new world_prompt is a place with no people
 and none of the section's lyric words. Return JSON."""
 
 
@@ -56,7 +57,8 @@ def _context(state):
         secs.append({"index": s["index"], "role": s["role"], "is_hook": s.get("is_hook", False),
                      "start_s": round(s["start_s"], 2), "end_s": round(s["end_s"], 2),
                      "covered_by_take": s["index"] in state.covered, "lyric": state.lyrics.get(s["index"], []),
-                     **{k: p[k] for k in ("subtext", "world_prompt", "look", "freeze", "camera_energy")}})
+                     **{k: p[k] for k in ("subtext", "world_prompt", "look", "freeze", "camera_energy")},
+                     "move": p.get("move", "none"), "particles": p.get("particles", "dust")})
     return {"song_subtext": state.treatment.get("song_subtext"), "covered_sections": state.covered,
             "sections": secs,
             "note": ("DRY RUN: renders use test plates and a drawn figure; worlds are not generated"

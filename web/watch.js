@@ -299,7 +299,10 @@
   }
 
   // ------------------------------------------------------------------ credits
-  function money(x) { return x == null ? "n/a" : "US$" + Number(x).toFixed(2); }
+  function money(x) {  // sub-dime costs keep a third decimal, so US$0.005 does not read as US$0.00
+    if (x == null) return "n/a";
+    const v = Number(x); return "US$" + v.toFixed(v > 0 && v < 0.1 ? 3 : 2);
+  }
   function count(x) { return x == null ? "n/a" : String(x); }
 
   function buildCredits(c) {
@@ -333,12 +336,62 @@
     $("made").hidden = false;
   }
 
+  // ------------------------------------------------------------------ the director's review of its own cut
+  function mmss(t) { const s = Math.max(0, Number(t) || 0); return Math.floor(s / 60) + ":" + pad(Math.floor(s % 60), 2); }
+
+  function buildReview(r) {
+    if (!r || !Array.isArray(r.cuts) || !r.cuts.length) return;
+    const first = r.cuts[0], last = r.cuts[r.cuts.length - 1];
+    $("rev-model").textContent = (r.mode === "keyed" ? String(r.model || "MUSE WONDER") : "FIXTURE").toUpperCase();
+    $("review-title").textContent = "Cut 1: " + (first.verdict === "revise" ? "revise." : "keep.");
+    const ol = $("rev-notes");
+    (first.notes || []).forEach((n) => {
+      const li = document.createElement("li"); li.className = "sev-" + (n.severity || "low");
+      li.innerHTML = '<span class="mono t"></span><span class="mono k"></span><span class="n"></span>';
+      li.querySelector(".t").textContent = mmss(n.t_s);
+      li.querySelector(".k").textContent = String(n.against || "").toUpperCase() + " · " +
+        String(n.severity || "").toUpperCase();
+      li.querySelector(".n").textContent = n.note;
+      ol.appendChild(li);
+    });
+    const ch = (r.changes || [])[0];
+    if (ch) {
+      $("rev-change").hidden = false;
+      const field = String(ch.field || "").replace("_", " ").toUpperCase();
+      $("rev-old").textContent = field + ": " + ch.old;
+      $("rev-new").textContent = field + ": " + ch.new;
+      $("rev-why").textContent = ch.because ? "BECAUSE: " + ch.because : "";
+      const box = $("rev-worlds"), stills = r.stills || [];
+      stills.forEach((w, i) => {
+        const f = document.createElement("figure");
+        f.innerHTML = '<img alt="" loading="lazy" decoding="async"><figcaption class="mono"></figcaption>';
+        f.querySelector("img").src = "data/" + w;
+        f.querySelector("img").alt = (i ? "Cut 2, after the change" : "Cut 1, before the change") + " at " +
+          mmss(r.still_t_s);
+        f.querySelector("figcaption").textContent = (stills.length > 1 ? (i ? "CUT 2" : "CUT 1") : "CUT") +
+          " AT " + mmss(r.still_t_s);
+        box.appendChild(f);
+      });
+    }
+    if (r.cuts.length > 1) {
+      const top = (last.notes || []).slice().sort((a, b) => "highmidlow".indexOf(a.severity) -
+                                                         "highmidlow".indexOf(b.severity))[0];
+      $("rev-after").hidden = false;
+      $("rev-after").textContent = "CUT 2, WATCHED AGAIN: " + String(last.verdict || "").toUpperCase() +
+        (top ? " · " + mmss(top.t_s) + " " + top.note : "");
+    }
+    $("rev-foot").textContent = "EVERY NOTE ABOVE IS VERBATIM MODEL OUTPUT, NOT EDITED. THIS LOOP: " +
+      (r.spend && r.spend.calls != null ? r.spend.calls + " PAID CALLS, " : "") +
+      (r.spend && r.spend.usd != null ? money(r.spend.usd) : "") + ".";
+    $("review").hidden = false;
+  }
+
   // ------------------------------------------------------------------ boot
   async function boot() {
     const m = S.manifest = await getJSON("manifest.json");
-    const [receipt, shots, credits, treatment, lyrics, timeline] = await Promise.all([
+    const [receipt, shots, credits, treatment, lyrics, timeline, review] = await Promise.all([
       getJSON(m.files.receipt), getJSON(m.files.shots), opt(m.files.credits), opt(m.files.treatment),
-      opt(m.files.lyrics), opt(m.files.timeline)]);
+      opt(m.files.lyrics), opt(m.files.timeline), opt(m.files.review)]);
     Object.assign(S, { receipt, shots, treatment, lyrics, fps: m.fps, frames: m.frames, dur: m.duration_s,
                        start: m.start_s });
     // the song's own sections over the render's range (a bars:A-B plan holds one pseudo-section, index -1)
@@ -354,6 +407,7 @@
     buildStrip();
     if (treatment) treatmentNote();
     buildCredits(credits);
+    buildReview(review);
     render(true);
     requestAnimationFrame(loop);
   }

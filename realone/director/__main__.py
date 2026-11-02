@@ -17,7 +17,7 @@ from pathlib import Path
 
 from realone.common import LOCAL_PREFIX, OUT, Refuse, file_md5, write_json
 from realone.director import budget, lyrics as lyr, loop, treatment as trt
-from realone.director.backend import FIXTURE_LABEL, FixtureBackend, MetaBackend, SparkOpenBackend
+from realone.director.backend import FIXTURE_LABEL, FixtureBackend, GlimmerBackend, MetaBackend, SparkOpenBackend
 from realone.director.budget import WONDER_MODEL
 from realone.director.tools import Renderer, State, Tools
 
@@ -50,7 +50,7 @@ def build_parser():
 
     pl = sub.add_parser("plan", help="lyrics + treatment + guard, no render")
     common(pl)
-    pl.add_argument("--brain", choices=["wonder", "spark-open"], default="wonder",
+    pl.add_argument("--brain", choices=["wonder", "spark-open", "glimmer"], default="wonder",
                     help="who writes the treatment: Muse Wonder (Meta Model API) or Muse Spark Open on Baseten "
                          "(open weights; needs BASETEN_API_KEY and --no-transcribe)")
     pl.add_argument("--spark-model", default=budget.SPARK_MODEL, help="Baseten model slug for --brain spark-open")
@@ -91,6 +91,8 @@ def _meta(a, mode_key):
         m["FIXTURE"] = FIXTURE_LABEL
     elif getattr(a, "brain", "wonder") == "spark-open":
         m["model"] = f"{a.spark_model} (Baseten)"
+    elif getattr(a, "brain", "wonder") == "glimmer":
+        m["model"] = f"{budget.GLIMMER_MODEL} ({budget.GLIMMER_HOST})"
     else:
         m["model"] = WONDER_MODEL
     m.update(mode_key)
@@ -159,9 +161,15 @@ def main(argv=None):
         if brain == "spark-open" and not a.no_transcribe:
             raise Refuse("--brain spark-open needs --no-transcribe (Baseten has no transcription endpoint); pass "
                          "--lyrics for the words. Nothing was called.")
+        if brain == "glimmer" and not (a.no_transcribe and a.no_audio):
+            raise Refuse("--brain glimmer needs --no-transcribe and --no-audio (Glimmer reads text and images, not "
+                         "audio); pass --lyrics for the words. Nothing was called.")
+        glimmer_url = None
         if a.dry_run:
             key = None
-        else:  # before any work
+        elif brain == "glimmer":  # before any work
+            key, glimmer_url = None, budget.require_glimmer_url()
+        else:
             key = budget.require_baseten_key() if brain == "spark-open" else budget.require_key()
         prefix = LOCAL_PREFIX if a.dry_run else ""
         OUT.mkdir(exist_ok=True)
@@ -198,7 +206,8 @@ def main(argv=None):
             print(budget.format_quote(q, "director: spend quote before any call:"))
             cap = budget.gate(q, a.cap_usd, a.yes_spend)
             meter = budget.Meter(cap, a.max_calls)
-            backend = SparkOpenBackend(key, meter, a.spark_model) if brain == "spark-open" else MetaBackend(key, meter)
+            backend = (SparkOpenBackend(key, meter, a.spark_model) if brain == "spark-open"
+                       else GlimmerBackend(meter, glimmer_url) if brain == "glimmer" else MetaBackend(key, meter))
         rec, tpath, ly, res = plan_stage(a, backend, meter, prefix, timeline)
         print(f"director: treatment -> {tpath}" + ("   [FIXTURE]" if a.dry_run else ""))
         _print_treatment(rec)

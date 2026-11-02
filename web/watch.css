@@ -218,12 +218,36 @@ kbd { font: 600 11px var(--mono); border: 1px solid var(--line); padding: 1px 5p
   .model:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
 }
 
+/* ---------- the director's review of its own cut */
+.review { border-top: 1px solid var(--line); padding-top: 12px; grid-column: 1 / -1; }
+.rev-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.rev-model { color: var(--ink); }
+.rev-verdict { font-size: clamp(34px, 5vw, 56px); line-height: 0.95; margin: 10px 0 14px; }
+.rev-notes { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 10px; max-width: 78ch; }
+.rev-notes li { display: grid; grid-template-columns: 44px 128px 1fr; gap: 4px 12px; align-items: baseline;
+  border-top: 1px solid var(--hair); padding-top: 8px; }
+.rev-notes .t { font-size: 12px; font-weight: 600; color: var(--ink); }
+.rev-notes .k { font-size: 10px; letter-spacing: 0.08em; color: var(--dim); }
+.rev-notes .sev-high .k { color: var(--mag); }
+.rev-notes .n { font-size: 14px; line-height: 1.45; }
+.rev-change .label { display: block; margin-bottom: 10px; }
+.rev-worlds { display: flex; gap: 12px; margin: 0 0 12px; }
+.rev-worlds figure { margin: 0; width: min(200px, 44vw); }
+.rev-worlds img { display: block; width: 100%; aspect-ratio: 9 / 16; object-fit: cover; background: var(--hair); }
+.rev-worlds figcaption { font-size: 10px; letter-spacing: 0.08em; margin-top: 4px; color: var(--dim); }
+.rev-worlds figure:last-child figcaption { color: var(--mag); }
+.rev-change .struck, .rev-change .world { max-width: 78ch; }
+.rev-change .world { margin: 6px 0 0; }
+.rev-after { font-size: 11.5px; line-height: 1.5; margin: 18px 0 10px; max-width: 78ch; }
+
 /* ---------- phone: title, video, receipt, director (CSS order, no script) */
 @media (max-width: 760px) {
-  .test-banner { padding: 8px 16px 9px; font-size: 10.5px; }
-  .test-banner strong { font-size: 20px; }
+  .test-banner { padding: 6px 16px 7px; font-size: 9.5px; gap: 2px 10px; line-height: 1.3; }
+  .test-banner strong { font-size: 16px; }
   .test-banner ul { flex-direction: column; flex-basis: 100%; }
   .test-banner span, .test-banner li { white-space: normal; flex-basis: 100%; }
+  .rev-notes li { grid-template-columns: 40px 1fr; }
+  .rev-notes .n { grid-column: 1 / -1; }
   .hero { display: flex; flex-direction: column; padding: 10px 0 28px; gap: 0; }
   .intro { display: contents; }
   .intro h1 { font-size: 64px; margin: 12px 16px 14px; }
@@ -235,6 +259,7 @@ kbd { font: 600 11px var(--mono); border: 1px solid var(--line); padding: 1px 5p
   .watch { order: 1; width: 100%; }
   .intro .slip { order: 3; margin: 26px 16px 0; max-width: none; flex: none; }
   .director { order: 4; margin: 28px 16px 0; }
+  .review { order: 5; margin: 28px 16px 0; }
   .stage { width: 100%; outline: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .stage-readout { display: flex; }
   .controls, .strip { padding: 0 16px; }

@@ -175,6 +175,7 @@ def apply_treatment(a):
         a.moves_from = str(p)
     a._treatment_freeze = [s["index"] for s in t["sections"] if s.get("freeze") is True]
     a._treatment_reveal = [s["index"] for s in t["sections"] if s.get("look") == "receipt"]
+    a._treatment_particles = {s["index"]: s["particles"] for s in t["sections"] if s.get("particles")}
 
 
 def _treatment_specs(a, indices, secs):
@@ -229,6 +230,11 @@ def render(a):
     if getattr(a, "_treatment_reveal", None):
         a.receipt_reveal = (list(getattr(a, "receipt_reveal", None) or [])
                             + _treatment_specs(a, a._treatment_reveal, secs))
+    tp = getattr(a, "_treatment_particles", None) or {}
+    kinds = {tp[s["index"]] for s in secs if s.get("index") in tp}
+    if len(kinds) == 1 and a.particles == "dust":  # the director revised the overlay for the rendered section(s)
+        a.particles = kinds.pop()
+        print(f"particles: {a.particles} (from the treatment)")
     freezes = FZ.resolve(tl, getattr(a, "freeze", None), getattr(a, "freeze_bars", 2), secs)
     style = getattr(a, "freeze_style", "bullet") if freezes else "still"  # no freeze: 0.2.0 unchanged
     lead_in = None

@@ -249,3 +249,46 @@ def test_render_passes_the_section_move_and_skips_a_dolly_without_the_stage(tmp_
     assert "--move" not in a and "dolly skipped" in dry.move_note
     a, _ = dry.argv(2, "clean", False, "x" * 30, "t", 0.0, move="none")
     assert "--move" not in a
+
+
+def test_particles_are_revisable_and_reach_the_renderer(tmp_path):
+    """Wonder's first keyed watch (Nov 1) asked a world_prompt to remove 'floating glitter particles', which are the
+    renderer's --particles overlay and not in the image: the revision could not reach them. Now the overlay is a
+    revise field the renderer receives, and anything outside the four kinds is refused."""
+    help_text = HELP_010 + "\n  --particles {dust,rain,embers,none}\n"
+    tools, st, r, _ = make(tmp_path, help_text=help_text)
+    tools.dispatch("render_section", {"section": 2, "look": st.plan(2)["look"], "freeze": st.plan(2)["freeze"]})
+    assert "--particles" not in r.calls[-1]                              # the default overlay adds no flag
+    assert "must be one of" in tools.dispatch("revise", {"section": 2, "field": "particles", "value": "glitter",
+                                                         "because": "x"})["error"]
+    assert "already uses dust" in tools.dispatch("revise", {"section": 2, "field": "particles", "value": "dust",
+                                                            "because": "x"})["error"]
+    ok = tools.dispatch("revise", {"section": 2, "field": "particles", "value": "none", "because": "sparkles"})
+    assert ok["ok"] and ok["applied"]["old"] == "dust" and ok["applied"]["new"] == "none"
+    again = tools.dispatch("render_section", {"section": 2, "look": st.plan(2)["look"],
+                                              "freeze": st.plan(2)["freeze"]})
+    assert again["ok"] and again["particles"] == "none"
+    a = r.calls[-1]
+    assert a[a.index("--particles") + 1] == "none"
+
+
+def test_watch_is_told_when_the_move_ran_and_that_the_overlay_is_ours(tmp_path):
+    """Wonder's first keyed watch called a working dolly zoom 'not visible': it was never told the move's timing or
+    its on-screen signature. The watch context now carries both, read from the renderer's own shot plan."""
+    from realone.director.tools import move_facts
+    tools, st, r, fb = make(tmp_path, {"watch": [WATCH_REVISE]})
+    first = tools.dispatch("render_section", {"section": 2, "look": st.plan(2)["look"],
+                                              "freeze": st.plan(2)["freeze"]})
+    shots = tmp_path / f"TEST_LOCAL_{first['tag']}_s2_shots.json"
+    shots.write_text(json.dumps({"fps": 30, "moves": [{"kind": "dolly", "start_frame": 0, "end_frame": 147}],
+                                 "stage": {"dolly": {"max_m": 3.0, "subject_m": [1.63, 1.91]}}}))
+    facts = move_facts(r.run_json(first["tag"], 2))
+    assert facts[0]["kind"] == "dolly" and facts[0]["start_s"] == 0.0 and facts[0]["end_s"] == 4.9
+    assert facts[0]["background_magnification"] == 2.69                 # (1.77 + 3.0) / 1.77
+    st.renders[2][-1]["move_on_screen"] = facts
+    tools.dispatch("watch", {"render_path": first["video"]})
+    ctx = json.loads(fb.requests[-1]["input"][0]["content"][0]["text"].split("\n", 1)[1])
+    assert ctx["render"]["move"][0]["background_magnification"] == 2.69
+    assert "not in the world" in ctx["render"]["particles"]
+    shots.unlink()
+    assert move_facts(r.run_json(first["tag"], 2)) is None             # no shot plan, no invented move

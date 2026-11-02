@@ -1,6 +1,60 @@
 # Changelog
 
 ## Unreleased
+- **The director's loop ran keyed end to end (Nov 1).** `direct --stage` on the stand-in hook clip: Muse Wonder
+  generated the world, rendered through the tracked stage with SAM 3.1 masks, watched its own cut, said "revise",
+  rewrote the world prompt, regenerated and re-rendered (US$0.45, 16 calls; the run then stopped on our own
+  `--max-calls 16`, before watching the re-render). Its notes found two things the code had hidden from it:
+  - **The watch never told Wonder when the camera move ran or what it looks like.** It called a working dolly zoom
+    "not visible" (frames 0 to 146 at full size: the world magnifies about 2.5x while he keeps his size). `watch`
+    now carries the move, its seconds in the clip and its on-screen signature from the renderer's own shot plan
+    (for a dolly, the background magnification (z + dz) / z from the solved subject distance).
+  - **The sparkles were ours.** Wonder read the dust overlay as "glitter, magical rather than exhausted" and tried
+    to remove it with a world prompt, which cannot reach a layer drawn over the image. `revise` gains a `particles`
+    field (dust, rain, embers, none) that reaches the renderer (`--particles`, and `--from-treatment` for a
+    section the director revised); the watch is told the overlay is ours. `particles` is local-only in the
+    treatment schema, never in the strict schema sent to Wonder.
+  - A watch note over 300 characters cost a re-upload and a re-watch (2 of the 16 calls): the limit is now 500.
+    Run 2 hit the same on `suggestion.why` (240; twice): now 500 too.
+  - **Run 2 (same clip, US$0.28, 19 calls) confirmed both fixes in Wonder's own words.** Told when the dolly ran,
+    it wrote "The dolly zoom reads clearly and works for the subtext: although he keeps walking and dancing forward,
+    he holds roughly the same size while the sedan and pillars behind him expand and flatten." It then used the new
+    field (particles dust -> none, "the sparkling dust ... turns exhaustion and stalled refusal into a magical,
+    confident dance moment") and re-rendered. Its second watch still says revise: the clean look's glossy floor
+    and bright tee read "polished dance-video sheen", and the cut-out edge "pasted against the haze". It stopped on
+    the 8-turn cap before calling finish (the log says so).
+  - 2 tests; 8 mutations of the new guards, all red, file restored byte-identical.
+- **Watch page, after a blind judge critic (Ansatz 8/8/8/8, ours 5/4/6/7 on the Stage 2 rubric):**
+  - Credits count what ran: SAM 3.1 one streamed request and one mask per frame on the page, priced per 1,000
+    frames; Muse Image one call per world; Wonder and Voice Transcribe the keyed ledger's calls and cost. A number
+    nobody measured is `null` (the page shows n/a), never 0. The live page had shown CALLS 0 and FRAMES 0 under
+    models it marked RAN: YES.
+  - The footer said "FOOTAGE AND SONG ARE THE ARTIST'S OWN." on a stock clip and a synthetic song. It is now
+    written by the build: that line only on a real render, "TEST RENDER: THE FOOTAGE AND SONG HERE ARE STAND-INS."
+    otherwise; the build refuses a template that lost the marker.
+  - Stand-ins are named: the repo's synthetic test song is recognised by content (a renamed copy too), and
+    `--stand-in TEXT` names footage that is not the artist's take. The banner says what stood in and, separately,
+    which Meta models really produced output.
+  - `--direct-log`: the director's review of its own cut goes on the page verbatim (notes with times, the one
+    change and its reason, the same moment of cut 1 and cut 2 side by side, the second watch); refuses a log with
+    no watch of the section, labels a dry-run log FIXTURE (and credits no model from it), refuses a render that is
+    not on disk. The loop's own calls are credited to the models that made them (Wonder: 2 treatment calls plus 12
+    in the loop on the live page).
+  - Live from `showcase2` (Nov 1, 23:30): the stand-in hook rendered from the director's final treatment (SAM 3.1
+    masks and the Muse Image world both cached, US$0.00; frames 588/588, cuts 3/3, audio +0.1 ms). Checked live at
+    1440 and 390: no horizontal scroll, both videos readyState 4, no console errors, 8 notes and both stills load
+    (`docs/screenshots/2026-11-01_watch-live-*`).
+  - Costs under a dime keep a third decimal; the phone banner is shorter.
+  - 7 tests; 17 mutations of the new guards, all red, file restored byte-identical.
+- **Muse Glimmer, wired, not yet run.** `plan --brain glimmer` sends the treatment through the same schema, guard and
+  validation as Wonder, to Muse Glimmer 30B (Apache-2.0, Meta's Q4_K_M GGUF) on a llama.cpp server we host. It reads
+  the lyrics and the beat grid (no audio input). `scripts/glimmer_pod.py run -- <command>` rents one 24 GB GPU on
+  RunPod for exactly the length of the command (deleted in a `finally`), with a one-run API key on the server
+  because its proxy URL is public; it refuses a balance under US$1 or a pod already running. Status and down
+  checked against the live API; `run` has not created a pod (the balance is under US$1). llama.cpp supports the
+  architecture, the vision projector and the chat template (read in its source, Nov 1). 2 tests.
+- **README:** the Muse Spark Open row said it writes treatments; it never ran with a key. It now says "wired, not
+  yet run".
 - **The tracked stage, `--stage tracked`** (docs/stage.md). The world is rebuilt in depth and filmed through the
   phone's own solved camera, instead of a still sliding behind a cut-out.
   - **Camera:** a planar track of the floor the artist stood on, with him masked out; a camera solve from the floor

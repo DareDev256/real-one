@@ -71,8 +71,19 @@ def spark_usd(input_tokens, output_tokens, cached_tokens=0):
     return fresh * SPARK_IN_USD + cached_tokens * SPARK_CACHED_USD + output_tokens * SPARK_OUT_USD
 
 
-BRAIN_USD = {"wonder": wonder_usd, "spark-open": spark_usd}
-BRAIN_NAME = {"wonder": "Wonder", "spark-open": "Spark Open"}
+# Muse Glimmer 30B (Apache-2.0, meta-models/Muse-Glimmer-30B-GGUF Q4_K_M + mmproj), self-hosted with llama.cpp's
+# OpenAI-compatible server on a GPU we start and stop (scripts/glimmer_pod.py). Nothing is billed per token: the GPU
+# is billed by the hour, and the pod script reports that cost. So a Glimmer call meters US$0 and the run log says why.
+GLIMMER_MODEL = "Muse-Glimmer-30B-Q4_K_M"
+GLIMMER_HOST = "self-hosted, llama.cpp"
+
+
+def glimmer_usd(input_tokens, output_tokens, cached_tokens=0):
+    return 0.0
+
+
+BRAIN_USD = {"wonder": wonder_usd, "spark-open": spark_usd, "glimmer": glimmer_usd}
+BRAIN_NAME = {"wonder": "Wonder", "spark-open": "Spark Open", "glimmer": "Glimmer"}
 
 
 def sam_usd(frames):
@@ -176,6 +187,17 @@ def require_baseten_key():
         raise Refuse("BASETEN_API_KEY is not set, and --brain spark-open runs Muse Spark Open on Baseten. Nothing "
                      "was called. The key comes with the Baseten hackathon credits; it lives outside the repo.")
     return key
+
+
+def require_glimmer_url():
+    """Glimmer's gate: GLIMMER_BASE_URL (the pod's /v1 endpoint, set by scripts/glimmer_pod.py up), checked before
+    any work. It holds the pod id, so it lives in the environment only, never in the repo."""
+    url = os.environ.get("GLIMMER_BASE_URL") or None
+    if not url or not url.startswith("https://") or not url.rstrip("/").endswith("/v1"):
+        raise Refuse("GLIMMER_BASE_URL is not set to an https://.../v1 endpoint, and --brain glimmer runs Muse "
+                     "Glimmer on a self-hosted llama.cpp server. Start one with scripts/glimmer_pod.py up. Nothing "
+                     "was called.")
+    return url
 
 
 class Meter:

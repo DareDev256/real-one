@@ -27,6 +27,9 @@ from realone.director.backend import text_part, user
 from realone.director.budget import MAX_REVISIONS, VIDEO_TOKENS_PER_S
 from realone.director.schema import (LOOKS, NOTES_SCHEMA, SECTION_SCHEMA, parse_json, people_in, validate)
 
+PARTICLES = ("dust", "rain", "embers", "none")  # the renderer's --particles overlay
+DEFAULT_PARTICLES = "dust"
+
 MAX_RENDERS_PER_SECTION = 2
 
 
@@ -61,10 +64,12 @@ TOOL_SPECS = [
         {"render_path": {"type": "string", "description": "the `video` path render_section returned"}},
         ["render_path"]),
     _fn("revise",
-        f"One change in the single revision pass: swap a section's world_prompt, change its look, or move the freeze "
-        f"to another hook (value 'true' on the hook that should freeze). Up to {MAX_REVISIONS} changes, all before "
-        f"the first re-render; the pass closes when a re-render starts.",
-        {"section": {"type": "integer"}, "field": {"type": "string", "enum": ["world_prompt", "look", "freeze"]},
+        f"One change in the single revision pass: swap a section's world_prompt, change its look, change its particle "
+        f"overlay ({'/'.join(PARTICLES)}; the overlay is ours, drawn over the world, never in the world image), or move "
+        f"the freeze to another hook (value 'true' on the hook that should freeze). Up to {MAX_REVISIONS} changes, all "
+        f"before the first re-render; the pass closes when a re-render starts.",
+        {"section": {"type": "integer"},
+         "field": {"type": "string", "enum": ["world_prompt", "look", "particles", "freeze"]},
          "value": {"type": "string"}, "because": {"type": "string", "description": "the note this answers"}},
         ["section", "field", "value", "because"]),
     _fn("finish", "End the run with a short summary of what was rendered and what was changed.",
@@ -77,7 +82,42 @@ music video: a filmed artist (real pixels, cut out by SAM 3.1) over a generated 
 below, not against taste in general. Give timestamped notes (seconds from the start of THIS clip): where the world,
 the look, the camera or the freeze fights the section's subtext, and where it lands. Then a verdict (keep or revise)
 and at most one suggestion: a new world_prompt (a place, no people, none of the lyric's words), a different look,
-or moving the freeze. The measured checks are facts from the renderer; do not contradict them."""
+a different particle overlay, or moving the freeze. The particles (dust, rain, embers) are an overlay the renderer
+draws over the world; they are not in the world image, so a world_prompt cannot remove them: change them with the
+particles field. render.move says which camera move ran, when, and what it does on screen; judge whether it reads at
+that time, not whether a different move would. The measured checks are facts from the renderer; do not contradict
+them."""
+
+
+SCREEN = {"dolly": "dolly zoom: the virtual camera pulls back while the lens zooms in, so the artist keeps his size and "
+                   "the world behind him grows (about {mag:.1f}x for a far wall) and its perspective flattens",
+          "crash": "crash zoom: a fast snap in toward his face on each downbeat, with a zoom blur",
+          "swap": "world swap: a new world on every bar, his feet on the same floor"}
+
+
+def move_facts(run_json):
+    """-> what the section's camera move did on screen, in this clip's seconds, from the renderer's own shot plan
+    (the `_shots.json` beside the run report), or None when no move ran. The dolly's magnification is computed from
+    the solved subject distance and the planned pull-back: (z + dz) / z."""
+    sp = Path(str(run_json).replace("_run.json", "_shots.json"))
+    if not sp.exists():
+        return None
+    plan = json.loads(sp.read_text())
+    fps = float(plan.get("fps") or FPS)
+    out = []
+    for m in plan.get("moves") or []:
+        f = {"kind": m["kind"], "start_s": round(m["start_frame"] / fps, 2), "end_s": round(m["end_frame"] / fps, 2)}
+        mag = 1.0
+        if m["kind"] == "dolly":
+            d = (plan.get("stage") or {}).get("dolly") or {}
+            z = sum(d.get("subject_m") or [0]) / max(1, len(d.get("subject_m") or []))
+            if z > 0 and d.get("max_m"):
+                mag = (z + d["max_m"]) / z
+                f["background_magnification"] = round(mag, 2)
+            f["eases_until_s"] = f["end_s"]
+        f["on_screen"] = SCREEN.get(m["kind"], m["kind"]).format(mag=mag)
+        out.append(f)
+    return out or None
 
 
 # --------------------------------------------------------------------------------------------- renderer adapter
@@ -119,7 +159,7 @@ class Renderer:
             self._help = p.stdout
         return self._help
 
-    def argv(self, section, look, freeze, world_prompt, tag, max_usd, move="none"):
+    def argv(self, section, look, freeze, world_prompt, tag, max_usd, move="none", particles=DEFAULT_PARTICLES):
         a = [sys.executable, "-m", "realone", "render", "--clip", self.clip, "--song", self.song,
              "--section", f"#{section}", "--look", look, "--tag", tag, "--max-minutes", f"{self.max_minutes:g}"]
         if self.sync_near is not None:
@@ -130,6 +170,8 @@ class Renderer:
             a += ["--mask", "sam", "--world", world_prompt, "--max-usd", f"{max_usd:.4f}"]
             if self.stage:
                 a += ["--stage", "tracked"]
+        if particles != DEFAULT_PARTICLES and "--particles" in self.help_text():
+            a += ["--particles", particles]
         flag, note = detect_freeze(self.help_text())
         if freeze and flag:
             a.append(flag)
@@ -256,7 +298,8 @@ class Tools:
             self.meter.before(f"render section {section} (SAM 3.1; the renderer quotes and caps its own spend)", 0.0)
         max_usd = self.meter.remaining() if self.meter else 0.0
         argv, freeze_note = self.renderer.argv(section, look, freeze, plan["world_prompt"], tag, max_usd,
-                                               move=plan.get("move", "none"))
+                                               move=plan.get("move", "none"),
+                                               particles=plan.get("particles", DEFAULT_PARTICLES))
         print(f"director: rendering section {section} ({sec['role']}, {look}{', freeze' if freeze else ''}) ...")
         rc, tail = self.renderer.runner(argv)
         if rc != 0:
@@ -274,6 +317,7 @@ class Tools:
             self.meter.charge("render:sam+image", float(run.get("billed_usd", 0.0)), {"section": section})
         rec = {"section": section, "video": lk["video"], "look": look, "freeze_requested": freeze,
                "freeze": freeze_note if freeze else "off", "move": getattr(self.renderer, "move_note", "no move"),
+               "move_on_screen": move_facts(rj), "particles": plan.get("particles", DEFAULT_PARTICLES),
                "tag": tag, "run_json": str(rj),
                "contact_sheet": lk.get("contact_sheet"), "duration_s": round(sec["end_s"] - sec["start_s"], 3),
                "measured": {"spec_ok": lk.get("spec_ok"), "cuts_on_plan": lk.get("cuts_on_plan"),
@@ -309,8 +353,10 @@ class Tools:
         ctx = {"section": {k: st.section(i)[k] for k in ("index", "role", "is_hook", "start_s", "end_s")},
                "lyric": st.lyrics.get(i, []), "song_subtext": st.treatment.get("song_subtext"),
                "treatment": {k: plan[k] for k in ("subtext", "world_prompt", "palette", "camera_energy", "look",
-                                                  "freeze", "why")},
+                                                  "freeze", "why") if k in plan},
                "render": {"look": rec["look"], "freeze": rec["freeze"], "duration_s": rec["duration_s"],
+                          "move": rec.get("move_on_screen") or {"kind": rec.get("move", "no move")},
+                          "particles": rec.get("particles", DEFAULT_PARTICLES) + " (our overlay, not in the world)",
                           "measured": rec["measured"]}}
         if st.dry_run:
             ctx["render"]["note"] = ("TEST render: the world is a procedural test plate (--local-plate) and the "
@@ -354,6 +400,13 @@ class Tools:
                 raise ToolError("; ".join(errs))
             old, plan["world_prompt"] = plan["world_prompt"], v
             st.worlds.pop(section, None)
+        elif field == "particles":
+            v = value.strip().lower()
+            if v not in PARTICLES:
+                raise ToolError(f"particles must be one of {', '.join(PARTICLES)}")
+            if v == plan.get("particles", DEFAULT_PARTICLES):
+                raise ToolError(f"section {section} already uses {v}")
+            old, plan["particles"] = plan.get("particles", DEFAULT_PARTICLES), v
         elif field == "look":
             if value not in LOOKS:
                 raise ToolError(f"look must be one of {', '.join(LOOKS)}")
