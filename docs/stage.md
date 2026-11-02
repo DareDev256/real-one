@@ -79,9 +79,20 @@ known 3 px/frame shift.
 
 ## Limits (honest)
 
-- **A locked-off take:** refused today. It needs a level-camera assumption and a horizon from the figure; this is
-  not built yet.
+- **A locked-off (tripod) take:** supported since Nov 1 (bdd2dda): read as a level camera, the horizon taken from the
+  figure, `--camera-m` if the tripod is not about 1.3 m.
 - **No visible floor** (a close-up with no feet or floor in frame): the track refuses. Film one wide moment.
 - **A moving world** (rain, traffic) is the particle layer, screen space for now.
 - **The artist is a flat matte:** a big orbit would show it. The stage follows the phone's own move and never
   invents a larger one.
+
+## Tried and dropped
+
+- **One "unify" grade over every layer** (Nov 2, lab only, after Muse Wonder's note on its own cut that the cut-out
+  edge felt "pasted against the haze"): a 7% veil toward the far background's colour, lifted blacks, a highlight
+  shoulder, 0.86 saturation, a 0.6 px softening and one shared grain, over world and performer alike. A blind
+  critic, with the original phone clip as the bar, picked it in 2 of 3 pairs, each by a slight margin, and the
+  original in the third; 5.5 vs 4.5 out of 10 overall, neither close to real footage. Not shipped: no consistent
+  win. The tells it named are the same as the gauntlet's: the performer lit as his own layer (a frontal neutral
+  key against a cool top and side light), no reflection of him in a wet floor, nothing under his feet. Those are
+  fixed at the shoot (light close to the world's), not by a grade. Script and pairs: lab `unify/`.
