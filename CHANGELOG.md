@@ -174,6 +174,15 @@
   frames in play and through the toggle, up to 3 frames for about half a second after a seek in WebKit, then under
   1; the counter changes with the frame; no horizontal scroll at 390 px. Screenshots:
   `docs/screenshots/2026-10-29_watch-page-{desktop,mobile}.png`. `web/dist/` is build output and is ignored.
+- **Watch page: a test render credits exactly the Meta models that ran.** The banner said "No Meta model ran" on
+  the Nov 1 showcase, whose world came from Muse Image and whose treatment from a keyed Muse Wonder run (only the
+  masks were local). `models_that_ran()` now reads the evidence: SAM 3.1 only when the masks were not Apple Vision,
+  Muse Image only when the world's name matches a `muse_*.json` prompt the run wrote, Muse Wonder and Voice
+  Transcribe only from a keyed treatment's ledger (a dry-run or FIXTURE treatment never counts). The banner names
+  them; the credits mark them `ran: true` with the ledger's cost. 2 tests; every new guard mutated red, file
+  restored byte-identical. The longer banner line wrapped badly at 390 px (page 545 px wide): it now wraps; checked
+  live at 1440 and 390 (`docs/screenshots/2026-11-01_watch-live-{desktop,mobile}.png`, no horizontal scroll, both
+  videos readyState 4, no console errors).
 - **Hook Freeze v2, `--freeze-style bullet` (the new default; `still` keeps the 0.2.0 freeze for A/B).** The owner
   watched the 0.2.0 freeze on his phone and called it "pretty meh": with the camera stopped too, the world is a still
   image behind a moving person (green screen), and nothing in the frame proves time stopped. Now, in a render with a

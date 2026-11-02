@@ -290,3 +290,40 @@ def test_local_paths_are_stripped(repo):
     out, _ = build(repo)
     for f in (out / "data").glob("*.json"):
         assert str(repo) not in f.read_text() and "/Users/" not in f.read_text(), f.name
+
+
+def test_a_test_render_credits_exactly_the_models_that_ran(repo):
+    """Test masks, but the world is real Muse Image output and the treatment a keyed Muse Wonder run: the page
+    says so (banner and credits), and still credits SAM 3.1 as stood in for."""
+    make_render(repo, plates=False)
+    shots_p = repo / "out" / "TEST_LOCAL_t_hook_shots.json"
+    shots = json.loads(shots_p.read_text())
+    shots["world_sources"] = [{"section": 2, "worlds": ["Vertical 9:16, deserted park"], "from": "#2"}]
+    shots_p.write_text(json.dumps(shots))
+    (repo / "out" / "worlds").mkdir(parents=True, exist_ok=True)
+    (repo / "out" / "worlds" / "muse_abc.json").write_text(json.dumps(
+        {"prompt": "Vertical 9:16, deserted parking structure. Light: soft", "model": "muse-image-1.0"}))
+    tp = treatment_file(repo, fixture=False)
+    t = json.loads(tp.read_text())
+    t["mode"] = "keyed"
+    t["spend"] = {"ledger": [{"kind": "voice:transcribe", "usd": 0.0045}, {"kind": "wonder:treatment", "usd": 0.1}]}
+    tp.write_text(json.dumps(t))
+    out, m = build(repo, treatment_path=tp)
+    c = json.loads((out / "data" / "credits.json").read_text())
+    ran = {x["name"]: x["ran"] for x in c["models"]}
+    assert ran == {"SAM 3.1": False, "Voice Transcribe": True, "Muse Wonder": True, "Muse Image": True}
+    assert next(x for x in c["models"] if x["name"] == "Muse Wonder")["usd"] == 0.1
+    html = (out / "index.html").read_text()
+    assert "Real model output here: Voice Transcribe, Muse Wonder, Muse Image." in html
+    assert "No Meta model ran" not in html
+
+
+def test_a_dry_run_treatment_is_never_credited_as_a_model_run(repo):
+    make_render(repo)
+    tp = treatment_file(repo, fixture=True)
+    t = json.loads(tp.read_text())
+    t["spend"] = {"ledger": [{"kind": "wonder:treatment", "usd": 0.0}]}   # a dry run can log its fixture calls
+    tp.write_text(json.dumps(t))
+    out, m = build(repo, treatment_path=tp)
+    c = json.loads((out / "data" / "credits.json").read_text())
+    assert not next(x for x in c["models"] if x["name"] == "Muse Wonder")["ran"]

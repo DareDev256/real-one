@@ -144,18 +144,48 @@ def test_reasons(stem, run, shots, treatment=None):
     return reasons
 
 
-def banner_html(reasons):
+def banner_html(reasons, ran=()):
     items = "".join(f"<li>{_esc(r)}</li>" for r in reasons)
+    said = f"Real model output here: {', '.join(ran)}." if ran else "No Meta model ran."
     return ('<aside class="test-banner" id="test-banner" role="note" aria-label="Test render">'
-            '<strong>TEST RENDER</strong><span>Not the film. No Meta model ran.</span>'
+            f'<strong>TEST RENDER</strong><span>Not the film. {_esc(said)}</span>'
             f'<ul>{items}</ul></aside>')
+
+
+def models_that_ran(run, shots, treatment, out_dir):
+    """Which Meta models really produced something on this page, from evidence only: SAM 3.1 when the masks are
+    not the local test engine; Muse Image when a world came from a prompt with a Muse Image file behind it
+    (out/worlds/muse_*.json); Muse Wonder and Voice Transcribe when the treatment is a keyed run whose spend
+    ledger names them. -> {model id: US$ or None}."""
+    got = {}
+    engine = str(run.get("engine", ""))
+    if engine and "Apple Vision" not in engine and "TEST ONLY" not in engine and run.get("mode") != "local test":
+        got["sam-3.1"] = None
+    names = [w for src in shots.get("world_sources", []) for w in src.get("worlds", [])]
+    metas = []
+    for f in sorted((Path(out_dir) / "worlds").glob("muse_*.json")):
+        try:
+            metas.append(json.loads(f.read_text()).get("prompt", ""))
+        except (OSError, ValueError):
+            pass
+    if names and any(any(m.startswith(n) for m in metas) for n in names):
+        got["muse-image"] = None
+    if treatment is not None and str(treatment.get("mode", "")).lower() == "keyed":
+        ledger = (treatment.get("spend") or {}).get("ledger", [])
+        w = sum(float(x.get("usd", 0) or 0) for x in ledger if str(x.get("kind", "")).startswith("wonder"))
+        v = sum(float(x.get("usd", 0) or 0) for x in ledger if str(x.get("kind", "")).startswith("voice"))
+        if any(str(x.get("kind", "")).startswith("wonder") for x in ledger):
+            got["muse-wonder"] = round(w, 4)
+        if any(str(x.get("kind", "")).startswith("voice") for x in ledger):
+            got["voice-transcribe"] = round(v, 5)
+    return got
 
 
 def _esc(s):
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def build_credits(reasons, run, credits_file=None, repo=REPO):
+def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None):
     """credits.json for the page. A test render gets TEST credits generated here (no model ran, US$0.00 billed);
     a real render must bring its own file with the real calls, frames and US$."""
     if credits_file is None:
@@ -168,12 +198,15 @@ def build_credits(reasons, run, credits_file=None, repo=REPO):
             "muse-wonder": "not run; the treatment beside the video is a FIXTURE",
             "muse-image": "three procedural test plates (TEST ONLY)",
         }
+        ran = ran or {}
+        real = [m["name"] for m in META_MODELS if m["id"] in ran]
         return {
             "status": "TEST",
-            "statement": "No Meta model ran for this render. Each line below names what the model does in Real One "
-                         "and what stood in for it here.",
-            "models": [dict(m, ran=False, stand_in=stand_in[m["id"]], calls=0, frames=0, usd=0.0)
-                       for m in META_MODELS],
+            "statement": ("A test render. Each line below names what the model does in Real One and whether it "
+                          "ran here: " + (", ".join(real) + " did; the rest were stood in for." if real else
+                                          "none did.")),
+            "models": [dict(m, ran=m["id"] in ran, stand_in=None if m["id"] in ran else stand_in[m["id"]], calls=0,
+                            frames=0, usd=float(ran.get(m["id"]) or 0.0)) for m in META_MODELS],
             "code": OUR_CODE,
             "total_usd": float(run.get("billed_usd", 0.0) or 0.0),
         }
@@ -390,7 +423,8 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
             lyrics = json.loads(lp.read_text())
 
     reasons = test_reasons(stem, run, shots, treatment)
-    credits = build_credits(reasons, run, credits_path, repo)
+    ran = models_that_ran(run, shots, treatment, out_dir) if reasons else {}
+    credits = build_credits(reasons, run, credits_path, repo, ran=ran)
 
     template = (web / "index.html").read_text()
     if BANNER_MARK not in template:
@@ -435,7 +469,8 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
     }
     dump(data / "manifest.json", manifest)
 
-    page = template.replace(BANNER_MARK, banner_html(reasons) if reasons else "")
+    page = template.replace(BANNER_MARK, banner_html(reasons, [m["name"] for m in META_MODELS if m["id"] in ran])
+                            if reasons else "")
     page = page.replace('data-test="0"', f'data-test="{1 if reasons else 0}"')
     (out / "index.html").write_text(page)
     for f in PAGE_FILES[1:]:
