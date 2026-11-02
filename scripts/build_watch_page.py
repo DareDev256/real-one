@@ -50,6 +50,7 @@ PAGE_FILES = ("index.html", "watch.css", "watch.js", "vercel.json")
 BANNER_MARK = "<!-- TEST_BANNER -->"
 FOOT_MARK = "<!-- FOOT_SOURCE -->"
 FOOT_REAL = "FOOTAGE AND SONG ARE THE ARTIST'S OWN."
+FOOT_LICENSED = "THE FOOTAGE IS THE PERFORMER'S OWN. SONG: {credit}"
 FOOT_TEST = "TEST RENDER: THE FOOTAGE AND SONG HERE ARE STAND-INS."
 DIST_MARK = ".realone-watch"
 FINISHED_LOOKS = ("collage", "clean")
@@ -226,7 +227,21 @@ def _esc(s):
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None):
+def song_claim(reasons, own_song=False, song_credit=None):
+    """What the page may say about the song. A test render says stand-in. A real render must say which: the
+    artist's own master (--own-song) or a licensed track named with its credit line (--song-credit). The page
+    never assumes the song is the artist's own: the Nov 2 demo is a performance of a CC BY track."""
+    if reasons:
+        return None
+    if own_song and song_credit:
+        raise Refuse("--own-song and --song-credit contradict each other; pick one")
+    if not own_song and not song_credit:
+        raise Refuse("a real render must say whose song it is: --own-song (the artist's own master) or "
+                     "--song-credit 'TEXT' (a licensed track, with the credit its licence asks for)")
+    return {"own": True} if own_song else {"own": False, "credit": " ".join(str(song_credit).split())}
+
+
+def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None, song=None):
     """credits.json for the page, generated from evidence (`ran`, from models_that_ran) unless a hand-written file
     is given. TEST when there are reasons, REAL otherwise. The total is what the Meta models' output on this page
     cost, summed from the same evidence (a cached render bills US$0.00 itself)."""
@@ -242,7 +257,9 @@ def build_credits(reasons, run, credits_file=None, repo=REPO, ran=None):
             stand_in = {k: "not used on this render" for k in stand_in}
         made = [m["name"] for m in META_MODELS if m["id"] in ran and ran[m["id"]].get("output", True)]
         silent = [m["name"] for m in META_MODELS if m["id"] in ran and not ran[m["id"]].get("output", True)]
-        rest = ("the footage and song are the artist's own." if not reasons
+        rest = ("the footage and song are the artist's own." if not reasons and (song or {}).get("own")
+                else f"the footage is the performer's own; the song is licensed: {song['credit']}"
+                if not reasons and song else "the footage is the performer's own." if not reasons
                 else "the footage and song are the stand-ins." if len(ran) == len(META_MODELS)
                 else "the rest were stood in for.")
         said = ((", ".join(made) + " made what you see here" if made else "No model's output is on this page")
@@ -462,7 +479,7 @@ def prepare_out(out):
 
 def build(tag, section, treatment_path=None, credits_path=None, out=None, look=None, out_dir=None, repo=REPO,
           web=WEB, encoder=encode, prober=probe, posterer=poster, log=print, stand_in=None, direct_log=None,
-          thumber=still_at):
+          thumber=still_at, own_song=False, song_credit=None):
     out_dir = Path(out_dir or repo / "out")
     out = Path(out or web / "dist")
     refuse_own(out, repo)
@@ -526,7 +543,8 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
     loop_ledger = ((load_json(direct_log, "director log", repo).get("spend") or {}).get("ledger", [])
                    if review is not None and review["mode"] == "keyed" else [])
     ran = models_that_ran(run, shots, treatment, out_dir, loop_ledger, lyrics)
-    credits = build_credits(reasons, run, credits_path, repo, ran=ran)
+    song = song_claim(reasons, own_song, song_credit)
+    credits = build_credits(reasons, run, credits_path, repo, ran=ran, song=song)
 
     template = (web / "index.html").read_text()
     if BANNER_MARK not in template:
@@ -585,7 +603,9 @@ def build(tag, section, treatment_path=None, credits_path=None, out=None, look=N
     if FOOT_MARK not in page:
         raise Refuse(f"web/index.html has lost its {FOOT_MARK} marker; the footer would claim the footage is the "
                      f"artist's own on a test render")
-    page = page.replace(FOOT_MARK, FOOT_TEST if reasons else FOOT_REAL)
+    foot = (FOOT_TEST if reasons else FOOT_REAL if song["own"]
+            else FOOT_LICENSED.format(credit=_esc(song["credit"].upper())))
+    page = page.replace(FOOT_MARK, foot)
     (out / "index.html").write_text(page)
     for f in PAGE_FILES[1:]:
         shutil.copy2(web / f, out / f)
@@ -607,10 +627,12 @@ def main(argv=None):
                                       "9146 (free license)'; puts it on the TEST banner")
     p.add_argument("--direct-log", help="out/director_<tag>_log.json from `direct`: shows Wonder's notes on its own "
                                         "cut, the revision, and the world before and after")
+    p.add_argument("--own-song", action="store_true", help="a real render: the song is the artist's own master")
+    p.add_argument("--song-credit", help="a real render of a licensed track: the credit line its licence asks for")
     a = p.parse_args(argv)
     try:
         build(a.tag, a.section, a.treatment, a.credits, a.out, a.look, stand_in=a.stand_in,
-              direct_log=a.direct_log)
+              direct_log=a.direct_log, own_song=a.own_song, song_credit=a.song_credit)
     except Refuse as e:
         print(f"build_watch_page: REFUSED: {e}", file=sys.stderr)
         return 2

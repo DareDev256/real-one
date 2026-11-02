@@ -243,7 +243,7 @@ def test_local_masks_alone_put_the_banner_up(repo):
 
 def test_real_render_has_no_banner(repo):
     make_render(repo, stem="t_hook", local=False, plates=False)
-    out, m = build(repo, credits_path=real_credits(repo))
+    out, m = build(repo, credits_path=real_credits(repo), own_song=True)
     html = (out / "index.html").read_text()
     assert 'id="test-banner"' not in html and 'data-test="0"' in html and bw.BANNER_MARK not in html
     assert m["test"] is False
@@ -253,7 +253,7 @@ def test_a_real_render_gets_real_credits_from_evidence(repo):
     """Monday's real take must not wait on a hand-written credits file: the credits come from the same evidence
     as a test render's, say REAL, credit only what ran, and never call a stand-in a stand-in."""
     make_render(repo, stem="t_hook", local=False, plates=False)
-    out, m = build(repo)
+    out, m = build(repo, own_song=True)
     c = json.loads((out / "data" / "credits.json").read_text())
     html = (out / "index.html").read_text()
     assert c["status"] == "REAL" and m["test"] is False and 'id="test-banner"' not in html
@@ -453,3 +453,19 @@ def test_the_footer_never_calls_stand_in_footage_the_artists_own(repo):
     (repo / "web" / "index.html").write_text((repo / "web" / "index.html").read_text().replace(bw.FOOT_MARK, "x"))
     with pytest.raises(bw.Refuse, match="FOOT_SOURCE"):
         build(repo)
+
+
+def test_a_real_render_must_say_whose_song_it_is(repo):
+    """The Nov 2 demo is James performing a CC BY track, so a real page may not assume the song is the artist's
+    own: it refuses until told, refuses a contradiction, and a licensed track puts its credit on the page."""
+    make_render(repo, stem="t_hook", local=False, plates=False)
+    with pytest.raises(Refuse, match="must say whose song it is"):
+        build(repo)
+    with pytest.raises(Refuse, match="contradict"):
+        build(repo, own_song=True, song_credit="x")
+    credit = '"What I Gotta Do" by J.Lang, CC BY 2.5'
+    out, _ = build(repo, song_credit=credit)
+    html = (out / "index.html").read_text()
+    c = json.loads((out / "data" / "credits.json").read_text())
+    assert bw.FOOT_REAL not in html and "THE FOOTAGE IS THE PERFORMER'S OWN. SONG: &quot;WHAT I GOTTA DO" in html
+    assert c["statement"].endswith("the song is licensed: " + credit) and "artist's own" not in c["statement"]

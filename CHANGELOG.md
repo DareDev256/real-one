@@ -63,6 +63,14 @@
   architecture, the vision projector and the chat template (read in its source, Nov 1). 2 tests.
 - **README:** the Muse Spark Open row said it writes treatments; it never ran with a key. It now says "wired, not
   yet run".
+- **The demo's song is a licensed track (Nov 2).** James has no release of his own, so the demo is him performing a
+  Creative Commons BY track from ccMixter (three human-made candidates on the shoot card; Pixabay's vocal rap was
+  4 of 6 labelled "AI generated", which a pitch of "the artist is never generated" cannot use). The watch page no
+  longer assumes a real render's song is the artist's own: it refuses until told `--own-song` or
+  `--song-credit 'TEXT'`, refuses both at once, and a licensed track puts its credit in the footer and the credits
+  statement ("the footage is the performer's own; the song is licensed: ..."). The pipeline diagram's footer said
+  "Footage and song are the artist's own"; it now says the song is the artist's master or a licensed track. 1 test;
+  4 mutations, all red.
 - **Monday's chain, walked before the take exists.** Every flag in the edit kit checked against `--help`. Two real
   gaps found and closed: `direct` without `--treatment` would have re-planned (a different treatment from the
   full render's), so the kit now passes it; and the watch page refused a real render without a hand-written
