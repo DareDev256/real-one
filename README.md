@@ -26,6 +26,8 @@ face or illustrate the lyrics word for word. Real One never generates the artist
 take, and the Real Receipt proves it frame by frame: switch it on and everything the models made turns grey while
 you stay in colour.
 
+<p><img src="docs/media/architecture.png" width="900" alt="Real One pipeline: SAM 3.1 cut-out, beat grid and sync, Voice Transcribe, the Muse Wonder director with the literal-lyrics guard, Muse Image worlds, the tracked stage, the compositor with camera moves, Hook Freeze and the Real Receipt, and the review loop"></p>
+
 ## How it uses Meta's models
 
 | Model | Its job in Real One |

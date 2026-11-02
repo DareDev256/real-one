@@ -18,4 +18,12 @@ record of what shipped.
   section and a tool loop that renders and watches the result; dry run proven on fixtures, see `docs/director.md`
 - [~] Subtext Cut: the director's rule (direct from what the song means, not what it says) and the literal-lyrics
   guard are built and tested on fixtures; the first keyed treatment on a real song is next
-- [ ] 3-minute demo video
+- [x] Tracked stage (Nov 1, `--stage tracked`, docs/stage.md): floor track, camera solve (tripod takes too), worlds in
+  depth on Core ML, filmed through the take's camera; blind critic 2/10 -> 7/10 against real footage (lab plate)
+- [x] Camera moves on the beat (Nov 1, `--move`, `--moves-from`, `--from-treatment`): dolly zoom, crash zoom, world
+  swap; the director places them per section
+- [x] First keyed Muse Wonder treatment (Nov 1, test song): US$0.15, audio in, moves placed; the keyed `direct` loop
+  (render, watch, revise) is next
+- [x] SAM 3.1 decode ~100x faster (Nov 1, compiled codec, byte-identical)
+- [ ] The artist's real take
+- [ ] 3-minute demo video (the edit kit is in the application folder)
