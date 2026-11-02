@@ -99,6 +99,12 @@ class MetaBackend:
             raise Refuse(f"Muse Wonder rejected the {purpose} request (HTTP 400): {msg[:400]}") from None
         except openai.APIError as e:
             raise Refuse(f"Muse Wonder {purpose} failed: {type(e).__name__}: {_scrub(e, self._key)[:400]}") from None
+        except RuntimeError as e:  # the stream ended without response.completed (incomplete or failed): refuse
+            self.meter.charge(f"wonder:{purpose}:unfinished", wonder_usd(est_input_tokens, max_out),
+                              {"note": "stream ended without response.completed; charged at the ceiling, unmeasured"})
+            raise Refuse(f"Muse Wonder {purpose} did not finish ({e}); counted at its ceiling US$"
+                         f"{wonder_usd(est_input_tokens, max_out):.4f}. Likely out of output tokens "
+                         f"(max_output_tokens {max_out}, reasoning effort {effort}).") from None
         u = resp.usage
         usage = {"input_tokens": getattr(u, "input_tokens", 0) or 0,
                  "cached_tokens": getattr(getattr(u, "input_tokens_details", None), "cached_tokens", 0) or 0,

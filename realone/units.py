@@ -154,6 +154,14 @@ class Ctx:
                                                           "stage_G", "stage_dz", "stage_zs") if k in arr.files})
         # camera moves on the beat (realone/stage/moves.py): a world per frame (swap), a crash zoom per frame
         self.frame_world = arr["frame_world"] if "frame_world" in arr.files else None
+        # hits on the beat (realone/hits.py): punch, flash and jolt per frame, on the finished frame
+        self.beat = ((arr["hit_punch"], arr["hit_flash"], arr["hit_dx"], arr["hit_dy"])
+                     if "hit_punch" in arr.files else None)
+        # lyric moments (realone/moments.py): ignite (frames since, which, the artist's box) and slam (which, age)
+        self.mo = ((arr["mo_ign"], arr["mo_ign_id"], arr["mo_ign_box"], arr["mo_slam"], arr["mo_slam_age"])
+                   if "mo_ign" in arr.files else None)
+        self.slam_words = d.get("slam_words") or []
+        self.bursts, self.slam_painter = {}, None
         # lyrics in the world (realone/lyrictext.py): which line, how many words, how long since the last landed
         self.lyrics = None
         if "lyr_line" in arr.files and d.get("lyric_lines"):
@@ -246,6 +254,11 @@ def render_unit(u):
             wk = world_key(world, front)  # the freeze proof is the world itself, taken before any lyrics
             if c.lyrics is not None and c.lyrics[0][i] >= 0:
                 world = _with_lyrics(c, i, sh_world, world)
+            if c.mo is not None and c.mo[0][i] >= 0:  # an ignite: embers rise behind him, the world takes the heat
+                from realone import moments as MO
+                j = int(c.mo[1][i])
+                burst = c.bursts.setdefault(j, MO.EmberBurst(j))
+                world, front = MO.ignite(world, front, int(c.mo[0][i]), MO.box_out(c.mo[2][i], crop), burst)
             per_out = _looks_for(c, i)
             looks = sorted(set(per_out.values()))
             use_nat = nf if c.native_frames[i] else None
@@ -266,6 +279,13 @@ def render_unit(u):
             if prev_thumb is not None:
                 rec["plate_steps"][j] = float(np.abs(th - prev_thumb).mean())
             prev_thumb = th
+            if c.mo is not None and c.mo[3][i] >= 0:  # a slam: the word in front of him, never on the Real Receipt
+                from realone import moments as MO
+                if c.slam_painter is None:
+                    c.slam_painter = MO.SlamPainter(c.slam_words)
+                sj, sa = int(c.mo[3][i]), int(c.mo[4][i])
+                frames = {lk: fr_ if lk == "receipt" else c.slam_painter.apply(fr_, sj, sa)
+                          for lk, fr_ in frames.items()}
             if c.bullet:  # the punch and the flash on the freeze downbeat, once per look
                 frames = {lk: apply_hit(fr_, float(c.punch[i]), float(c.flash[i])) for lk, fr_ in frames.items()}
             if c.crash is not None and c.crash[0][i] > 1.0001:  # the crash zoom: the whole finished frame
@@ -273,6 +293,10 @@ def render_unit(u):
                 sc, cx, cy = c.crash
                 frames = {lk: apply_crash(fr_, float(sc[i]), float(cx[i]), float(cy[i]),
                                           float(sc[i - 1]) if i > 0 else 1.0) for lk, fr_ in frames.items()}
+            if c.beat is not None:  # the frame kicks on the beat, after everything else (Receipt share unchanged)
+                from realone import hits as HT
+                bp, bf, bx_, by_ = (float(a_[i]) for a_ in c.beat)
+                frames = {lk: HT.apply(fr_, bp, bf, bx_, by_) for lk, fr_ in frames.items()}
             for out, look in per_out.items():
                 encs[out].stdin.write(frames[look].tobytes())
                 rec["filmed"][out][j] = inf[look].get("filmed", np.nan)

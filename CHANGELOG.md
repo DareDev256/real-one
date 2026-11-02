@@ -1,6 +1,35 @@
 # Changelog
 
 ## Unreleased
+- **Hits on the beat (`--hits`, Nov 2).** James on the Savv render: "it should have hit or effects based off the
+  beat ... it just looks like a rotoscoped person with a background." The finished frame now kicks with the song:
+  every downbeat a zoom punch (4.5%, easing back over 6 frames) and an exposure kick (x1.22 for 3 frames; a first
+  version mixed toward white and read as haze, so it is a gain now and blacks stay black), the backbeats a smaller
+  punch (1.8%), the hook 1.6x harder with a short jolt on each downbeat (its direction from the frame index, so a
+  re-render is the same video). No chromatic aberration. Applied after the compositor, so the artist's pixels move
+  with the frame and are never generated; the frames a hit changes are designed changes for the render's cut
+  check (the stand-in hook still passes 3/3 cuts on plan). `realone/hits.py`, 8 tests, 8 mutations all red.
+- **Lyric moments (`--moments`, Nov 2).** James: "get burnt up ... shouldn't this thing be generating fire?", and
+  the bar "what would Kendrick Lamar do?". A few words a section get a visual hit on the beat they are sung:
+  - **ignite**: an ember burst rises from behind the artist (drawn in the world layer; a fifth of the embers in the
+    front layer), the world takes a warm flash and a glow climbs from his feet. The first lab version read as
+    welding sparks (thin, white); the embers are now short orange streaks with a heat haze.
+  - **slam**: the word slams in front of him (Helvetica Neue Condensed Black, a thin edge and a soft shadow, not a
+    meme stroke), 0.67 s, fading out. It is drawn on every look except the Real Receipt, whose filmed share is
+    measured from his mask, so the receipt stays a true count.
+  - **Muse Wonder picks them**: `python -m realone.director moments --treatment T` is one call that reads each
+    section's lyric and subtext and returns the words and effects (`picks`). Checked locally before anything is
+    kept: the word must be sung in that section, at most 2 a section and 8 a song, never a word on a local
+    violence list (Meta employees judge; Savv's drill verse was flagged for exactly this). On the stand-in song,
+    US$0.024: slam "good" on both hooks ("repeated as refusal rather than belief"), ignite "Lights" ("sleepless
+    4 a.m. lights catch as the night's endurance turns visible"), slam "good" on the first verse and "dream" on
+    the second. Without a director pick, words about fire ignite on their own; `--moment WORD:EFFECT` hand-picks.
+  - Two live failures fixed on the way: the strict schema sent to Wonder kept a stripped LOCAL_ONLY key in
+    `required` (HTTP 400, nothing billed; `wire_schema` now drops it from `required` too, and a test walks every
+    wire schema); then a low token cap ran out mid-reply, and the stream's `RuntimeError` escaped the backend
+    unmetered (now a refusal counted at its ceiling, US$0.044 at most).
+  - `realone/moments.py`, `realone/director/moments.py`, 16 tests, 14 mutations all red. Not tested yet: that the
+    render loop skips the slam on the Receipt look (the code path is one dict comprehension in `units.py`).
 - **The director's loop ran keyed through every step (Nov 1; neither run reached `finish`, see below).** `direct --stage` on the stand-in hook clip: Muse Wonder
   generated the world, rendered through the tracked stage with SAM 3.1 masks, watched its own cut, said "revise",
   rewrote the world prompt, regenerated and re-rendered (US$0.45, 16 calls; the run then stopped on our own

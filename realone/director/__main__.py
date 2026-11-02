@@ -1,8 +1,9 @@
-"""python -m realone.director {plan, direct, review} ...
+"""python -m realone.director {plan, direct, review, moments} ...
 
   plan    timeline + lyrics + Muse Wonder treatment + literal-lyrics guard -> out/<..>director_<tag>_treatment.json
   direct  plan, then the agentic loop: worlds, renders, watch, one revision pass -> ..._log.json + the renders
   review  watch one existing render against a treatment -> ..._review.json
+  moments one Wonder call picks the lyric moments (ignite, slam) of a treatment -> ..._moments_treatment.json
 
 Keyed runs need MODEL_API_KEY (refused before any work without it), quote US$ and CA$ first, and refuse a ceiling
 over --cap-usd (US$2) without --yes-spend. --dry-run replays hand-written FIXTURE responses (never real model
@@ -65,6 +66,14 @@ def build_parser():
     di.add_argument("--stage", action="store_true",
                     help="keyed renders through the tracked stage (the world filmed through the take's camera; "
                          "needed for a dolly move)")
+    mo = sub.add_parser("moments", help="Wonder picks the lyric moments (ignite, slam) of an existing treatment")
+    mo.add_argument("--treatment", required=True, help="the treatment file (its lyric and subtext are read)")
+    mo.add_argument("--tag", default="main")
+    mo.add_argument("--effort", default="medium", choices=["minimal", "low", "medium", "high", "xhigh", "max"])
+    mo.add_argument("--dry-run", action="store_true")
+    mo.add_argument("--script", default=DEFAULT_SCRIPT)
+    mo.add_argument("--cap-usd", type=float, default=0.25, help="refuse a ceiling over this (US$)")
+    mo.add_argument("--yes-spend", action="store_true")
     rv = sub.add_parser("review", help="watch one render against its treatment")
     rv.add_argument("--render", required=True, help="an MP4 under out/")
     rv.add_argument("--treatment", required=True, help="the treatment file it was made from")
@@ -151,11 +160,45 @@ def plan_stage(a, backend, meter, prefix, timeline):
     return rec, path, ly, res
 
 
+def moments_cmd(a):
+    """One Wonder call: the treatment's lyric moments. Writes a copy of the treatment with `moments` per section."""
+    from realone.director import moments as dmo
+    _exists(a.treatment)
+    rec = json.loads(Path(a.treatment).read_text())
+    if not rec.get("sections"):
+        raise Refuse(f"{a.treatment}: not a treatment (no sections)")
+    if a.dry_run:
+        backend, meter = FixtureBackend(a.script), None
+        print("director: DRY RUN moments (FIXTURE reply, no call)")
+    else:
+        key = budget.require_key()
+        est = len(json.dumps(dmo.brief(rec))) // 4 + 600
+        q = {"lines": [], "ceiling_usd": budget.wonder_ceiling("moments", est)}
+        q["ceiling_cad"] = round(q["ceiling_usd"] * budget.USD_TO_CAD, 2)
+        print(f"director: moments quote: up to US${q['ceiling_usd']:.3f} (about CA${q['ceiling_cad']:.2f}), one call")
+        meter = budget.Meter(budget.gate({**q, "expected_usd": q["ceiling_usd"]}, a.cap_usd, a.yes_spend), 1)
+        backend = MetaBackend(key, meter)
+    out = dmo.pick(backend, rec, effort=a.effort)
+    prefix = LOCAL_PREFIX if a.dry_run else ""
+    out["moments_pick"]["from_treatment"] = str(a.treatment)
+    out["moments_pick"]["spend"] = meter.summary() if meter else {"spent_usd": 0.0}
+    path = write_json(OUT / f"{prefix}director_{a.tag}_moments_treatment.json", out)
+    for r in out["sections"]:
+        for m in r["moments"]:
+            print(f"  #{r['index']} {m['effect']:<6s} {m['word']!r}: {m.get('why', '')}")
+    for d in out["moments_pick"]["dropped"]:
+        print(f"  dropped {d['moment'].get('word')!r}: {d['why']}")
+    print(f"director: {out['moments_pick']['kept']} moments [{out['moments_pick']['source']}] -> {path}")
+    return 0
+
+
 def main(argv=None):
     a = build_parser().parse_args(argv)
     try:
         if a.cmd == "review":
             return review(a)
+        if a.cmd == "moments":
+            return moments_cmd(a)
         _exists(a.song, a.lyrics, getattr(a, "clip", None))
         brain = getattr(a, "brain", "wonder")
         if brain == "spark-open" and not a.no_transcribe:

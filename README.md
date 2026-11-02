@@ -60,6 +60,11 @@ loop, render, watch, revise, re-render, on a stand-in clip). Muse Glimmer and Sp
   front of it because it is part of the world layer. Timed to the beat grid, not aligned to the vocal. A blind editor
   critic scored it 5.5/10 against viral lyric clips and 5/10 for reading as 3D (from 4 and 2 a round earlier); the
   words are readable about 60% of the time on the stand-in, where the performer's arms often cross them.
+- **Hits on the beat** (`--hits`): every downbeat punches the frame (a zoom kick and an exposure kick), the snare
+  beats a smaller kick, harder with a jolt on the hook.
+- **Lyric moments** (`--moments`): Muse Wonder reads the lyric and picks two or three words a section for a visual
+  hit on the beat they are sung: **ignite** (embers rise behind you and the world takes the heat) or **slam** (the
+  word slams in front of you). Never a word about violence, and never drawn on the Real Receipt.
 - **Camera moves on the beat** (`--move`): a **dolly zoom** on the hook drop (the world stretches behind you while
   you keep your size, because the stage knows the world's depth and the phone's camera), a **crash zoom** toward
   your face on every downbeat, and a **world swap** every bar with the floor locked under your feet. All of them

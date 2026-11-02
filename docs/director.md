@@ -223,3 +223,23 @@ frozen hook). The director picks it from what the section means, the same way it
 to `realone render --move` (see docs/stage.md); a dolly needs the tracked stage (`direct --stage`).
 `realone render --moves-from <treatment.json>` takes the moves for a whole-song render.
 
+## Lyric moments (added 2026-11-02)
+
+`python -m realone.director moments --treatment out/director_<tag>_treatment.json [--effort low] [--dry-run]`
+
+One Muse Wonder call (strict schema `lyric_moments`, top-level key `picks`) reads each section's lyric and the
+subtext the treatment already wrote, and names the few words that get a visual hit on the frame they are sung:
+`ignite` (an ember burst behind the artist, a warm flash) or `slam` (the word in front of him). The brief asks for
+restraint: most verses 0 or 1, at most 2 a section, 8 a song.
+
+Checked locally (`realone/director/moments.py: check`) before anything is kept, and every drop is reported in
+`moments_pick.dropped`: the word must be sung in the section it names; one word, not a phrase; never a word on the
+local VIOLENCE list; the caps. The output is a copy of the treatment with `moments` on each section
+(`out/director_<tag>_moments_treatment.json`); `moments` is LOCAL_ONLY in the treatment schema, so the main
+treatment call never asks for it. The renderer reads it with `--from-treatment ... --moments`, only for the
+sections the render covers.
+
+Quote before the call: up to US$0.164 at the 8,000-token output cap (default `--cap-usd 0.25`). Measured on the
+stand-in song, effort low: US$0.024 (839 in, 1,051 out, 789 of them reasoning). At effort medium with a 2,000-token
+cap the reply ran out of tokens mid-way; that now refuses and is counted at its ceiling.
+

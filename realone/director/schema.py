@@ -17,7 +17,7 @@ MOVES = ("none", "dolly", "crash", "swap")  # realone/stage/moves.py KINDS, plus
 
 # Section fields only the revision pass writes (never asked of the model in the treatment): allowed when a saved
 # treatment is read back, left out of the strict schema sent to Wonder (strict mode needs every property required).
-LOCAL_ONLY = {"particles"}
+LOCAL_ONLY = {"particles", "moments"}
 
 SECTION_SCHEMA = {
     "type": "object",
@@ -42,6 +42,12 @@ SECTION_SCHEMA = {
                                 "crash or swap"},
         "particles": {"type": "string", "enum": ["dust", "rain", "embers", "none"],
                       "description": "the particle overlay, set only by a revision"},
+        "moments": {"type": "array", "maxItems": 2, "description": "lyric moments, set only by the moments pick "
+                                                                  "(realone/director/moments.py)",
+                    "items": {"type": "object", "additionalProperties": False, "required": ["word", "effect"],
+                              "properties": {"word": {"type": "string", "minLength": 1, "maxLength": 40},
+                                             "effect": {"type": "string", "enum": ["ignite", "slam"]},
+                                             "why": {"type": "string", "maxLength": 240}}}},
         "why": {"type": "string", "minLength": 8, "maxLength": 240, "description": "one line"},
     },
 }
@@ -135,6 +141,8 @@ def wire_schema(schema):
             out[k] = {name: wire_schema(sub) for name, sub in v.items() if name not in LOCAL_ONLY}
         elif k == "items":
             out[k] = wire_schema(v)
+        elif k == "required":  # a key stripped from properties must not stay required (strict mode: HTTP 400)
+            out[k] = [r for r in v if r not in LOCAL_ONLY]
         else:
             out[k] = v
     return out

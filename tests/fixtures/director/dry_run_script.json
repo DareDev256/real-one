@@ -6,5 +6,6 @@
   "guard_reask": ["guard_rewrites.json"],
   "loop": ["loop_script.json"],
   "watch": ["watch_1_hook_collage.json", "watch_2_hook_receipt.json"],
-  "decide": ["decide_code_driver.json"]
+  "decide": ["decide_code_driver.json"],
+  "moments": ["moments_1.json"]
 }

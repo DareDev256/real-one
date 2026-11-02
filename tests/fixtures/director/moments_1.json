@@ -1,0 +1,11 @@
+{
+  "_FIXTURE": "Hand-written lyric-moments reply for the dry run on the synthetic test song. NOT model output: no model read these lyrics. One slam on the hook's word, one ignite on the hook's last line, and one pick that the local check must drop (not sung in that section).",
+  "response": {
+    "picks": [
+      {"section": 2, "word": "good", "effect": "slam", "why": "the hook's whole lie sits in this one word"},
+      {"section": 2, "word": "Lights", "effect": "ignite", "why": "the lights coming on at four is where he cannot hide it any more"},
+      {"section": 1, "word": "fire", "effect": "ignite", "why": "FIXTURE: a word that is not in this section, so the check drops it"}
+    ],
+    "why": "FIXTURE: two moments on the hook and none on the verses, so they land."
+  }
+}

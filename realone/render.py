@@ -177,6 +177,8 @@ def apply_treatment(a):
     a._treatment_reveal = [s["index"] for s in t["sections"] if s.get("look") == "receipt"]
     a._treatment_particles = {s["index"]: s["particles"] for s in t["sections"] if s.get("particles")}
     a._treatment_lyrics = {s["index"]: list(s.get("lyric") or []) for s in t["sections"]}
+    a._treatment_moments = ({s["index"]: list(s.get("moments") or []) for s in t["sections"]}
+                            if any("moments" in s for s in t["sections"]) else None)
 
 
 def _treatment_specs(a, indices, secs):
@@ -434,6 +436,16 @@ def render(a):
             x0, y0, cw, ch = crops[i]
             ox[i], oy[i] = (fx[i] - x0) * W / cw, (fy[i] - y0) * W / cw
         arrays["crash_scale"], arrays["crash_cx"], arrays["crash_cy"] = sc, ox, oy
+    beat_designed = set()
+    if getattr(a, "hits", False):  # the frame kicks on the beat (realone/hits.py)
+        from realone import hits as HT
+        hp = HT.profile(tl, s0, n, FPS)
+        arrays["hit_punch"], arrays["hit_flash"], arrays["hit_dx"], arrays["hit_dy"] = (
+            hp["punch"], hp["flash"], hp["dx"], hp["dy"])
+        beat_designed = hp["designed"]
+        plan["hits"] = {"frames_punched": int((hp["punch"] > 1.0).sum()), "flashes": int((hp["flash"] > 0).sum()),
+                        "jolts": int((np.abs(hp["dx"]) > 0).sum())}
+        print(f"hits on the beat: {plan['hits']}")
     lyric_lines = None
     if getattr(a, "lyrics_in_world", False):  # the lyric lines written into the world, a word on each beat
         from realone import lyrictext as LT
@@ -445,6 +457,39 @@ def render(a):
         arrays.update(lyr_arr)
         print(f"lyrics in the world: {len(lyric_lines)} lines, {plan['lyrics_in_world']['words']} words, on "
               f"{plan['lyrics_in_world']['frames_with_words']} of {n} frames")
+    slam_words = []
+    if getattr(a, "moments", False) or getattr(a, "moment", None):  # lyric moments (realone/moments.py)
+        from realone import lyrictext as LT
+        from realone import moments as MO
+        if lyric_lines is not None:
+            mo_lines, mo_line, mo_shown = lyric_lines, arrays["lyr_line"], arrays["lyr_shown"]
+        else:  # each word's beat is needed even when the words are not drawn
+            try:
+                mo_lines, lyr_arr, _ = LT.for_render(getattr(a, "_treatment_lyrics", None), tl, s0, n, FPS)
+            except LT.LyricError as e:
+                raise Refuse(str(e).replace("--lyrics-in-world", "--moments")) from None
+            mo_line, mo_shown = lyr_arr["lyr_line"], lyr_arr["lyr_shown"]
+        if getattr(a, "moment", None):
+            chosen, source = [], "--moment (hand-picked)"
+            for spec in a.moment:
+                word, _, eff = spec.rpartition(":")
+                if eff not in MO.EFFECTS or not word.strip():
+                    raise Refuse(f"--moment {spec}: expected WORD:EFFECT with effect one of {', '.join(MO.EFFECTS)}")
+                chosen.append({"word": word, "effect": eff})
+        elif getattr(a, "_treatment_moments", None) is not None:
+            t1 = s0 + n / FPS  # only the sections this render covers: a verse pick must not land on a hook word
+            inside = [sec["index"] for sec in tl["sections"] if sec["start_s"] < t1 and sec["end_s"] > s0]
+            chosen = [m for i in inside for m in a._treatment_moments.get(i, [])]
+            source = "the director's pick (treatment `moments`)"
+        else:
+            chosen, source = None, "no director pick: words about fire ignite"
+        picked = MO.pick(mo_lines, chosen)
+        mo_arr, slam_words, mo_designed, mo_rep = MO.profile(picked, mo_line, mo_shown, n, boxes)
+        arrays.update(mo_arr)
+        beat_designed = set(beat_designed) | mo_designed  # a slam or an ignite flash changes the frame on purpose
+        plan["moments"] = {"source": source, "moments": mo_rep}
+        print(f"lyric moments ({source}): " + (", ".join(f"{m['word']} {m['effect']} @{m['frame']}" for m in mo_rep)
+                                                or "none in this render"))
     stage_rep = None
     if getattr(a, "stage", "off") == "tracked":
         from realone.stage import pipeline as STG
@@ -481,7 +526,8 @@ def render(a):
            "arrays": str(seg_dir / "arrays.npz"), "look_names": list(LOOKS), "outputs": looks,
            "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
            "cv_threads": max(1, (os.cpu_count() or 4) // workers),
-           "stage": stage_rep, "stage_cache": str(OUT / "work" / "depth"), "lyric_lines": lyric_lines}
+           "stage": stage_rep, "stage_cache": str(OUT / "work" / "depth"), "lyric_lines": lyric_lines,
+           "slam_words": slam_words}
     if stage_rep is not None:
         ctx["args"]["stage"] = "tracked"
     if os.environ.get("REALONE_KEEP_WORK"):  # debug: keep what a lab needs to rebuild any frame without a render
@@ -550,6 +596,7 @@ def render(a):
         hit = ({f["start_frame"] + j for f in plan["freezes"] for j in range(0, len(FZ.FLASH) + 1)}
                | {f["end_frame"] for f in plan["freezes"]}) if style == "bullet" else set()
         hit |= MV.designed_changes(moves)  # a crash snap or a world swap changes the whole frame on purpose
+        hit |= beat_designed  # so does a punch on the beat
         # a planned cut is confirmed by the strict global rule, or (busy handheld takes) as a clear local peak;
         # where a crash snap lands on the same downbeat the neighbourhood is busier still, and 2x is the bar
         matched = [p for p in planned if any(abs(c - p) <= 1 for c in cuts)

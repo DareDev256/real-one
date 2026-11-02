@@ -89,6 +89,15 @@ def build_parser():
     r.add_argument("--moves-from", metavar="TREATMENT_JSON",
                    help="take the camera moves from a director treatment (each section's `move`); sections outside "
                         "the rendered range are skipped")
+    r.add_argument("--hits", action="store_true",
+                   help="the frame kicks on the beat: a punch and a flash on every downbeat, a smaller punch on the "
+                        "backbeats, harder with a jolt on the hook")
+    r.add_argument("--moments", action="store_true",
+                   help="lyric moments: the words the director picked (the treatment's `moments`, from python -m "
+                        "realone.director moments) ignite or slam on the beat they are sung; with no pick in the "
+                        "treatment, words about fire ignite")
+    r.add_argument("--moment", action="append", metavar="WORD:EFFECT",
+                   help="hand-pick a lyric moment (effect ignite or slam); repeatable; outranks the treatment")
     r.add_argument("--lyrics-in-world", action="store_true",
                    help="write each section's lyric lines into the world behind the artist, a word on each beat "
                         "(needs --from-treatment for the lines; on --stage tracked they move with the camera)")
