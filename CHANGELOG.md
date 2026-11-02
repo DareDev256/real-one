@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-- **The director's loop ran keyed end to end (Nov 1).** `direct --stage` on the stand-in hook clip: Muse Wonder
+- **The director's loop ran keyed through every step (Nov 1; neither run reached `finish`, see below).** `direct --stage` on the stand-in hook clip: Muse Wonder
   generated the world, rendered through the tracked stage with SAM 3.1 masks, watched its own cut, said "revise",
   rewrote the world prompt, regenerated and re-rendered (US$0.45, 16 calls; the run then stopped on our own
   `--max-calls 16`, before watching the re-render). Its notes found two things the code had hidden from it:

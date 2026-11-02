@@ -23,7 +23,7 @@ record of what shipped.
 - [x] Camera moves on the beat (Nov 1, `--move`, `--moves-from`, `--from-treatment`): dolly zoom, crash zoom, world
   swap; the director places them per section
 - [x] First keyed Muse Wonder treatment (Nov 1, test song): US$0.15, audio in, moves placed
-- [x] The director's loop keyed end to end (Nov 1, stand-in clip): generate, render through the stage with SAM 3.1,
+- [x] The director's loop keyed through every step (Nov 1, stand-in clip; both runs stopped on our own caps before `finish`): generate, render through the stage with SAM 3.1,
   watch, revise, re-render, watch again (run 2: US$0.28, 19 calls; it judged the dolly "reads clearly" and turned
   the dust overlay off itself). Its first run exposed what the watch was not told (the move, the overlay): fixed
 - [x] Live watch page (Nov 1, real-one-watch.vercel.app): the stand-in render, the Real Receipt, Wonder's verbatim
