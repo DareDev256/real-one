@@ -42,6 +42,9 @@ def build_parser():
     r.add_argument("--match", type=float, default=0.35, help="LAB colour match strength")
     r.add_argument("--grain", type=float, default=5.0, help="film grain strength")
     r.add_argument("--no-despill", dest="despill", action="store_false", help="turn the edge despill off (A/B only)")
+    r.add_argument("--pockets", choices=("auto", "on", "off"), default="auto",
+                   help="cut enclosed background pockets out of the matte (auto: only for the --mask local test "
+                        "masks, which fill gaps; never for SAM 3.1, where an interior 'pocket' is the artist)")
     r.add_argument("--max-usd", type=float, default=1.00, help="refuse if the API spend quote is over this")
     r.add_argument("--max-minutes", type=float, default=20.0, help="stop a render that runs longer than this")
     r.add_argument("--max-seconds", type=float, default=40.0, help="longest section one run will render")

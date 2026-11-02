@@ -130,3 +130,28 @@ def test_despill_scales_with_the_close_up_reframe(scene):
     out = outs["receipt"]
     centre = out[H // 2 - 20:H // 2 + 20, W // 2 - 20:W // 2 + 20]
     assert sat(centre).mean() < 0.08, sat(centre).mean()  # grey world shows through, not the bluish room
+
+
+def test_pockets_are_cut_only_when_asked_and_never_along_the_outline():
+    """A bright patch inside the matte that matches the background: cut as a pocket only with pockets=True (the
+    gap-filling test masks); a patch lying along the matte's outline (a head's rim highlight) is never a pocket."""
+    import cv2
+    import numpy as np
+    from realone.common import H, W
+    from realone.composite import despill_estimate
+    fg = np.zeros((H, W, 3), np.float32)
+    fg[:] = (0.9, 0.9, 0.9)                         # a white background
+    hard = np.zeros((H, W), bool)
+    hard[500:1500, 300:800] = True
+    fg[hard] = (0.25, 0.18, 0.12)                   # the artist
+    gap = np.zeros((H, W), bool)
+    gap[900:960, 340:400] = True                    # an enclosed gap the mask filled, 40 px in from the edge
+    fg[gap] = (0.9, 0.9, 0.9)
+    rim = np.zeros((H, W), bool)
+    rim[500:540, 450:650] = True                    # a highlight along the top outline, background-coloured
+    fg[rim] = (0.9, 0.9, 0.9)
+    on = despill_estimate(fg, hard, pockets=True)
+    off = despill_estimate(fg, hard, pockets=False)
+    assert on["cut"][gap].mean() > 0.5               # the enclosed gap is cut with pockets on
+    assert off["cut"].max() == 0.0                   # nothing is cut with pockets off (SAM)
+    assert on["cut"][rim].mean() < 0.1               # the rim is never treated as a pocket

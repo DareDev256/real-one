@@ -154,7 +154,7 @@ class CleanPlate:
         return out, int(drop.sum())
 
 
-def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print):
+def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print, capture_shadow=False):
     """One pass over the take: every frame's matte with the real floor taken out at its feet, written as a packed
     mask file in the same format as the input (np.packbits rows), plus <out>_shadow.npy: his real shadow per frame
     (uint8, 255 = none, 1/4 resolution). -> (path, removed px per frame)."""
@@ -164,9 +164,11 @@ def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print):
     out_path = Path(out_path)
     tmp = out_path.with_suffix(".tmp.npy")
     packed = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.uint8, shape=(n, W * H // 8))
-    sh_path = out_path.with_name(out_path.stem + "_shadow.npy")
-    shadows = np.lib.format.open_memmap(sh_path, mode="w+", dtype=np.uint8,
-                                        shape=(n, H // SHADOW_SCALE, W // SHADOW_SCALE))
+    shadows = None
+    if capture_shadow:  # only for --contact real: the capture costs as much as the refine itself
+        sh_path = out_path.with_name(out_path.stem + "_shadow.npy")
+        shadows = np.lib.format.open_memmap(sh_path, mode="w+", dtype=np.uint8,
+                                            shape=(n, H // SHADOW_SCALE, W // SHADOW_SCALE))
     cp = CleanPlate(H_to0)
     lag = max(OFFSETS)
     pending = collections.deque()
@@ -182,7 +184,8 @@ def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print):
             r, k = cp.refine(j, fr, m, cy)
             packed[j] = np.packbits(r)
             removed[j] = k
-            shadows[j] = np.round(cp.shadow(j, fr, r, cy) * 255).astype(np.uint8)
+            if shadows is not None:
+                shadows[j] = np.round(cp.shadow(j, fr, r, cy) * 255).astype(np.uint8)
 
     for i, fr in enumerate(read_frames(proxy)):
         if i >= n:
@@ -193,7 +196,8 @@ def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print):
         flush(i - lag)
     flush(n)
     packed.flush()
-    shadows.flush()
+    if shadows is not None:
+        shadows.flush()
     del packed, shadows
     tmp.rename(out_path)
     log(f"stage: clean-plate feet: {int((removed > 0).sum())}/{n} frames had real floor in the matte, "

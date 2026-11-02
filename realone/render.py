@@ -443,7 +443,8 @@ def render(a):
         # the Receipt included, uses the refined matte
         from realone.stage.cleanplate import refine_masks
         mpath, removed = refine_masks(norm, n, masks, st_arr["stage_H"], st_arr["stage_contact"],
-                                      Path(str(mpath)).with_name(Path(str(mpath)).stem + "_stagefeet.npy"))
+                                      Path(str(mpath)).with_name(Path(str(mpath)).stem + "_stagefeet.npy"),
+                                      capture_shadow=getattr(a, "contact", "synthetic") == "real")
         masks = np.load(mpath, mmap_mode="r")
         stage_rep["feet_px_removed"] = {"frames": int((removed > 0).sum()), "total": int(removed.sum())}
         if getattr(a, "contact", "synthetic") == "real":
@@ -453,7 +454,9 @@ def render(a):
     np.savez(seg_dir / "arrays.npz", **arrays)
     units = U.make_units(plan, workers, avoid=[f["end_frame"] for f in plan["freezes"]])
     workers = min(workers, len(units))
-    ctx = {"args": {k: getattr(a, k) for k in ("erode", "feather", "wrap", "match", "grain", "despill", "push")},
+    pockets = {"on": True, "off": False}.get(getattr(a, "pockets", "auto"), local)  # auto: only the gap-filling
+    ctx = {"args": dict({k: getattr(a, k) for k in ("erode", "feather", "wrap", "match", "grain", "despill", "push")},
+                        pockets=pockets),
            "proxy": str(norm), "native": str(take["native"]) if take["native"] else None,
            "native_size": take["native_size"], "ns": list(take["ns"]), "masks": str(mpath),
            "plates": [str(p) for _, p, _ in worlds], "particles": [k for _, _, k in worlds], "freeze_style": style,

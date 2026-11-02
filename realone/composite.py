@@ -93,7 +93,10 @@ def despill(fg, hard, target, **kw):
     return despill_apply(fg, est, target)
 
 
-def despill_estimate(fg, hard, band_px=8, reach_px=120, max_pocket_px=9000, scale=1.0):
+OUTLINE_SHARE = 0.25  # a pocket whose perimeter runs more than this along the matte's outline is a rim, not a gap
+
+
+def despill_estimate(fg, hard, band_px=8, reach_px=120, max_pocket_px=9000, scale=1.0, pockets=True):
     """Colour decontamination of the artist's edge (the look-independent half).
 
     fg      (H, W, 3) float32 0..1, the source pixels (output space)
@@ -108,6 +111,9 @@ def despill_estimate(fg, hard, band_px=8, reach_px=120, max_pocket_px=9000, scal
     - Deeper in (up to `reach_px`; a gap under the chin can sit 80 px from the outer edge), only small enclosed pockets that read as pure background (a gap between
       chin, hand and collar that the mask filled) get it, and their alpha is cut so the world shows through.
       A pocket bigger than `max_pocket_px` is not a pocket (a blue shirt on a blue wall), so it is left alone.
+    pockets: cut enclosed background pockets out of the matte. Only for masks that fill gaps (the Apple Vision
+    test masks); SAM 3.1 follows the gaps itself, and there an interior "pocket" is the artist: a bald head's
+    highlight against a white sky read as background and was cut, showing the world through his forehead.
     scale: the reframe zoom. Distances are in source pixels, so a 1.9x close-up needs 1.9x the reach and
     1.9^2 the pocket areas (without it, a pocket 50 px from the edge sits 95 px away in the close-up and is missed).
     Returns an estimate for despill_apply(fg, est, target) -> (fg', alpha_cut (H, W) 0..1, stats).
@@ -158,9 +164,24 @@ def despill_estimate(fg, hard, band_px=8, reach_px=120, max_pocket_px=9000, scal
     cand = ((sq > 0.35) & mq).astype(np.uint8)  # 0.35: a pocket's narrow tip averages with skin at 1/4 res
     n, lab, st, _ = cv2.connectedComponentsWithStats(cand, connectivity=8)
     keep = np.zeros(n, bool)
+    # a pocket is ENCLOSED by the artist (a gap under the chin that the mask filled). A bright patch that touches
+    # the matte's own outline is not a pocket: a bald head's highlight against a white sky reads as "background"
+    # by colour, and cutting it showed the new world through his forehead (blue blotches in a blue world)
+    # The test is how much of the patch's own perimeter runs along the outline: a filled gap is mostly enclosed
+    # (a narrow opening at most), a rim highlight lies along the outline.
+    outside = cv2.dilate((~mq).astype(np.uint8), k3, iterations=1) > 0
     for i in range(1, n):
         area = st[i, cv2.CC_STAT_AREA] * q * q
-        keep[i] = min_pocket_px <= area <= max_pocket_px
+        if not (min_pocket_px <= area <= max_pocket_px):
+            continue
+        x, y, bw_, bh_ = st[i, cv2.CC_STAT_LEFT], st[i, cv2.CC_STAT_TOP], st[i, cv2.CC_STAT_WIDTH], st[i, cv2.CC_STAT_HEIGHT]
+        blob = (lab[y:y + bh_, x:x + bw_] == i).astype(np.uint8)
+        # (the crop's border must erode as background, or a blob that fills its own box has no perimeter at all)
+        perim = (blob > 0) & ~(cv2.erode(blob, k3, borderType=cv2.BORDER_CONSTANT, borderValue=0) > 0)
+        on_outline = perim & outside[y:y + bh_, x:x + bw_]
+        keep[i] = on_outline.sum() <= OUTLINE_SHARE * max(1, perim.sum())
+    if not pockets:  # SAM 3.1 does not fill gaps: an interior "pocket" there is the artist (a skin highlight)
+        keep[:] = False
     pocket_q = keep[lab].astype(np.float32)
     # widen the pocket region by 2 quarter-px; the cut below is still gated by each pixel's own spill
     pocket_q = cv2.GaussianBlur(cv2.dilate(pocket_q, k3, iterations=it(2)), (0, 0), 0.8)
@@ -326,7 +347,7 @@ class Compositor:
                                       borderValue=0) > 0.5
         wb_small = cv2.GaussianBlur(cv2.resize(world, (270, 480), interpolation=cv2.INTER_AREA), (0, 0), 4.5)
         wb = cv2.resize(wb_small, (W, H), interpolation=cv2.INTER_LINEAR) / 255
-        self.est = despill_estimate(fg, hard, scale=zoom) if a.despill else None
+        self.est = despill_estimate(fg, hard, scale=zoom, pockets=getattr(a, "pockets", True)) if a.despill else None
         cut = self.est["cut"] if self.est is not None else 0.0
         filmed = float((hard * (1.0 - cut)).mean())
         outs, info = {}, {}

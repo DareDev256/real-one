@@ -68,6 +68,19 @@
   - 7 tests (`tests/test_moves.py`), 7 guards mutation-red. A centre clamp in the crash zoom was found
     unnecessary (zooming in about a point inside the frame cannot show a border) and removed.
 - `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own (what the dolly uses).
+- **Pocket cuts no longer punch holes in the artist** (found on the first showcase render). The despill cut
+  "pockets", interior patches that match the background, so the world shows through gaps the mask filled. A bald
+  head's highlights against a white sky matched the background by colour, were cut, and the blue world showed
+  through his forehead.
+  - Now a patch lying along the matte's outline (over 25% of its perimeter) is never a pocket.
+  - Pockets are cut only for the Apple Vision test masks, which fill gaps (`--pockets auto`). SAM 3.1 follows
+    the gaps itself, so there an interior "pocket" is the artist.
+  - `--pockets on|off` overrides.
+  - The perimeter test had its own bug, also fixed: a blob cropped to its bounding box eroded with the crop
+    border as foreground and had no perimeter.
+  - 1 test, 3 guards mutation-red.
+- The clean-plate pass captures the real shadow only for `--contact real`. The capture cost as much as the
+  refine itself, and the first showcase render spent about 12 minutes in it.
 - **Worlds lit like the take** (`realone/stage/light.py`). Gauntlet round 7 found that a world lit like the take
   beats one lit against it. With `--stage tracked`, the take's light is measured off the background around the
   artist and named in the world prompt as one sentence:
