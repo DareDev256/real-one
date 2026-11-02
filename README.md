@@ -6,12 +6,14 @@ Film your song on your phone, once. Real One turns the take into a music video: 
 only the world around you is made, one world for each section of the song, every cut on a downbeat.
 
 <p>
-<img src="docs/media/hook_freeze.gif" width="270" align="top" alt="Hook Freeze: rain falls, then hangs mid-air while the camera keeps moving and the figure keeps dancing">
-<img src="docs/media/receipt.jpg" width="405" align="top" alt="Real Receipt: the same frame finished, and with every generated pixel grey">
+<img src="docs/media/hook_freeze.gif" width="270" align="top" alt="Hook Freeze on a stand-in stock clip: the rain hangs mid-air while the performer keeps dancing, then falls again on the release">
+<img src="docs/media/receipt.jpg" width="405" align="top" alt="Real Receipt: the same frame finished, and with every generated pixel grey; the counter reads 17.6% filmed">
 </p>
 
-*Test render: a drawn figure on code-drawn worlds, with no Meta model in the loop yet. Both images are regenerated from
-the first keyed render of a real take (`scripts/readme_media.py`).*
+*Stand-in: a stock clip (Mixkit, free license) and the repo's synthetic test song, through the real pipeline. SAM 3.1
+cut the performer out, Muse Image built the world from Muse Wonder's world prompt, and the tracked stage filmed it
+through the clip's own camera. Both images are regenerated from the artist's own take once it is filmed
+(`scripts/readme_media.py`).*
 
 [How the director works](docs/director.md) · [Implementation notes](docs/implementation-notes.md) ·
 [Watch page](web/) · [Build status](docs/status.md) · [Changelog](CHANGELOG.md)

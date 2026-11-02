@@ -41,3 +41,28 @@ def test_a_missing_receipt_look_is_refused(tmp_path, monkeypatch):
 def test_a_render_without_a_freeze_is_refused():
     with pytest.raises(rm.Refuse, match="no freeze"):
         rm.freeze_start_s({"freeze": {"freezes": []}})
+
+
+def test_a_keyed_render_of_the_test_song_needs_stand_in_and_is_stamped(tmp_path):
+    """A keyed SAM render of the synthetic test song (Nov 1: a stock clip through the real models) is not the
+    artist's film: without --stand-in it is refused (caught by content, so a renamed copy counts); with it, the
+    images carry the stand-in band. A real master goes unstamped."""
+    song = tmp_path / "renamed.wav"
+    song.write_bytes(rm.TEST_SONG.read_bytes())
+    run = {"mode": "demo", "engine": "SAM 3.1 'the person'", "song": str(song)}
+    with pytest.raises(rm.Refuse, match="--stand-in"):
+        rm.stamp_text("showcase3", run)
+    assert rm.stamp_text("showcase3", run, stand_in=True) == rm.STAND_IN_STAMP
+    master = tmp_path / "master.wav"
+    master.write_bytes(b"RIFF the artist's own master")
+    assert rm.stamp_text("real", dict(run, song=str(master))) is None
+    assert rm.stamp_text("TEST_LOCAL_x", run) == rm.TEST_STAMP
+
+
+def test_the_gif_shows_the_landing_or_else_the_release():
+    lands = {"freeze": {"freezes": [{"frames": "90-236"}]}}            # 3 s of take before the freeze
+    t0, t1 = rm.clip_times(lands)
+    assert t0 == pytest.approx(2.0) and 3.0 < t1 < 236 / 30
+    opens = {"freeze": {"freezes": [{"frames": "0-146"}]}}             # the take starts frozen (Nov 1 showcase3)
+    t0, t1 = rm.clip_times(opens)
+    assert t0 == pytest.approx(146 / 30 - 1.6) and t0 < 146 / 30 < t0 + 3.2  # the release is inside the GIF

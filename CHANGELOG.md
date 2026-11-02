@@ -63,6 +63,16 @@
   architecture, the vision projector and the chat template (read in its source, Nov 1). 2 tests.
 - **README:** the Muse Spark Open row said it writes treatments; it never ran with a key. It now says "wired, not
   yet run".
+- **README media from the real pipeline.** The hero GIF and receipt image were a drawn figure with no Meta model.
+  They now come from `showcase3`: the stand-in stock clip with SAM 3.1 masks, the Muse Image world from Wonder's
+  prompt, the tracked stage and a Hook Freeze with rain (all checks pass: world identical on all 147 frozen frames,
+  no jump on the release; US$0.00, cached). `scripts/readme_media.py`:
+  - refuses a keyed render of the synthetic test song unless `--stand-in`, which stamps "STAND-IN CLIP  real SAM
+    3.1 + Muse Image" (caught by content, so a renamed copy counts);
+  - when a render opens already frozen (a take that starts on the hook's downbeat), the GIF shows the release
+    instead of the landing, so the rain is seen hanging and then falling;
+  - the stamp sits above the frame instead of over it (it covered the receipt counter).
+  - 2 tests; 3 mutations, all red.
 - **The tracked stage, `--stage tracked`** (docs/stage.md). The world is rebuilt in depth and filmed through the
   phone's own solved camera, instead of a still sliding behind a cut-out.
   - **Camera:** a planar track of the floor the artist stood on, with him masked out; a camera solve from the floor
