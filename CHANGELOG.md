@@ -68,6 +68,13 @@
   - 7 tests (`tests/test_moves.py`), 7 guards mutation-red. A centre clamp in the crash zoom was found
     unnecessary (zooming in about a point inside the frame cannot show a border) and removed.
 - `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own (what the dolly uses).
+- **Tripod takes work in the stage** (no camera operator needed). A locked-off take has no motion to solve, so
+  the stage now treats the camera as level, `--camera-m` (default 1.3 m, a chest-high tripod) above the floor,
+  and places the horizon from the artist standing on the floor (feet - (feet - head) x camera / figure). The
+  world holds still and the virtual moves (dolly, crash, swap) run on top. A take that reads as locked (under
+  3 px of floor drift) goes straight to this path, so a jitter-solved normal is never trusted. End to end on a
+  truly locked test clip (the dancer composited onto a frozen background), 3 bars with a dolly zoom pass every
+  render check. 1 test.
 - **SAM 3.1 masks decode ~100x faster** (`realone/samcodec.py`). Meta's parser validates every mask by decoding
   and re-encoding it in pure Python, and the pipeline then decoded it again: about 456k Python calls per mask. A
   numba port of the same range coder (SAM License permits derivative works) is installed into the parser for the

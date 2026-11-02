@@ -87,6 +87,9 @@ def build_parser():
                    help="--stage tracked contact shadow: synthetic occlusion + a cast shadow (default; the blind "
                         "gauntlet's winner), or real: the artist's own shadow lifted from the take (correct under a "
                         "lifted foot, weaker under a planted one)")
+    r.add_argument("--camera-m", type=float, default=1.3,
+                   help="--stage tracked on a tripod (a camera that does not move): its height above the floor in "
+                        "metres (default 1.3, chest height); the horizon then comes from the artist's figure")
     r.add_argument("--figure-m", type=float, default=1.75,
                    help="the artist's height in metres (sizes the camera height from the figure on the floor)")
 

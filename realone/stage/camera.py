@@ -212,6 +212,22 @@ def fit_lens_and_floor(H_to0, vfovs=np.arange(24.0, 80.0, 1.0)):
     return best
 
 
+def horizon_from_figure(contact_y, top_y, camera_m, figure_m=1.75):
+    """A locked-off camera has no motion to solve, so the horizon comes from the artist instead: a figure_m tall
+    person, feet at contact_y and head at top_y, seen by a camera camera_m above the floor, puts the horizon at
+    feet - (feet - head) * camera_m / figure_m (the same similar-triangles rule as height_from_figure, inverted)."""
+    if not (contact_y > top_y):
+        raise Refuse("stage solve: the artist's feet are not below the head; cannot place the horizon")
+    return contact_y - (contact_y - top_y) * camera_m / figure_m
+
+
+def level_floor_normal(horizon_y, K):
+    """The floor normal (pointing to the floor) of a camera with no roll whose horizon is at row horizon_y:
+    pitched down by atan((cy - horizon) / f)."""
+    th = np.arctan2(K[1, 2] - horizon_y, K[1, 1])
+    return np.array([0.0, np.cos(th), np.sin(th)])
+
+
 def height_from_figure(contact_y, top_y, horizon_y, figure_m=1.75):
     """Camera height from a standing figure on the floor: a figure_m tall person whose feet are at contact_y and
     head at top_y, with the horizon at horizon_y (camera height = figure_m * (feet - horizon) / (feet - head))."""

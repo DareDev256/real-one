@@ -382,6 +382,7 @@ def render(a):
         lens_mm, lens_src = STG.lens_for(STG.clip_tags(clip), getattr(a, "lens_mm", None))
         st_arr, stage_rep = STG.prepare(norm, n, masks, worlds, plan, shot_of, lens_mm, OUT / "work" / "depth",
                                         figure_m=getattr(a, "figure_m", 1.75),
+                                        locked_camera_m=getattr(a, "camera_m", 1.3),
                                         world_of=arrays.get("frame_world"),
                                         dolly_dz=MV.dolly_profile(n, moves, [sh["start_frame"] for sh in
                                                                              plan["shots"]]))

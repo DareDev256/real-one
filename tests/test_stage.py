@@ -283,3 +283,17 @@ def test_dolly_zoom_virtual_camera_keeps_the_subject_depth_still():
     Hv = Kv @ (w.R_al + np.outer([0, 0, dz], nc) / zs) @ np.linalg.inv(w.KS)
     p = np.float32([[[300, 800], [800, 1500]]])
     assert np.abs(cv2.perspectiveTransform(p, Hs) - cv2.perspectiveTransform(p, Hv)).max() < 0.5
+
+
+def test_a_tripod_take_gets_its_horizon_from_the_figure():
+    """A locked-off camera has no motion to solve: a 1.75 m figure seen by a camera 1.3 m up puts the horizon
+    1.3/1.75 of the way from the feet to the head, and the floor normal follows from that horizon."""
+    K = CAM.intrinsics(VFOV)
+    hz = CAM.horizon_from_figure(1700.0, 500.0, 1.3, 1.75)
+    assert hz == pytest.approx(1700 - 1200 * 1.3 / 1.75)
+    assert CAM.height_from_figure(1700.0, 500.0, hz, 1.75) == pytest.approx(1.3)   # the inverse of the same rule
+    n = CAM.level_floor_normal(hz, K)
+    l = np.linalg.inv(K).T @ n
+    assert -(l[0] * W / 2 + l[2]) / l[1] == pytest.approx(hz, abs=0.5)               # that normal's horizon is hz
+    with pytest.raises(Refuse):
+        CAM.horizon_from_figure(500.0, 1700.0, 1.3)

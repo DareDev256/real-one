@@ -84,8 +84,22 @@ def _measure_look(proxy, frames, masks, world_full, R, t, corr, contact):
                 sun_len=float(sun_len), sun_drop=float(sun_drop))
 
 
+def _figure_rows(masks, contact, n):
+    """(feet row, head row) on frames where the whole figure is inside the frame, sampled ~24 times."""
+    out = []
+    for i in range(0, n, max(1, n // 24)):
+        m = _mask(masks, i)
+        ys = np.nonzero(m.any(1))[0]
+        if len(ys) and ys.max() < H - 8 and ys.min() > 8:  # feet and head both inside the frame
+            out.append((float(contact[i][1]), float(ys.min())))
+    if not out:
+        raise Refuse("stage: the artist is never seen head to feet on the floor; cannot size the camera "
+                     "(film one wide moment with the feet in frame)")
+    return out
+
+
 def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m=1.75, log=print, world_of=None,
-            dolly_dz=None):
+            dolly_dz=None, locked_camera_m=1.3):
     """-> (arrays dict for arrays.npz, report dict). worlds: [(name, still path, particles)]."""
     t0 = time.time()
     track = CAM.ground_track(read_frames(proxy), lambda i: _mask(masks, i))
@@ -94,26 +108,38 @@ def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m
         raise Refuse(f"stage: tracked {len(Hs)} frames, the take has {n}")
     K = CAM.intrinsics(vfov_916(lens_mm))
     kind, drift = CAM.classify_motion(Hs, K)
-    n0 = CAM.solve_camera(Hs, K, 1.0)["n0"]
-    l = np.linalg.inv(K).T @ n0
-    horizon = float(-(l[0] * W / 2 + l[2]) / l[1])
-    # camera height from the artist standing on the floor, measured on the frames where the whole figure is in
-    hs = []
-    for i in range(0, n, max(1, n // 24)):
-        m = _mask(masks, i)
-        ys = np.nonzero(m.any(1))[0]
-        if len(ys) and ys.max() < H - 8 and ys.min() > 8:  # feet and head both inside the frame
+    rows = _figure_rows(masks, track["contact"], n)
+    try:
+        if kind == "locked":  # the frame-centre floor moved under 3 px all take: any solved normal would be noise
+            raise Refuse("stage solve: the camera never moved enough (locked off)")
+        n0 = CAM.solve_camera(Hs, K, 1.0)["n0"]
+        l = np.linalg.inv(K).T @ n0
+        horizon = float(-(l[0] * W / 2 + l[2]) / l[1])
+        hs = []
+        for feet, head in rows:
             try:
-                hs.append(CAM.height_from_figure(float(track["contact"][i][1]), float(ys.min()), horizon, figure_m))
+                hs.append(CAM.height_from_figure(feet, head, horizon, figure_m))
             except Refuse:
                 pass
-    if not hs:
-        raise Refuse("stage: the artist is never seen head to feet on the floor; cannot size the camera height "
-                     "(film one wide moment with the feet in frame)")
-    height = float(np.median(hs))
-    R, t, res = CAM.solve_on_floor(Hs, K, n0, height)
-    log(f"stage: floor tracked on {n} frames (median {int(np.median(track['step_inliers'][1:]))} points), "
-        f"{kind} camera, lens {lens_mm:g} mm, horizon row {horizon:.0f}, camera {height:.2f} m above the floor")
+        if not hs:
+            raise Refuse("stage: the artist's feet are never below the solved horizon")
+        height = float(np.median(hs))
+        R, t, res = CAM.solve_on_floor(Hs, K, n0, height)
+    except Refuse as e:
+        if "moved the camera enough" not in str(e) and "never moved enough" not in str(e):
+            raise
+        # a tripod: nothing to solve. The camera is level (no roll), `locked_camera_m` above the floor (a chest-high
+        # tripod by default, --camera-m), and the horizon comes from the artist standing on the floor. The world
+        # holds still under the floor track (the homographies are ~identity) and virtual moves run on top.
+        kind = "locked"
+        height = float(locked_camera_m)
+        horizon = float(np.median([CAM.horizon_from_figure(f, hd, height, figure_m) for f, hd in rows]))
+        n0 = CAM.level_floor_normal(horizon, K)
+        R = np.repeat(np.eye(3)[None], n, 0)
+        t = np.zeros((n, 3))
+    log(f"stage: floor tracked on {n} frames (median {int(np.median(track['step_inliers'][1:])) if n > 1 else 0} "
+        f"points), {kind} camera, lens {lens_mm:g} mm, horizon row {horizon:.0f}, camera {height:.2f} m above the "
+        f"floor" + (" (tripod: height assumed, horizon from the figure)" if kind == "locked" else ""))
 
     if world_of is None:
         world_of = np.array([sh["world"] for sh in plan["shots"]])[shot_of]
@@ -178,7 +204,8 @@ def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m
     report = dict(lens_mm=lens_mm, vfov_deg=round(vfov_916(lens_mm), 2), motion=kind, drift_px=round(drift, 1),
                   horizon_row=round(horizon, 1), camera_height_m=round(height, 3), figure_m=figure_m,
                   track_points_median=int(np.median(track["step_inliers"][1:])) if n > 1 else 0,
-                  floor_reproj_px_before_pin=[round(x, 2) for x in CAM.floor_reproj_err(Hs, K, R, t, n0, height)],
+                  floor_reproj_px_before_pin=[round(x, 2) for x in CAM.floor_reproj_err(Hs, K, R, t, n0, height)]
+                  if kind != "locked" else None,
                   worlds=per_world, K=K.tolist(), height=height, seconds=round(time.time() - t0, 1))
     if dolly_info:
         report["dolly"] = dolly_info
