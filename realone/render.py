@@ -176,6 +176,7 @@ def apply_treatment(a):
     a._treatment_freeze = [s["index"] for s in t["sections"] if s.get("freeze") is True]
     a._treatment_reveal = [s["index"] for s in t["sections"] if s.get("look") == "receipt"]
     a._treatment_particles = {s["index"]: s["particles"] for s in t["sections"] if s.get("particles")}
+    a._treatment_lyrics = {s["index"]: list(s.get("lyric") or []) for s in t["sections"]}
 
 
 def _treatment_specs(a, indices, secs):
@@ -433,6 +434,17 @@ def render(a):
             x0, y0, cw, ch = crops[i]
             ox[i], oy[i] = (fx[i] - x0) * W / cw, (fy[i] - y0) * W / cw
         arrays["crash_scale"], arrays["crash_cx"], arrays["crash_cy"] = sc, ox, oy
+    lyric_lines = None
+    if getattr(a, "lyrics_in_world", False):  # the lyric lines written into the world, a word on each beat
+        from realone import lyrictext as LT
+        try:
+            lyric_lines, lyr_arr, plan["lyrics_in_world"] = LT.for_render(getattr(a, "_treatment_lyrics", None),
+                                                                          tl, s0, n, FPS)
+        except LT.LyricError as e:
+            raise Refuse(str(e)) from None
+        arrays.update(lyr_arr)
+        print(f"lyrics in the world: {len(lyric_lines)} lines, {plan['lyrics_in_world']['words']} words, on "
+              f"{plan['lyrics_in_world']['frames_with_words']} of {n} frames")
     stage_rep = None
     if getattr(a, "stage", "off") == "tracked":
         from realone.stage import pipeline as STG
@@ -469,9 +481,15 @@ def render(a):
            "arrays": str(seg_dir / "arrays.npz"), "look_names": list(LOOKS), "outputs": looks,
            "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
            "cv_threads": max(1, (os.cpu_count() or 4) // workers),
-           "stage": stage_rep, "stage_cache": str(OUT / "work" / "depth")}
+           "stage": stage_rep, "stage_cache": str(OUT / "work" / "depth"), "lyric_lines": lyric_lines}
     if stage_rep is not None:
         ctx["args"]["stage"] = "tracked"
+    if os.environ.get("REALONE_KEEP_WORK"):  # debug: keep what a lab needs to rebuild any frame without a render
+        keep = OUT / "work" / f"keep_{tag}"
+        keep.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(seg_dir / "arrays.npz", keep / "arrays.npz")
+        (keep / "ctx.json").write_text(json.dumps(ctx, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))
+        print(f"kept {keep}")
     print(f"render: {n} frames, {len(plan['shots'])} shots, {len(units)} units on {workers} worker(s) ({why})")
     t0 = time.time()
     recs = run_units(ctx, units, workers, a.max_minutes * 60 - (t0 - t_start), t0, n)

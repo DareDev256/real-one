@@ -297,3 +297,81 @@ def test_a_tripod_take_gets_its_horizon_from_the_figure():
     assert -(l[0] * W / 2 + l[2]) / l[1] == pytest.approx(hz, abs=0.5)               # that normal's horizon is hz
     with pytest.raises(Refuse):
         CAM.horizon_from_figure(500.0, 1700.0, 1.3)
+
+
+# ------------------------------------------------------------------ lyrics on a sign standing in the world
+
+def test_the_sign_stands_on_the_floor_and_its_homography_matches_the_floor_machinery():
+    """sign_plane puts a vertical plane depth_m ahead along the floor and height_m above it; plane_frame_h warps
+    any plane exactly as render warps the floor (checked on the floor itself), including a camera move."""
+    still, disp = _synthetic_world()
+    K = CAM.intrinsics(VFOV)
+    n = np.array([0.0, np.cos(PITCH), np.sin(PITCH)])
+    w = World3D(still, disp, K, HEIGHT, n, still_f=K[0, 0] * 0.8)
+    R, t = np.eye(3), np.array([0.05, 0.0, 0.2])
+    a = w.plane_frame_h(R, t, w.nS, w.d)
+    b = w.floor_h(R, t)
+    assert np.allclose(a / a[2, 2], b / b[2, 2], atol=1e-6)
+    nS = w.nS / np.linalg.norm(w.nS)
+    f = np.array([0.0, 0.0, 1.0]) - nS[2] * nS
+    f /= np.linalg.norm(f)
+    foot = 3.5 * f + w.d * nS                                         # on the floor, 3.5 m ahead
+    assert abs(float(nS @ foot) - w.d) < 1e-9
+    Hs, (m, dm), zc = w.sign_plane(foot, f, 2.0, 18.0, 2.4, (2048, 1024))
+    assert abs(float(m @ nS)) < 1e-9                                  # vertical: perpendicular to the floor
+    # the canvas centre lands on the sign's centre: 2.0 m above the floor, 3.5 m along the floor
+    centre = np.linalg.inv(w.KS) @ Hs @ np.array([1024.0, 512.0, 1.0])
+    P = centre / (centre @ m) * dm                                    # back onto the plane
+    assert abs((w.d - P @ nS) - 2.0) < 1e-6
+    assert zc.shape == (1024, 2048) and np.isfinite(zc).all() and 1 / zc.max() > 2.5
+    # turned: the sign's two edges sit at different depths, the side it turns away from farther
+    assert abs(float(zc[512, 0]) - float(zc[512, -1])) > 0.01
+
+
+def test_the_sign_moves_with_parallax_unlike_the_backdrop():
+    """A camera that slides sideways moves a sign 3.5 m away across the frame; the backdrop at infinity does not
+    move at all. That difference is what reads as 3D tracked."""
+    still, disp = _synthetic_world()
+    K = CAM.intrinsics(VFOV)
+    n = np.array([0.0, np.cos(PITCH), np.sin(PITCH)])
+    w = World3D(still, disp, K, HEIGHT, n, still_f=K[0, 0] * 0.8)
+    nS = w.nS / np.linalg.norm(w.nS)
+    f = np.array([0.0, 0.0, 1.0]) - nS[2] * nS
+    f /= np.linalg.norm(f)
+    Hs, (m, dm), _ = w.sign_plane(3.5 * f + w.d * nS, f, 2.0, 0.0, 2.4, (2048, 1024))
+    c = np.array([1024.0, 512.0, 1.0])
+    def px(H_):
+        q = H_ @ c
+        return q[:2] / q[2]
+    still_px = Hs @ c
+    still_px = still_px / still_px[2]
+    p0 = px(w.plane_frame_h(np.eye(3), np.zeros(3), m, dm) @ Hs)
+    p1 = px(w.plane_frame_h(np.eye(3), np.array([-0.3, 0.0, 0.0]), m, dm) @ Hs)    # camera 0.3 m to the right
+    b0 = w.plane_frame_h(np.eye(3), np.zeros(3), None, None) @ still_px
+    b1 = w.plane_frame_h(np.eye(3), np.array([-0.3, 0.0, 0.0]), None, None) @ still_px
+    assert abs(p1[0] - p0[0]) > 40                                    # the sign slides across the frame
+    assert abs(b1[0] / b1[2] - b0[0] / b0[2]) < 1e-6                  # the backdrop at infinity stays put
+
+
+
+def test_floor_point_finds_where_a_pixel_ray_meets_the_floor_and_misses_above_the_horizon():
+    still, disp = _synthetic_world()
+    K = CAM.intrinsics(VFOV)
+    n = np.array([0.0, np.cos(PITCH), np.sin(PITCH)])
+    w = World3D(still, disp, K, HEIGHT, n, still_f=K[0, 0] * 0.8)
+    p = w.floor_point(np.eye(3), np.zeros(3), (W / 2, H * 0.9))      # low in the frame: the floor
+    assert p is not None and abs(float(w.nS @ p) - w.d) < 1e-6
+    assert w.floor_point(np.eye(3), np.zeros(3), (W / 2, 5.0)) is None  # the top of the frame: above the horizon
+
+
+def test_floor_point_refuses_a_ray_along_the_horizon_and_a_camera_under_the_floor():
+    still, disp = _synthetic_world()
+    K = CAM.intrinsics(VFOV)
+    n = np.array([0.0, np.cos(PITCH), np.sin(PITCH)])
+    w = World3D(still, disp, K, HEIGHT, n, still_f=K[0, 0] * 0.8)
+    q = w.R_al @ w.nS                                   # the floor normal seen by an unrotated frame camera
+    f, cx, cy = K[0, 0], K[0, 2], K[1, 2]
+    y = cy - (q[2] * f) / q[1]                          # the row exactly on the horizon at the centre column
+    assert w.floor_point(np.eye(3), np.zeros(3), (cx, y)) is None
+    below = -(w.R_al @ ((w.d + 0.5) * w.nS))            # camera centre 0.5 m under the floor
+    assert w.floor_point(np.eye(3), below, (W / 2, H * 0.9)) is None

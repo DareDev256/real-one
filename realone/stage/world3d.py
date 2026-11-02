@@ -158,6 +158,8 @@ class World3D:
                 if normal is not None:
                     M = M + np.outer(np.asarray(t_v, float), normal) / dist
                 Hm = correction @ Kv @ M @ np.linalg.inv(self.KS)
+            if k == 0:
+                self.last_h0 = Hm  # still -> frame for the backdrop
             border = cv2.BORDER_REPLICATE if k == 0 else cv2.BORDER_CONSTANT  # the backdrop is never empty
             a = cv2.warpPerspective(alpha, Hm, (W, H), flags=cv2.INTER_LINEAR, borderMode=border)
             if not a.any():
@@ -168,6 +170,63 @@ class World3D:
             zbuf = zbuf * (1 - a) + zl * a
             floor_vis = a if k == 1 else floor_vis * (1 - a)
         return out, zbuf, floor_vis
+
+    def plane_frame_h(self, R_t, t_t, normal, dist, correction=np.eye(3), virtual=None):
+        """Still -> frame homography for any plane normal . X_S = dist, exactly as `render` warps its layers
+        (the anchor alignment, the floor pin, and a dolly's virtual camera)."""
+        R = R_t @ self.R_al
+        if virtual is None:
+            return correction @ self.plane_h(R, t_t, normal, dist)
+        t_v, fs = virtual
+        Kv = self.K.copy()
+        Kv[0, 0] *= fs
+        Kv[1, 1] *= fs
+        Z = Kv @ np.linalg.inv(self.K)
+        M = R + np.outer(t_t, normal) / dist + np.outer(np.asarray(t_v, float), normal) / dist
+        return (Z @ correction @ np.linalg.inv(Z)) @ Kv @ M @ np.linalg.inv(self.KS)
+
+    def floor_point(self, R_t, t_t, px):
+        """The point on the world's floor (still-camera coordinates) seen through frame pixel px = (x, y) by the
+        frame camera (X_frame = R X_S + t, R = R_t R_al). None when that ray never meets the floor."""
+        R = R_t @ self.R_al
+        ray = R.T @ np.linalg.inv(self.K) @ np.array([px[0], px[1], 1.0])
+        C = -R.T @ np.asarray(t_t, float)
+        den = float(self.nS @ ray)
+        if den <= 1e-6:
+            return None
+        lam = (self.d - float(self.nS @ C)) / den
+        return C + lam * ray if lam > 0 else None
+
+    def camera_centre(self, R_t, t_t):
+        return -(R_t @ self.R_al).T @ np.asarray(t_t, float)
+
+    def sign_plane(self, foot, facing, height_m, yaw_deg, width_m, canvas):
+        """A sign standing in the world: a vertical plane (perpendicular to the floor) standing on the floor at
+        `foot` (a floor point, still-camera coordinates), its centre height_m above it, facing back along
+        `facing` (the direction it is seen from, along the floor), turned yaw_deg about the vertical.
+        canvas: (w, h) pixels of the text painted on it, width_m wide.
+        -> (still <- canvas homography, plane (normal, dist) in still-camera coordinates, canvas inverse depth
+        float32 (h, w): 1/Z of every canvas pixel, for the depth test against the world)."""
+        n = self.nS / np.linalg.norm(self.nS)                         # down, toward the floor
+        f = np.asarray(facing, float) - float(np.asarray(facing, float) @ n) * n
+        f /= np.linalg.norm(f)                                        # away from the viewer, along the floor
+        r = np.cross(n, f)
+        r /= np.linalg.norm(r)                                        # the viewer's right
+        y = np.radians(yaw_deg)
+        a = np.cos(y) * r + np.sin(y) * f                             # the sign's horizontal axis
+        P0 = np.asarray(foot, float) - height_m * n                   # straight up from the floor point
+        m = np.cross(a, n)
+        m /= np.linalg.norm(m)
+        dm = float(m @ P0)
+        if dm < 0:
+            m, dm = -m, -dm
+        cw, ch = canvas
+        s = width_m / cw
+        C = np.array([[s, 0, -cw / 2 * s], [0, s, -ch / 2 * s], [0, 0, 1.0]])   # canvas px -> metres on the sign
+        H_still = self.KS @ np.column_stack([a, n, P0]) @ C
+        uu, vv = np.meshgrid((np.arange(cw) - cw / 2) * s, (np.arange(ch) - ch / 2) * s)
+        Z = P0[2] + uu * a[2] + vv * n[2]
+        return H_still, (m, dm), (1.0 / np.maximum(Z, 1e-3)).astype(np.float32)
 
     def floor_h(self, R_t, t_t):
         return self.plane_h(R_t @ self.R_al, t_t, self.nS, self.d)

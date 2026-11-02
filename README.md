@@ -55,6 +55,11 @@ loop, render, watch, revise, re-render, on a stand-in clip). Muse Glimmer and Sp
   filmed through that same camera. Your feet stay planted: floor slip near the feet drops from 6.3 to 0.4 px a frame
   against a still world. A contact shadow cast from the world's own sun, depth of field matched to the take's, and a
   grade from the light around you finish it.
+- **Lyrics in the world** (`--lyrics-in-world`): each phrase of the lyric stands on its own sign in the scene, beside
+  you and turned at an angle, tracked to the phone's camera like the floor, a word landing on each beat; you are in
+  front of it because it is part of the world layer. Timed to the beat grid, not aligned to the vocal. A blind editor
+  critic scored it 5.5/10 against viral lyric clips and 5/10 for reading as 3D (from 4 and 2 a round earlier); the
+  words are readable about 60% of the time on the stand-in, where the performer's arms often cross them.
 - **Camera moves on the beat** (`--move`): a **dolly zoom** on the hook drop (the world stretches behind you while
   you keep your size, because the stage knows the world's depth and the phone's camera), a **crash zoom** toward
   your face on every downbeat, and a **world swap** every bar with the floor locked under your feet. All of them

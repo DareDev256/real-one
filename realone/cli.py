@@ -89,6 +89,9 @@ def build_parser():
     r.add_argument("--moves-from", metavar="TREATMENT_JSON",
                    help="take the camera moves from a director treatment (each section's `move`); sections outside "
                         "the rendered range are skipped")
+    r.add_argument("--lyrics-in-world", action="store_true",
+                   help="write each section's lyric lines into the world behind the artist, a word on each beat "
+                        "(needs --from-treatment for the lines; on --stage tracked they move with the camera)")
     r.add_argument("--no-world-light", action="store_true",
                    help="A/B only: with --stage tracked, do NOT append the take's measured light to the world prompts")
     r.add_argument("--contact", choices=("synthetic", "real"), default="synthetic",

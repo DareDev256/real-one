@@ -233,7 +233,7 @@ class StageWorlds:
         w = self.rep["worlds"][str(wid)]
         return (w["sun_dir"][0], tuple(w["key_colour"])) if w.get("sun_drop", 0) >= 0.3 else None
 
-    def layer(self, wid, i, mask, parts, wt, cam, crop):
+    def layer(self, wid, i, mask, parts, wt, cam, crop, lyric=None):
         from realone.composite import crop_matrix, is_identity
         from realone.stage import integrate as IG
         g = self.get(wid)
@@ -243,6 +243,9 @@ class StageWorlds:
             dz, zs = float(self.dz[i]), float(self.zs[i])
             virt = (np.array([0.0, 0.0, dz]), (zs + dz) / zs)
         img, zb, fv = g.render(self.R[i], self.t[i], self.corr[i], virtual=virt)
+        self.last_text = None
+        if lyric is not None:  # the words on a sign standing in the world, warped like the world, hidden behind it
+            self.last_text = self._sign(g, wid, i, zb, virt, *lyric)
         # contact: the synthetic occlusion + drop (the blind gauntlet's winner, rounds 4 to 7), or with
         # --contact real his real shadow lifted from the take (right under a LIFTED foot, but it loses the dense
         # pocket under a planted one: gauntlet r7 scored it 5 vs 6)
@@ -265,10 +268,89 @@ class StageWorlds:
         if not is_identity(crop):
             M, _ = crop_matrix(crop)
             img = cv2.warpAffine(img, M, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
+            if self.last_text is not None:
+                rgb, al = self.last_text
+                self.last_text = (cv2.warpAffine(rgb, M, (W, H), flags=cv2.INTER_LINEAR),
+                                  cv2.warpAffine(al, M, (W, H), flags=cv2.INTER_LINEAR))
         img = IG.add_grain(img, w.get("grain", 0.0), i)  # after the punch-in: grain is the sensor's, not the world's
         back, front = parts.layers(wt) if cam is None else parts.layers(wt, cam=cam[0], vel=cam[1])
         base = np.clip(img, 0, 255).astype(np.float32)
         return np.clip(base + back * 255, 0, 255), front * 255, base
+
+    def _sign(self, g, wid, i, zb, virt, line, shown, age):
+        """-> (rgb, alpha) of frame i's words in frame coordinates, or None. Each line's sign stands in the world
+        LT.SIGN_BEHIND_M behind where the artist stands at the middle of the line (his feet found on the tracked
+        floor), facing that frame's camera, and fixed in the world from then on: the camera moves past it like
+        anything else in the scene. The depth test hides it wherever the world is nearer (a pillar)."""
+        from realone import lyrictext as LT
+        if not hasattr(self, "sign_paint"):
+            self.sign_paint, self.sign_depth = LT.sign_painter(self.lyric_lines), {}
+        got = self.sign_paint.rgba(line, shown, age)
+        if got is None:
+            return None
+        key = (wid, line)
+        if key not in self.sign_depth:  # where this line's sign stands: behind him, where he is as the line starts
+            self.sign_depth[key] = self._sign_spot(g, self.lyric_start.get(line, i), line)
+        foot, facing, height_m, width_m, side = self.sign_depth[key]
+        H_still, (m, dm), zc = g.sign_plane(foot, facing, height_m, LT.sign_yaw(side, shown, age), width_m,
+                                            LT.SIGN_CANVAS)
+        Hf = g.plane_frame_h(self.R[i], self.t[i], m, dm, self.corr[i], virt) @ H_still
+        rgb, al = got
+        rgb = cv2.warpPerspective(rgb, Hf, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+        al = cv2.warpPerspective(al, Hf, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+        zt = cv2.warpPerspective(zc, Hf, (W, H), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT)
+        return rgb, LT.occlude(al, zb, zt)  # where the world is nearer, the sign is behind it
+
+    def _sign_spot(self, g, i0, line=0):
+        """-> (floor point, facing, height m, width m) for the sign of a line starting at frame i0. It stands on a
+        vertical plane SIGN_BEHIND_M behind the artist's feet (the contact point on the tracked floor), facing that
+        frame's camera. Lines change on the same downbeats as the shots, so each line is placed for its own shot:
+        its centre where the ray through SIGN_TARGET of that shot's framing (after the punch-in) meets the plane,
+        and SIGN_SHARE of that framing wide. From then on it is fixed in the world."""
+        from realone import lyrictext as LT
+        cx, cy = self.contact[i0]
+        px = (cx, cy) if np.isfinite(cx) else (W / 2, H * 0.92)
+        feet = g.floor_point(self.R[i0], self.t[i0], px)
+        cam = g.camera_centre(self.R[i0], self.t[i0])
+        if feet is None:  # the ray misses the floor (a frame looking up): a spot 3 m ahead along the floor
+            n = g.nS / np.linalg.norm(g.nS)
+            fwd = (self.R[i0] @ g.R_al).T @ np.array([0.0, 0.0, 1.0])
+            fwd = fwd - (fwd @ n) * n
+            feet = cam + (g.d - float(n @ cam)) * n + 3.0 * fwd / np.linalg.norm(fwd)
+        facing = feet - cam
+        n = g.nS / np.linalg.norm(g.nS)
+        facing = facing - (facing @ n) * n
+        facing /= max(np.linalg.norm(facing), 1e-6)
+        q = feet + LT.SIGN_BEHIND_M * facing                         # a point on the sign's plane, on the floor
+        crops = getattr(self, "crops", None)
+        if crops is None:
+            side = LT.sign_target(line)[0]
+            return q, facing, LT.SIGN_HEIGHT_M, LT.SIGN_WIDTH_M, side
+        x0, y0, cw, ch = (float(v) for v in crops[i0])
+        boxes = getattr(self, "boxes", None)
+        body = None
+        if boxes is not None and np.isfinite(boxes[i0, 0]):
+            body = ((float(boxes[i0, 0]) - x0) / cw, (float(boxes[i0, 2]) - x0) / cw)
+        side, tx, ty, share = LT.sign_target(line, body)
+        R = self.R[i0] @ g.R_al
+        ray = R.T @ np.linalg.inv(self.K) @ np.array([x0 + tx * cw, y0 + ty * ch, 1.0])
+        den = float(facing @ ray)
+        if den <= 1e-6:
+            return q, facing, LT.SIGN_HEIGHT_M, LT.SIGN_WIDTH_M, side
+        P0 = cam + (float(facing @ (q - cam)) / den) * ray            # the sign's centre, on its plane
+        height = float(np.clip(g.d - float(n @ P0), 0.6, 3.0))
+        Z = float((R @ P0 + self.t[i0])[2])                           # its depth from that frame's camera
+        width = float(np.clip(share * cw * Z / self.K[0, 0], 0.3, 3.0))
+        foot = P0 + (g.d - float(n @ P0)) * n
+        # measure it through the same warp the render uses (the floor pin can scale a shot by a lot), then size it
+        # so it really spans SIGN_SHARE of that shot's width
+        Hs, (m, dm), _ = g.sign_plane(foot, facing, height, LT.sign_yaw(side, 2, 99), width, LT.SIGN_CANVAS)
+        Hf = g.plane_frame_h(self.R[i0], self.t[i0], m, dm, self.corr[i0]) @ Hs
+        ends = Hf @ np.array([[0.0, LT.SIGN_CANVAS[0]], [LT.SIGN_CANVAS[1] / 2] * 2, [1.0, 1.0]])
+        px = abs(ends[0, 1] / ends[2, 1] - ends[0, 0] / ends[2, 0])
+        if np.isfinite(px) and px > 1:
+            width = float(np.clip(width * share * cw / px, 0.3, 3.0))
+        return foot, facing, height, width, side
 
     def get(self, wid):
         if wid not in self.built:

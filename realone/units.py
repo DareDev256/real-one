@@ -154,12 +154,36 @@ class Ctx:
                                                           "stage_G", "stage_dz", "stage_zs") if k in arr.files})
         # camera moves on the beat (realone/stage/moves.py): a world per frame (swap), a crash zoom per frame
         self.frame_world = arr["frame_world"] if "frame_world" in arr.files else None
+        # lyrics in the world (realone/lyrictext.py): which line, how many words, how long since the last landed
+        self.lyrics = None
+        if "lyr_line" in arr.files and d.get("lyric_lines"):
+            self.lyrics = (arr["lyr_line"], arr["lyr_shown"], arr["lyr_age"])
+            self.lyric_lines = d["lyric_lines"]
+            self.painters = {}
+            ln = self.lyrics[0]  # each line's middle frame: every worker anchors a line's sign at the same place,
+            # placed for the middle of the line so the camera's drift over the line splits both ways
+            self.lyric_start = {int(k): int((np.nonzero(ln == k)[0][0] + np.nonzero(ln == k)[0][-1]) // 2)
+                                for k in np.unique(ln[ln >= 0])}
         self.crash = (arr["crash_scale"], arr["crash_cx"], arr["crash_cy"]) if "crash_scale" in arr.files else None
         # Hook Freeze v2 (`bullet`): the camera truck, the motion-blur clock rate and the hit, per frame
         self.bullet = "cam_dx" in arr.files
         if self.bullet:
             self.cam_dx, self.cam_zoom, self.vel = arr["cam_dx"], arr["cam_zoom"], arr["vel"]
             self.grade, self.punch, self.flash = arr["grade"], arr["punch"], arr["flash"]
+
+
+def _with_lyrics(c, i, wid, world):
+    """Blend frame i's lyric words into the world layer. On the tracked stage they are painted on the backdrop (the
+    still's own coordinates, warped by the backdrop's homography and the shot's punch-in), so they move like the far
+    scene; without the stage they sit in screen space. Either way the artist is composited over them."""
+    from realone import lyrictext as LT
+    if c.stage is not None:  # the stage already painted the sign for this frame (pipeline.StageWorlds._sign)
+        got = c.stage.last_text
+    else:  # no stage: the words sit in screen space, still behind the artist
+        if "screen" not in c.painters:
+            c.painters["screen"] = LT.LyricPainter(c.lyric_lines, W, H)
+        got = c.painters["screen"].rgba(*(int(a[i]) for a in c.lyrics))
+    return world if got is None else LT.blend(world, *got)
 
 
 def init_worker(d):
@@ -203,7 +227,14 @@ def render_unit(u):
             wkey = (sh_world, float(wt), float(c.pushf[i]), tuple(crop), cam)  # exactly world_layer's inputs
             m = unpack_mask(c.masks[i])
             if c.stage is not None:  # every frame has its own camera pose: nothing to cache
-                world, front, wbase = c.stage.layer(sh_world, i, m, c.parts[sh_world], wt, cam, crop)
+                lyr = None
+                if c.lyrics is not None and c.lyrics[0][i] >= 0:
+                    c.stage.lyric_lines = c.lyric_lines
+                    c.stage.lyric_start = c.lyric_start
+                    c.stage.crops = c.crops
+                    c.stage.boxes = c.boxes
+                    lyr = tuple(int(x[i]) for x in c.lyrics)
+                world, front, wbase = c.stage.layer(sh_world, i, m, c.parts[sh_world], wt, cam, crop, lyric=lyr)
                 c.comp.key = c.stage.key_for(sh_world)
             else:
                 if wcache is None or wcache[0] != wkey:
@@ -212,6 +243,9 @@ def render_unit(u):
                 _, world, front, wbase = wcache
             if c.bullet and c.grade[i] > 0:  # the frozen world grades cool; the artist is composited in colour
                 world, front = grade_world(world, float(c.grade[i])), grade_world(front, float(c.grade[i]))
+            wk = world_key(world, front)  # the freeze proof is the world itself, taken before any lyrics
+            if c.lyrics is not None and c.lyrics[0][i] >= 0:
+                world = _with_lyrics(c, i, sh_world, world)
             per_out = _looks_for(c, i)
             looks = sorted(set(per_out.values()))
             use_nat = nf if c.native_frames[i] else None
@@ -221,7 +255,7 @@ def render_unit(u):
             if i < f0:
                 continue  # warm-up: the colour-match EMA only
             j = i - f0
-            rec["keys"].append(world_key(world, front))
+            rec["keys"].append(wk)
             if c.bullet:  # the world-space state this frame was drawn from: particle positions, plate clock, push
                 st = c.parts[sh_world].state(wt)
                 rec["states"].append(st.astype(np.float32))

@@ -63,6 +63,54 @@
   architecture, the vision projector and the chat template (read in its source, Nov 1). 2 tests.
 - **README:** the Muse Spark Open row said it writes treatments; it never ran with a key. It now says "wired, not
   yet run".
+- **Lyrics in the world, `--lyrics-in-world` (Nov 2).** James asked for the on-screen lyrics viral music clips carry
+  (he named Evan Blum's videos for Lay Bankz), then asked for them "3d tracked to the environment ... angled".
+  Real One writes each section's lyric lines INTO the scene behind the artist, a word on each beat. On the tracked
+  stage each line stands on its own sign in the world: a vertical plane on the floor 1.4 m behind where his feet are
+  at the middle of the line (the contact point's ray meets the tracked floor), facing that frame's camera, turned 15
+  degrees (alternating side line by line, each new line swinging in from 30). Lines change on the same downbeats as
+  the shots, so each line is placed for its own shot: its centre where the ray through the upper middle of that
+  shot's framing (25% down, after the punch-in) meets the plane, and 72% of that framing wide. From then on it is
+  fixed in the world and the camera moves past it like anything else in the scene. Three placements were tried in a
+  lab that rebuilds any frame through the real compositor from a kept render (`REALONE_KEEP_WORK=1`): a fixed 2.4 m
+  sign 2 m up (words off the top and the left edge, because camera and performer travel), the same sign behind his
+  feet at the line's start (words drifting out of the punched-in medium and close shots), then this one.
+  - **Blind critic round 1** (a viral-clip editor's eye, frames every 0.5 s): "no" as it stood, 4/10 against the best
+    viral lyric clips and 2/10 for reading as 3D. Its one gap: the words sat dead centre at head height, so his head
+    and arms covered a key word about half the time, and an 18 degree turn was too gentle to read as perspective.
+    Fixed: each line now stands BESIDE him, alternating left and right (19% of the shot's width off his centre line),
+    turned 28 degrees with its far end toward the frame's edge (the near, bigger letters face him, so the edge never
+    cuts them), two words a row (up to four rows), sized by measuring its real projected width through the render's
+    own warp (the floor pin scales later shots, and a size from the bare camera came out at half).
+  - **Phrases, not lines.** A lyric line is shown as phrases of at most 4 words ("lights on at four / and I'm still
+    holding"), each with its own sign for its own bar (by beats when a section has more phrases than bars): a sign
+    that lives half as long drifts half as far as the camera moves, and a phrase reads at a glance.
+  - **The side away from him.** Each phrase stands on the side of the frame opposite his body's centre in that
+    shot's framing (his tracked box), so his head is not behind the words. Fitting the sign into the free strip
+    beside his box was tried and lost: with his arms out the box fills the frame and the sign shrank to nothing.
+  - **Blind critic round 2** (the same brief): "with fixes", 5.5/10 against the best viral lyric clips (from 4) and
+    5/10 for reading as 3D (from 2); the current phrase fully readable about 60% of the lyric time (phrases 1-2 about
+    85%, the punched-in second half 30 to 50%, where his head and arms cross the words). Its next gap: anchor phrases
+    to real surfaces (a pillar face, the floor) clear of his silhouette, and keep the performer-in-front effect for
+    single words as a deliberate beat. Shipped as an option, not the default; the live watch page stays on the render
+    without lyrics until the real take decides. It is warped every frame by the same plane-induced homography as the floor and the depth cards, with the
+  floor pin and a dolly's virtual camera, so it has true perspective and parallax (a test proves it slides with a
+  sideways camera move while the backdrop at infinity does not), and a depth test hides it wherever the world is
+  nearer (a pillar in front of it). He walks in front of it because it is blended into the world layer before he is
+  composited; his pixels are never touched and the Real Receipt counts every letter as generated. Without the stage
+  the words sit in screen space, still behind him.
+  - Timing is the beat grid, not the vocal: each line gets an equal share of its section's bars from a downbeat,
+    its words land on successive beats (half-beats when the line is busier than its beats). Voice Transcribe gives
+    one time per turn, not per word, so karaoke alignment is not claimed.
+  - The Hook Freeze proof hashes the world layer: the hash is now taken before the words are blended in, so the
+    world still proves it stood still while the lyrics carry on with the vocal.
+  - Helvetica Neue Condensed Black, white over a soft shadow, the newest word sliding up and fading in over 4
+    frames; a line keeps its final layout so words never jump.
+  - Refuses: no lyric lines (it needs `--from-treatment`), no beat grid, no line inside the rendered range.
+  - 14 tests (lyric timing, painter, depth test, swing, sign geometry, parallax, floor point); 21 mutations, all red,
+    files
+    restored byte-identical. The first render died on a one-channel colour layer that only the stage's warp exposed;
+    a test now runs that path.
 - **The demo's song is a licensed track (Nov 2).** James has no release of his own, so the demo is him performing a
   Creative Commons BY track from ccMixter (three human-made candidates on the shoot card; Pixabay's vocal rap was
   4 of 6 labelled "AI generated", which a pitch of "the artist is never generated" cannot use). The watch page no
