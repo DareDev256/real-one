@@ -80,9 +80,14 @@ def build_parser():
                         "stretches behind you while you keep your size; needs --stage tracked), crash@SECTION (a "
                         "snap zoom toward your face on every downbeat), swap@SECTION (a new world every bar, the "
                         "floor locked under you). SECTION: hook, hook:2, #3, bars:A-B, verse")
+    r.add_argument("--from-treatment", metavar="TREATMENT_JSON",
+                   help="the director's treatment drives the render: each section's world, camera move, the freeze "
+                        "and the receipt-look sections (only those inside the rendered range apply)")
     r.add_argument("--moves-from", metavar="TREATMENT_JSON",
                    help="take the camera moves from a director treatment (each section's `move`); sections outside "
                         "the rendered range are skipped")
+    r.add_argument("--no-world-light", action="store_true",
+                   help="A/B only: with --stage tracked, do NOT append the take's measured light to the world prompts")
     r.add_argument("--contact", choices=("synthetic", "real"), default="synthetic",
                    help="--stage tracked contact shadow: synthetic occlusion + a cast shadow (default; the blind "
                         "gauntlet's winner), or real: the artist's own shadow lifted from the take (correct under a "

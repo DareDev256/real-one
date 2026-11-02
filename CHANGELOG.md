@@ -68,6 +68,18 @@
   - 7 tests (`tests/test_moves.py`), 7 guards mutation-red. A centre clamp in the crash zoom was found
     unnecessary (zooming in about a point inside the frame cannot show a border) and removed.
 - `World3D.render(virtual=(t_v, f_scale))`: a camera move on top of the phone's own (what the dolly uses).
+- **Worlds lit like the take** (`realone/stage/light.py`). Gauntlet round 7 found that a world lit like the take
+  beats one lit against it. With `--stage tracked`, the take's light is measured off the background around the
+  artist and named in the world prompt as one sentence:
+  - `low` when the background is dark;
+  - `hard` when the sky band reads clear blue;
+  - `soft` for an overcast grey sky or no sky at all.
+  `--no-world-light` turns it off for A/B. The first version mis-read the real overcast park as "direct sun,
+  warm" (dark trees against white sky looked like contrast; pink brick and green leaves looked like warm light).
+  It was rebuilt on the sky, and the light's colour was dropped (scene colour is not light colour). The real
+  plate now reads soft. 2 tests, 3 guards mutation-red.
+- **`--from-treatment`**: the director's treatment drives the render in one flag: each section's world, its move,
+  the freeze and the receipt-look sections (only those inside the rendered range). 2 tests.
 - **Tripod takes work in the stage** (no camera operator needed). A locked-off take has no motion to solve, so
   the stage now treats the camera as level, `--camera-m` (default 1.3 m, a chest-high tripod) above the floor,
   and places the horizon from the artist standing on the floor (feet - (feet - head) x camera / figure). The

@@ -1,5 +1,6 @@
 """A section, or the whole song, end to end: analyse -> sync -> plan -> mask -> worlds -> composite (parallel units)
 -> concat with the master -> check -> sheets."""
+import json
 import os
 import resource
 import shutil
@@ -147,10 +148,46 @@ def collage_inks(plan, worlds, masks, crops, wf, pushf, s0, push, style="still")
     return out
 
 
+def apply_treatment(a):
+    """--from-treatment: the director's treatment drives the render. Each section's world_prompt becomes its world
+    (--section-world #i=...), its move goes to --moves-from, and the freeze and receipt-look sections are kept
+    for after the analysis (only the ones inside the rendered range apply; see _treatment_specs)."""
+    path = getattr(a, "from_treatment", None)
+    if not path:
+        return
+    p = Path(path)
+    if not p.exists():
+        raise Refuse(f"--from-treatment not found: {p}")
+    try:
+        obj = json.loads(p.read_text())
+    except json.JSONDecodeError as e:
+        raise Refuse(f"--from-treatment is not valid JSON: {e}") from None
+    t = obj.get("treatment", obj)
+    if not isinstance(t, dict) or not isinstance(t.get("sections"), list) or not t["sections"]:
+        raise Refuse(f"--from-treatment {p}: not a treatment (no sections)")
+    sw = list(getattr(a, "section_world", None) or [])
+    for s in t["sections"]:
+        if not isinstance(s.get("index"), int) or not str(s.get("world_prompt", "")).strip():
+            raise Refuse(f"--from-treatment {p}: a section has no index or no world_prompt")
+        sw.append(f"#{s['index']}={s['world_prompt']}")
+    a.section_world = sw
+    if not getattr(a, "moves_from", None):
+        a.moves_from = str(p)
+    a._treatment_freeze = [s["index"] for s in t["sections"] if s.get("freeze") is True]
+    a._treatment_reveal = [s["index"] for s in t["sections"] if s.get("look") == "receipt"]
+
+
+def _treatment_specs(a, indices, secs):
+    """Section indices from the treatment -> '#i' specs for the sections being rendered (others are skipped)."""
+    inside = {s.get("index") for s in secs}
+    return [f"#{i}" for i in indices if i in inside]
+
+
 def render(a):
     t_start = time.time()
     stages = {}
     looks = parse_looks(a.look)
+    apply_treatment(a)
     local, default, per, prompts, key = gate(a)
     prefix = LOCAL_PREFIX if local else ""
     base = prefix + a.tag
@@ -187,6 +224,11 @@ def render(a):
     stages["sync_s"] = round(time.time() - t, 1)
 
     # 3. plan: worlds per section, freezes, cuts
+    if getattr(a, "_treatment_freeze", None):
+        a.freeze = list(getattr(a, "freeze", None) or []) + _treatment_specs(a, a._treatment_freeze, secs)
+    if getattr(a, "_treatment_reveal", None):
+        a.receipt_reveal = (list(getattr(a, "receipt_reveal", None) or [])
+                            + _treatment_specs(a, a._treatment_reveal, secs))
     freezes = FZ.resolve(tl, getattr(a, "freeze", None), getattr(a, "freeze_bars", 2), secs)
     style = getattr(a, "freeze_style", "bullet") if freezes else "still"  # no freeze: 0.2.0 unchanged
     lead_in = None
@@ -298,6 +340,15 @@ def render(a):
 
     # 7. worlds
     worlds = []
+    light_txt = ""
+    if (getattr(a, "stage", "off") == "tracked" and not getattr(a, "no_world_light", False)
+            and any(kind not in ("plate", "image") for kind, _ in entries)):
+        from realone.stage import light as LIGHT  # light every generated world the way the take was lit
+        info, light_txt = LIGHT.from_take(norm, masks, n)
+        if info:
+            print(f"world light: the take reads {info['kind']} (background L* {info['l_mean']:.0f}, sky grey "
+                  f"{info['sky_grey']:.2f} / blue {info['sky_blue']:.2f}); appended to every world prompt:{light_txt}")
+            plan["world_light"] = {k: (round(v, 2) if isinstance(v, float) else v) for k, v in info.items()}
     plates_local = local_plates() if any(kind == "plate" for kind, _ in entries) else []
     for kind, v in entries:
         if kind == "plate":
@@ -305,7 +356,7 @@ def render(a):
         elif kind == "image":
             worlds.append((Path(v).stem, Path(v), a.particles))
         else:
-            path, b = gen_world(client, v, wrap=wrap)
+            path, b = gen_world(client, v + light_txt, wrap=wrap)
             billed += b
             worlds.append((v[:28], path, a.particles))
     names = [nm for nm, _, _ in worlds]
