@@ -479,6 +479,12 @@ def render(a):
         else:
             arrays.update(lyr_arr)
             plan["lyrics_in_world"]["mode"] = mode
+            framing = [sh.get("framing") for sh in plan["shots"]]
+            from realone import moments as MO
+            arrays["lyr_card"] = LT.card_places(
+                lyr_arr["lyr_line"], len(lyric_lines), lambda i: framing[int(shot_of[i])],
+                lambda i: None if np.isnan(boxes[i, 0]) else MO.box_out(boxes[i], crops[i]))
+            plan["lyrics_in_world"]["cards"] = sorted({int(g) for g in lyr_arr["lyr_line"][arrays["lyr_card"] > 0]})
             print(f"lyrics in the world ({mode}): {len(lyric_lines)} lines, {plan['lyrics_in_world']['words']} "
                   f"words, on {plan['lyrics_in_world']['frames_with_words']} of {n} frames")
     elif getattr(a, "_lyrics_off_why", None):

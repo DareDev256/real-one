@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- **Front cards in medium and close shots (Nov 2, after a blind critic).** A fresh critic compared the stand-in hook
+  before (lyric signs only) and after (hits, moments, living world) without knowing which was which: 4/10 against
+  5.5/10. It called the "GOOD" slam "the only moment either clip does anything beyond dancer with small captions",
+  and named one gap: the lyrics read as tiny stacked captions. It also flagged text over the head at 9.7 to 12 s.
+  At full size that text is behind him (he is correctly in front), but in the medium and close shots the sign
+  lands behind his head and is cut in half by it. Now the line's framing decides, once per line: a wide shot keeps
+  the sign in the world; a medium or close shot brings the line to the front as a bold card in the lower third
+  (or the top when his head is low), word by word on the beat, never on the Real Receipt.
+  `lyrictext.card_places`, `CardPainter`, `card_looks`; 2 tests, 3 mutations all red.
 - **The world is alive (on by default, `--still-world` to turn it off; Nov 2).** James on the Savv render: "even how
   they had the lamps, the background should technically be active ... moving". Wonder's own world prompt asked for
   "flickering amber security lamps", and a still cannot flicker. `realone/livingworld.py` finds the lights in every

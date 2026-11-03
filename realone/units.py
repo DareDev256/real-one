@@ -169,9 +169,10 @@ class Ctx:
         else:
             self.living = None
         # lyrics in the world (realone/lyrictext.py): which line, how many words, how long since the last landed
-        self.lyrics = None
+        self.lyrics, self.cards, self.card_painter = None, None, None
         if "lyr_line" in arr.files and d.get("lyric_lines"):
             self.lyrics = (arr["lyr_line"], arr["lyr_shown"], arr["lyr_age"])
+            self.cards = arr["lyr_card"] if "lyr_card" in arr.files else None
             self.lyric_lines = d["lyric_lines"]
             self.painters = {}
             ln = self.lyrics[0]  # each line's middle frame: every worker anchors a line's sign at the same place,
@@ -261,7 +262,8 @@ def render_unit(u):
                 world, front = grade_world(world, float(c.grade[i])), grade_world(front, float(c.grade[i]))
             wk = world_key(world, front)  # the freeze proof is the world itself, taken before any lyrics
             slamming = c.mo is not None and c.mo[3][i] >= 0
-            if c.lyrics is not None and c.lyrics[0][i] >= 0 and not slamming:  # a slam IS the lyric on its beat
+            card = int(c.cards[i]) if c.cards is not None and c.lyrics[0][i] >= 0 else 0
+            if c.lyrics is not None and c.lyrics[0][i] >= 0 and not slamming and not card:  # a slam IS the lyric
                 world = _with_lyrics(c, i, sh_world, world)
             if c.mo is not None and c.mo[0][i] >= 0:  # an ignite: embers rise behind him, the world takes the heat
                 from realone import moments as MO
@@ -288,6 +290,11 @@ def render_unit(u):
             if prev_thumb is not None:
                 rec["plate_steps"][j] = float(np.abs(th - prev_thumb).mean())
             prev_thumb = th
+            if card and not slamming:  # a medium or close shot: the line comes to the front as a card
+                from realone import lyrictext as LT
+                if c.card_painter is None:
+                    c.card_painter = LT.CardPainter(c.lyric_lines)
+                frames = LT.card_looks(frames, c.card_painter, card, *(int(x[i]) for x in c.lyrics))
             if c.mo is not None and c.mo[3][i] >= 0:  # a slam: the word in front of him, never on the Real Receipt
                 from realone import moments as MO
                 if c.slam_painter is None:

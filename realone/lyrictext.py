@@ -187,6 +187,57 @@ class LyricPainter:
         return rgb.astype(np.float32), alpha.astype(np.float32)
 
 
+# Cards: in a medium or close shot a sign behind the artist lands behind his head and is cut in half by it (the
+# Nov 2 blind critic: "text stacked directly over the forehead and headphones"), and there is no free world beside
+# him. There the line comes to the front: a bold card in the lower third, or the top when his head is low, word by
+# word on the beat. Wide shots keep the sign in the world. A card covers part of him, so like a slam it is never
+# drawn on the Real Receipt.
+CARD_FRAMINGS = ("medium", "close")
+CARD_SIZE = 0.085            # letter height, share of the frame height (0.068 read as captions, Nov 2)
+CARD_WORDS = 2               # words a row: a phrase stacks as a card, no stray word on a row of its own
+CARD_ROWS = 2
+
+
+def card_places(line_id, n_lines, framing_at, box_at):
+    """-> int8 per frame: 0 the line is a sign in the world, 1 a card in the lower third, 2 a card at the top.
+    Decided once per line from the frame it starts on: framing_at(i) is that frame's shot framing, box_at(i) the
+    artist's box in output px (or None)."""
+    from realone import moments as MO
+    from realone.common import H as _H
+    line_id = np.asarray(line_id)
+    out = np.zeros(line_id.shape[0], np.int8)
+    row_h = CARD_SIZE * _H * CARD_ROWS
+    for gid in range(n_lines):
+        idx = np.nonzero(line_id == gid)[0]
+        if not idx.size or framing_at(int(idx[0])) not in CARD_FRAMINGS:
+            continue
+        y = MO.slam_y(box_at(int(idx[0])), row_h)
+        out[idx] = 1 if y == int(MO.SLAM_Y[0] * _H) else 2
+    return out
+
+
+class CardPainter:
+    """A line as a front card: the frame's width, CARD_ROWS rows at most, each word landing with the usual pop."""
+
+    def __init__(self, lines, font_spec=DEFAULT_FONT):
+        from realone import moments as MO
+        from realone.common import H as _H, W as _W
+        self.p = {place: LyricPainter(lines, _W, _H, font_spec, CARD_SIZE, MO.SLAM_Y[place - 1], CARD_WORDS, CARD_ROWS)
+                  for place in (1, 2)}
+
+    def apply(self, frame, place, line, shown, age):
+        got = self.p[place].rgba(line, shown, age) if place in self.p else None
+        if got is None:
+            return frame
+        rgb, a = got
+        return (frame.astype(np.float32) * (1 - a[..., None]) + rgb * a[..., None]).clip(0, 255).astype(np.uint8)
+
+
+def card_looks(frames, painter, place, line, shown, age):
+    """The card on every look but the Real Receipt (its filmed share is measured from the artist's mask)."""
+    return {lk: fr if lk == "receipt" else painter.apply(fr, place, line, shown, age) for lk, fr in frames.items()}
+
+
 # The sign the words stand on in the world (realone/stage): its size, where it stands, and how a line comes in.
 SIGN_CANVAS = (1536, 1536)   # pixels painted on the sign (square: two words a row, up to four rows)
 SIGN_WIDTH_M = 1.4           # metres wide in the world (tuned on the Nov 2 stand-in: wider clips)

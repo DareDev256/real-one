@@ -143,3 +143,31 @@ def test_a_phrase_goes_to_the_side_with_more_room_away_from_his_body():
     assert side == 1 and x > 0.5 and x + share / 2 <= 1
     side, x, _, share = LT.sign_target(0, (0.10, 0.98))   # arms out across the frame: still a full-size sign
     assert share == LT.SIGN_SHARE
+
+
+def test_card_places_follow_the_framing_and_the_head():
+    import numpy as np
+    from realone import lyrictext as LT
+    line = np.array([0] * 10 + [1] * 10 + [2] * 10 + [-1] * 5)
+    framing = ["wide"] * 10 + ["close"] * 10 + ["medium"] * 15
+    high_head, low_head = (300, 200, 800, 1900), (300, 1150, 800, 1900)
+    boxes = [high_head] * 20 + [low_head] * 15
+    got = LT.card_places(line, 3, lambda i: framing[i], lambda i: boxes[i])
+    assert list(got[:10]) == [0] * 10          # wide: the sign stays in the world
+    assert list(got[10:20]) == [1] * 10        # close, head high: the lower third
+    assert list(got[20:30]) == [2] * 10        # medium, head low: the top
+    assert list(got[30:]) == [0] * 5           # no line
+
+
+def test_card_never_on_the_receipt_and_sits_low():
+    import numpy as np
+    from realone import lyrictext as LT
+    from realone.common import H, W
+    fr = np.zeros((H, W, 3), np.uint8)
+    cp = LT.CardPainter([["I'M", "GOOD,", "I'M", "GOOD"]])
+    out = LT.card_looks({"clean": fr, "receipt": fr}, cp, 1, 0, 4, 9)
+    assert out["receipt"] is fr
+    rows = np.nonzero((out["clean"] > 200).any(axis=(1, 2)))[0]
+    assert rows.size and rows.min() > 0.5 * H
+    top = cp.apply(fr, 2, 0, 4, 9)
+    assert np.nonzero((top > 200).any(axis=(1, 2)))[0].max() < 0.5 * H
