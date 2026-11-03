@@ -181,6 +181,24 @@ def apply_treatment(a):
                             if any("moments" in s for s in t["sections"]) else None)
 
 
+def lyrics_mode(a):
+    """forced (--lyrics-in-world: refuse without words), auto (on by default when the treatment carries lyric
+    lines, James Nov 2: "when the text is there, it's a lot more interesting"), or off (--no-lyrics, no lyric, or a
+    lyric with words on the violence list: those never go on screen unless forced)."""
+    if getattr(a, "lyrics_in_world", False):
+        return "forced"
+    lines = [x for v in (getattr(a, "_treatment_lyrics", None) or {}).values() for x in v]
+    if getattr(a, "no_lyrics", False) or not lines:
+        return "off"
+    from realone.moments import violent_words
+    bad = sorted({w for x in lines for w in violent_words(x)})
+    if bad:
+        a._lyrics_off_why = (f"the lyric has words on the violence list ({', '.join(bad[:4])}); "
+                             "--lyrics-in-world forces them on")
+        return "off"
+    return "auto"
+
+
 def _treatment_specs(a, indices, secs):
     """Section indices from the treatment -> '#i' specs for the sections being rendered (others are skipped)."""
     inside = {s.get("index") for s in secs}
@@ -447,16 +465,25 @@ def render(a):
                         "jolts": int((np.abs(hp["dx"]) > 0).sum())}
         print(f"hits on the beat: {plan['hits']}")
     lyric_lines = None
-    if getattr(a, "lyrics_in_world", False):  # the lyric lines written into the world, a word on each beat
+    mode = lyrics_mode(a)
+    if mode != "off":  # the lyric lines written into the world, a word on each beat
         from realone import lyrictext as LT
         try:
             lyric_lines, lyr_arr, plan["lyrics_in_world"] = LT.for_render(getattr(a, "_treatment_lyrics", None),
                                                                           tl, s0, n, FPS)
         except LT.LyricError as e:
-            raise Refuse(str(e)) from None
-        arrays.update(lyr_arr)
-        print(f"lyrics in the world: {len(lyric_lines)} lines, {plan['lyrics_in_world']['words']} words, on "
-              f"{plan['lyrics_in_world']['frames_with_words']} of {n} frames")
+            if mode == "forced":
+                raise Refuse(str(e)) from None
+            plan["lyrics_in_world"] = {"off": str(e)}  # on by default only where there are words to show
+            print(f"lyrics in the world: off ({e})")
+        else:
+            arrays.update(lyr_arr)
+            plan["lyrics_in_world"]["mode"] = mode
+            print(f"lyrics in the world ({mode}): {len(lyric_lines)} lines, {plan['lyrics_in_world']['words']} "
+                  f"words, on {plan['lyrics_in_world']['frames_with_words']} of {n} frames")
+    elif getattr(a, "_lyrics_off_why", None):
+        plan["lyrics_in_world"] = {"off": a._lyrics_off_why}
+        print(f"lyrics in the world: off ({a._lyrics_off_why})")
     slam_words = []
     if getattr(a, "moments", False) or getattr(a, "moment", None):  # lyric moments (realone/moments.py)
         from realone import lyrictext as LT
@@ -513,6 +540,8 @@ def render(a):
         if getattr(a, "contact", "synthetic") == "real":
             stage_rep["shadow_path"] = str(Path(str(mpath)).with_name(Path(str(mpath)).stem + "_shadow.npy"))
         plan["stage"] = {k: v for k, v in stage_rep.items() if k != "K"}
+    plan["living_world"] = ("off (--still-world)" if getattr(a, "still_world", False) else
+                            "on: the world's lights flicker and swell on the kick, haze drifts (world clock)")
     write_json(shots_path, plan)  # again: now with each shot's counter place and collage ink
     np.savez(seg_dir / "arrays.npz", **arrays)
     units = U.make_units(plan, workers, avoid=[f["end_frame"] for f in plan["freezes"]])
@@ -527,7 +556,10 @@ def render(a):
            "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
            "cv_threads": max(1, (os.cpu_count() or 4) // workers),
            "stage": stage_rep, "stage_cache": str(OUT / "work" / "depth"), "lyric_lines": lyric_lines,
-           "slam_words": slam_words}
+           "slam_words": slam_words,
+           "beat_grid": None if getattr(a, "still_world", False) else
+           {"beats": tl.get("beats") or [], "downbeats": tl.get("downbeats") or [],
+            "beats_per_bar": tl.get("beats_per_bar") or 4}}
     if stage_rep is not None:
         ctx["args"]["stage"] = "tracked"
     if os.environ.get("REALONE_KEEP_WORK"):  # debug: keep what a lab needs to rebuild any frame without a render

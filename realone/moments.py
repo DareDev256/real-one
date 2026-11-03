@@ -30,8 +30,17 @@ FLASH_FRAMES = 8        # the warm flash on the world
 SLAM_FRAMES = 20        # the slammed word, 0.67 s
 SLAM_FADE = 6           # its last frames fade out
 SLAM_SCALE = (1.28, 1.1, 1.03)  # its first frames: in from bigger, landing at 1.0
+SLAM_Y = (0.72, 0.18)   # where the word may sit (share of frame height): the lower third first, else the top
+FACE_SHARE = 0.24       # the top of the artist's box this deep is his head: a slam never covers it
 EMBERS = 230
 WARM = np.float32([-0.22, 0.06, 0.42])  # BGR gain at full flash: blue down, red up
+
+
+# Words that never go on screen by default (Meta employees judge the hackathon; Savv's drill verse, Nov 2): the
+# director may not pick them as moments, and a lyric carrying any of them keeps lyrics-in-the-world off unless
+# --lyrics-in-world forces it.
+VIOLENCE = frozenset("gun guns glock glocks shoot shooting shot shots kill killed killing murder blood bullet bullets "
+                     "stick sticks opp opps smoke smoked body bodies drill strap draco".split())
 
 
 class MomentError(ValueError):
@@ -69,6 +78,33 @@ def pick(lines, chosen=None, most=MAX_MOMENTS):
                 if len(out) >= most:
                     return out
     return out
+
+
+def violent_words(text):
+    """The words of `text` on the VIOLENCE list, normalised."""
+    return sorted({_norm(w) for w in str(text).split()} & VIOLENCE)
+
+
+def slam_y(box, word_h):
+    """The word's centre row: the first SLAM_Y place whose band misses the artist's head (the top FACE_SHARE of his
+    box, output px), else the one that covers it least. The first render put it across his face (Nov 2)."""
+    if box is None or np.isnan(box[0]):
+        return int(SLAM_Y[0] * H_)
+    f0, f1 = box[1], box[1] + FACE_SHARE * (box[3] - box[1])
+
+    def overlap(cy):
+        top, bot = cy * H_ - word_h / 2, cy * H_ + word_h / 2
+        return max(0.0, min(bot, f1) - max(top, f0))
+
+    best = min(SLAM_Y, key=lambda cy: (overlap(cy) > 0, overlap(cy)))
+    return int(best * H_)
+
+
+def slam_looks(frames, painter, j, age, box=None):
+    """Slam word j onto every look but the Real Receipt, whose filmed share is measured from the artist's mask: a
+    word covering him there would make the receipt's count untrue. box: the artist in output px (keeps his face
+    clear)."""
+    return {lk: fr if lk == "receipt" else painter.apply(fr, j, age, box) for lk, fr in frames.items()}
 
 
 def land_frame(line_id, shown, gid, k):
@@ -238,8 +274,9 @@ class SlamPainter:
         self.cache[j] = arr
         return arr
 
-    def apply(self, frame, j, age):
-        """frame: uint8 (H, W, 3) BGR -> the frame with word j slammed in, `age` frames after it landed."""
+    def apply(self, frame, j, age, box=None):
+        """frame: uint8 (H, W, 3) BGR -> the frame with word j slammed in, `age` frames after it landed, clear of
+        the artist's face when his box (output px) is given."""
         import cv2
         if j < 0 or age >= SLAM_FRAMES:
             return frame
@@ -248,7 +285,7 @@ class SlamPainter:
         img = cv2.resize(base, None, fx=sc, fy=sc, interpolation=cv2.INTER_LINEAR)
         fade = 1.0 if age < SLAM_FRAMES - SLAM_FADE else (SLAM_FRAMES - age) / (SLAM_FADE + 1)
         h, w = img.shape[:2]
-        cx, cy = W_ // 2, int(0.30 * H_)
+        cx, cy = W_ // 2, slam_y(box, base.shape[0])
         xa, ya = cx - w // 2, cy - h // 2
         x0, y0, x1, y1 = max(0, xa), max(0, ya), min(W_, xa + w), min(H_, ya + h)
         if x1 <= x0 or y1 <= y0:

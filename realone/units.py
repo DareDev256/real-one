@@ -162,6 +162,12 @@ class Ctx:
                    if "mo_ign" in arr.files else None)
         self.slam_words = d.get("slam_words") or []
         self.bursts, self.slam_painter = {}, None
+        bg = d.get("beat_grid")  # the living world (realone/livingworld.py): None = a still world
+        if bg is not None:
+            from realone.livingworld import LivingWorld
+            self.living = LivingWorld(bg["beats"], bg["downbeats"], bg["beats_per_bar"])
+        else:
+            self.living = None
         # lyrics in the world (realone/lyrictext.py): which line, how many words, how long since the last landed
         self.lyrics = None
         if "lyr_line" in arr.files and d.get("lyric_lines"):
@@ -249,10 +255,13 @@ def render_unit(u):
                     wcache = (wkey,) + world_layer(c.plates[sh_world], c.parts[sh_world], crop, c.pushf[i],
                                                    c.args.push, wt, cam=cam)
                 _, world, front, wbase = wcache
+            if c.living is not None:  # its lamps breathe on the world clock: a frozen world freezes them too
+                world = c.living.apply(world, wt)
             if c.bullet and c.grade[i] > 0:  # the frozen world grades cool; the artist is composited in colour
                 world, front = grade_world(world, float(c.grade[i])), grade_world(front, float(c.grade[i]))
             wk = world_key(world, front)  # the freeze proof is the world itself, taken before any lyrics
-            if c.lyrics is not None and c.lyrics[0][i] >= 0:
+            slamming = c.mo is not None and c.mo[3][i] >= 0
+            if c.lyrics is not None and c.lyrics[0][i] >= 0 and not slamming:  # a slam IS the lyric on its beat
                 world = _with_lyrics(c, i, sh_world, world)
             if c.mo is not None and c.mo[0][i] >= 0:  # an ignite: embers rise behind him, the world takes the heat
                 from realone import moments as MO
@@ -283,9 +292,8 @@ def render_unit(u):
                 from realone import moments as MO
                 if c.slam_painter is None:
                     c.slam_painter = MO.SlamPainter(c.slam_words)
-                sj, sa = int(c.mo[3][i]), int(c.mo[4][i])
-                frames = {lk: fr_ if lk == "receipt" else c.slam_painter.apply(fr_, sj, sa)
-                          for lk, fr_ in frames.items()}
+                sbox = None if np.isnan(c.boxes[i, 0]) else MO.box_out(c.boxes[i], crop)
+                frames = MO.slam_looks(frames, c.slam_painter, int(c.mo[3][i]), int(c.mo[4][i]), sbox)
             if c.bullet:  # the punch and the flash on the freeze downbeat, once per look
                 frames = {lk: apply_hit(fr_, float(c.punch[i]), float(c.flash[i])) for lk, fr_ in frames.items()}
             if c.crash is not None and c.crash[0][i] > 1.0001:  # the crash zoom: the whole finished frame

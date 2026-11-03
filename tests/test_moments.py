@@ -100,3 +100,34 @@ def test_box_out_follows_the_crop():
     assert MO.box_out((100, 200, 300, 400), (0, 0, MO.W_, MO.H_)) == (100, 200, 300, 400)
     x0, y0, x1, y1 = MO.box_out((540, 960, 640, 1060), (540, 960, MO.W_ / 2, MO.H_ / 2))
     assert (x0, y0) == (0, 0) and abs(x1 - 200) < 1e-6
+
+
+def test_slam_never_reaches_the_receipt():
+    fr = np.zeros((MO.H_, MO.W_, 3), np.uint8)
+    out = MO.slam_looks({"clean": fr, "receipt": fr, "collage": fr}, MO.SlamPainter(["good"]), 0, 5)
+    assert out["receipt"] is fr
+    assert (out["clean"] > 200).sum() > 10000 and (out["collage"] > 200).sum() > 10000
+
+
+def test_slam_keeps_clear_of_his_face():
+    word_h = 300
+    head_high = (300, 250, 800, 1900)   # head at the top: the word goes to the lower third
+    assert MO.slam_y(head_high, word_h) == int(MO.SLAM_Y[0] * MO.H_)
+    head_low = (300, 1150, 800, 1900)   # a low framing: his head is where the lower third would be
+    y = MO.slam_y(head_low, word_h)
+    assert y == int(MO.SLAM_Y[1] * MO.H_)
+    f0, f1 = 1150, 1150 + MO.FACE_SHARE * 750
+    assert y + word_h / 2 < f0 or y - word_h / 2 > f1
+    assert MO.slam_y(None, word_h) == int(MO.SLAM_Y[0] * MO.H_)
+
+
+def test_slam_drawn_where_slam_y_says():
+    fr = np.zeros((MO.H_, MO.W_, 3), np.uint8)
+    out = MO.SlamPainter(["good"]).apply(fr, 0, 6, (300, 250, 800, 1900))
+    rows = np.nonzero((out > 200).any(axis=(1, 2)))[0]
+    assert rows.min() > 0.55 * MO.H_  # the lower third, not across the head at the top
+
+
+def test_violent_words():
+    assert MO.violent_words("Glock on my hip, shots!") == ["glock", "shots"]
+    assert MO.violent_words("I'm good, I'm good") == []

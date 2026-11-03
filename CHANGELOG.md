@@ -1,6 +1,24 @@
 # Changelog
 
 ## Unreleased
+- **The world is alive (on by default, `--still-world` to turn it off; Nov 2).** James on the Savv render: "even how
+  they had the lamps, the background should technically be active ... moving". Wonder's own world prompt asked for
+  "flickering amber security lamps", and a still cannot flicker. `realone/livingworld.py` finds the lights in every
+  frame of the world layer (warm bright pixels, or any colour brighter than its surroundings: warm-only found
+  nothing in the stand-in's blue world, where the lights are neon reflections in puddles), then they flicker per
+  region, swell on the kick (a downbeat, smaller on the backbeat), one stutters out on about a third of the bars,
+  and haze drifts through their light. All of it runs on the world clock, so a Hook Freeze freezes the lamps too and
+  the freeze proof stays true. The first pass was measured too weak to see (the halo around Savv's lamps moved 41
+  to 43 of 255, frame-to-frame change 0.07); now 42 to 51 with lamp cores 142 to 184, about 54 ms a frame. 7 tests;
+  8 mutations all red after two tests were tightened (a dying lamp on every bar passed "rare", and the haze test
+  passed through the flicker alone).
+- **Lyrics in the world are on by default** when the treatment carries lyric lines (`--no-lyrics` turns them off;
+  `--lyrics-in-world` still forces them and refuses without words). A lyric with any word on the violence list
+  stays off unless forced, so Savv's verse cannot reach the screen by default. 4 tests, 6 mutations all red.
+- **The slam moved off his face.** The first moments render put "GOOD" across the performer's head (it sat at 30%
+  of the frame height). It now takes the lower third, or the top when his head is low, whichever misses the top
+  quarter of his box; the in-world sign hides while a slam is on (the slam is the lyric on that beat). The slam
+  never reaching the Real Receipt is now a tested function (`moments.slam_looks`).
 - **Hits on the beat (`--hits`, Nov 2).** James on the Savv render: "it should have hit or effects based off the
   beat ... it just looks like a rotoscoped person with a background." The finished frame now kicks with the song:
   every downbeat a zoom punch (4.5%, easing back over 6 frames) and an exposure kick (x1.22 for 3 frames; a first

@@ -14,13 +14,11 @@ import json
 from realone.common import Refuse
 from realone.director.backend import text_part, user
 from realone.director.schema import parse_json, validate
-from realone.moments import EFFECTS, _norm
+from realone.moments import EFFECTS, VIOLENCE, _norm
 from realone.lyrictext import words_of
 
 MAX_PER_SECTION = 2
 MAX_TOTAL = 8
-VIOLENCE = frozenset("gun guns glock glocks shoot shooting shot shots kill killed killing murder blood bullet bullets "
-                     "stick sticks opp opps smoke smoked body bodies drill strap draco".split())
 
 INSTRUCTIONS = """You are the director of a music video. The treatment (one world per section) is done. Now pick the
 lyric moments: the few words that get a visual hit on the exact frame they are sung.

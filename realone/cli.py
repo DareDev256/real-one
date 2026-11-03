@@ -98,6 +98,11 @@ def build_parser():
                         "treatment, words about fire ignite")
     r.add_argument("--moment", action="append", metavar="WORD:EFFECT",
                    help="hand-pick a lyric moment (effect ignite or slam); repeatable; outranks the treatment")
+    r.add_argument("--still-world", action="store_true",
+                   help="keep the world a still image (by default its lamps flicker, swell on the kick and haze "
+                        "drifts through their light: realone/livingworld.py)")
+    r.add_argument("--no-lyrics", action="store_true",
+                   help="keep the lyric out of the world (it is on by default when the treatment carries lyrics)")
     r.add_argument("--lyrics-in-world", action="store_true",
                    help="write each section's lyric lines into the world behind the artist, a word on each beat "
                         "(needs --from-treatment for the lines; on --stage tracked they move with the camera)")
