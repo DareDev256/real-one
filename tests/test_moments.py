@@ -20,9 +20,27 @@ def _sched(n=120):
 
 
 def test_director_picks_win_in_order_and_cap():
-    got = MO.pick(LINES, [{"word": "GOOD", "effect": "slam"}, {"word": "lights", "effect": "ignite"},
-                          {"word": "good", "effect": "slam"}, {"word": "four", "effect": "slam"}])
-    assert [(g, k, e) for g, k, e, _ in got] == [(0, 1, "slam"), (2, 0, "ignite"), (0, 3, "slam")]
+    picks = [{"word": "GOOD", "effect": "slam"}, {"word": "lights", "effect": "ignite"},
+             {"word": "four", "effect": "slam"}, {"word": "up", "effect": "ignite"}]
+    got = MO.pick(LINES, picks, repeats=False)
+    assert [(g, k, e) for g, k, e, _ in got] == [(0, 1, "slam"), (2, 0, "ignite"), (2, 3, "slam")]  # 3 picks max
+
+
+def test_a_pick_repeats_each_time_its_word_is_sung():
+    got = MO.pick(LINES, [{"word": "good", "effect": "slam"}])
+    assert [(g, k) for g, k, _, _ in got] == [(0, 1), (0, 3)]
+
+
+def test_landings_are_spaced_and_capped():
+    n = 400
+    line, shown = np.full(n, -1, np.int16), np.zeros(n, np.int16)
+    words = [["a"] * 8]
+    lands = [0, 20, 60, 120, 180, 240, 300, 360]  # word k lands on lands[k]
+    for k, f in enumerate(lands):
+        line[f:], shown[f:] = 0, k + 1
+    mo = [(0, k, "slam", "a") for k in range(8)]
+    arr, w, designed, report = MO.profile(mo, line, shown, n)
+    assert [r["frame"] for r in report] == [0, 60, 120, 180]  # 20 is too soon after 0; then the cap of 4
 
 
 def test_bad_picks_are_skipped():
@@ -45,13 +63,13 @@ def test_land_frame():
 
 def test_profile_spans_and_designed():
     line, shown = _sched()
-    mo = [(1, 1, "ignite", "burnt"), (0, 1, "slam", "good,")]
+    mo = [(2, 0, "ignite", "lights"), (0, 1, "slam", "good,")]
     arr, words, designed, report = MO.profile(mo, line, shown, 120)
-    assert arr["mo_ign"][50] == 0 and arr["mo_ign"][49] == -1 and arr["mo_ign"][50 + MO.IGNITE_FRAMES - 1] > 0
+    assert arr["mo_ign"][70] == 0 and arr["mo_ign"][69] == -1 and arr["mo_ign"][70 + MO.IGNITE_FRAMES - 1] > 0
     assert words == ["good,"] and arr["mo_slam"][10] == 0 and arr["mo_slam_age"][15] == 5
     assert arr["mo_slam"][10 + MO.SLAM_FRAMES] == -1
-    assert {50, 51, 10, 11} <= designed and 12 not in designed
-    assert [r["frame"] for r in report] == [50, 10]
+    assert {70, 71, 10, 11} <= designed and 12 not in designed
+    assert [r["frame"] for r in report] == [10, 70]  # in the order they are sung
 
 
 def test_ignite_box_comes_from_the_artist():
@@ -59,7 +77,7 @@ def test_ignite_box_comes_from_the_artist():
     boxes = np.full((120, 4), np.nan)
     boxes[50] = (100, 200, 300, 900)
     arr, *_ = MO.profile([(1, 1, "ignite", "burnt")], line, shown, 120, boxes)
-    assert tuple(arr["mo_ign_box"][60]) == (100, 200, 300, 900)
+    assert tuple(arr["mo_ign_box"][60]) == (100, 200, 300, 900)  # the box when the word landed (frame 50)
 
 
 def test_flash_hits_then_settles():

@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- **A moment lands each time its word is sung (Nov 2, critic round 2).** The second blind round scored the cards
+  6/10 against the sign-only version's 4/10, and named the remaining gap: "the whole 20 s has one visual tempo, so
+  nothing hits"; add 3 or 4 hits. Wonder is told a hook that repeats can carry its moment each time, but the
+  renderer fired only the first time the word was sung. Now a pick lands on every repeat, spaced at least 1.5 s
+  (`MIN_GAP`) and at most 4 a render (`MAX_HITS`). The stand-in hook: slam "good" at 0.6 s and again at 10.4 s
+  (the card shows "I'M", then "GOOD" slams on the beat), ignite "Lights" at 14.7 s. 3 tests, 6 mutations all red.
 - **Front cards in medium and close shots (Nov 2, after a blind critic).** A fresh critic compared the stand-in hook
   before (lyric signs only) and after (hits, moments, living world) without knowing which was which: 4/10 against
   5.5/10. It called the "GOOD" slam "the only moment either clip does anything beyond dancer with small captions",

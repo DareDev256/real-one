@@ -21,7 +21,10 @@ import numpy as np
 from realone.common import H as H_, W as W_
 
 EFFECTS = ("ignite", "slam")
-MAX_MOMENTS = 3
+MAX_MOMENTS = 3         # distinct words picked
+MAX_HITS = 4            # moments landing in one render, a hook's repeats included (critic round 2, Nov 2: "add
+                        # 3-4 of these hits"; one per ~5 s of a 20 s hook)
+MIN_GAP = 45            # frames between two landings (1.5 s): a repeat sung sooner is skipped, so hits stay hits
 IGNITE_WORDS = frozenset(
     "fire fires burn burns burnt burned burning flame flames blaze blazing lit heat ash ashes inferno torch "
     "lighter matches".split())
@@ -52,23 +55,27 @@ def _norm(w):
     return "".join(ch for ch in w if ch.isalnum() or ch == "'").strip("'")
 
 
-def pick(lines, chosen=None, most=MAX_MOMENTS):
+def pick(lines, chosen=None, most=MAX_MOMENTS, repeats=True):
     """lines: the render's lyric phrases ([[word, ...], ...], from lyrictext.schedule). chosen: the director's
     [{"word", "effect"}, ...] in order, None when no director chose (then fire words ignite), [] when it chose none.
-    -> [(phrase id, word index, effect, word)], at most `most`, each a different word position."""
-    out, used = [], set()
+    -> [(phrase id, word index, effect, word)] for at most `most` distinct picks; with `repeats` a pick lands every
+    time its word is sung (a hook that repeats carries its moment each time: the director is told so), and
+    `profile` spaces the landings (MIN_GAP) and caps them (MAX_HITS)."""
+    out, used, picks = [], set(), 0
     if chosen is not None:
         for ch in chosen:
             eff, want = ch.get("effect"), _norm(ch.get("word", ""))
             if eff not in EFFECTS or not want:
                 continue
-            spot = next(((g, k) for g, ws in enumerate(lines) for k, w in enumerate(ws)
-                         if _norm(w) == want and (g, k) not in used), None)
-            if spot is None:
+            spots = [(g, k) for g, ws in enumerate(lines) for k, w in enumerate(ws)
+                     if _norm(w) == want and (g, k) not in used]
+            if not spots:
                 continue  # the word is not sung inside this render
-            used.add(spot)
-            out.append((spot[0], spot[1], eff, lines[spot[0]][spot[1]]))
-            if len(out) >= most:
+            for g, k in (spots if repeats else spots[:1]):
+                used.add((g, k))
+                out.append((g, k, eff, lines[g][k]))
+            picks += 1
+            if picks >= most:
                 break
         return out
     for g, ws in enumerate(lines):
@@ -122,10 +129,13 @@ def profile(moments, line_id, shown, n, boxes=None):
     ign_box = np.full((n, 4), np.nan, np.float32)
     slam, slam_age = np.full(n, -1, np.int16), np.zeros(n, np.int16)
     words, designed, report = [], set(), []
-    for j, (g, k, eff, w) in enumerate(moments):
-        f0 = land_frame(line_id, shown, g, k)
-        if f0 is None:
-            continue
+    landed = sorted((f0, m) for m in moments if (f0 := land_frame(line_id, shown, m[0], m[1])) is not None)
+    kept, last = [], -10 ** 9
+    for f0, m in landed:  # spaced and capped, in the order they are sung
+        if f0 - last >= MIN_GAP and len(kept) < MAX_HITS:
+            kept.append((f0, m))
+            last = f0
+    for j, (f0, (g, k, eff, w)) in enumerate(kept):
         if eff == "ignite":
             box = boxes[f0] if boxes is not None else np.array([W_ * 0.3, H_ * 0.2, W_ * 0.7, H_ * 0.95])
             if np.isnan(box[0]):
