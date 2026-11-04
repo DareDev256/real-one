@@ -1,9 +1,10 @@
-"""python -m realone.director {plan, direct, review, moments} ...
+"""python -m realone.director {plan, direct, review, moments, takes} ...
 
   plan    timeline + lyrics + Muse Wonder treatment + literal-lyrics guard -> out/<..>director_<tag>_treatment.json
   direct  plan, then the agentic loop: worlds, renders, watch, one revision pass -> ..._log.json + the renders
   review  watch one existing render against a treatment -> ..._review.json
   moments one Wonder call picks the lyric moments (ignite, slam) of a treatment -> ..._moments_treatment.json
+  takes   Wonder watches several takes and picks one per section -> one edited clip + ..._takes.json
 
 Keyed runs need MODEL_API_KEY (refused before any work without it), quote US$ and CA$ first, and refuse a ceiling
 over --cap-usd (US$2) without --yes-spend. --dry-run replays hand-written FIXTURE responses (never real model
@@ -75,6 +76,19 @@ def build_parser():
     mo.add_argument("--script", default=DEFAULT_SCRIPT)
     mo.add_argument("--cap-usd", type=float, default=0.25, help="refuse a ceiling over this (US$)")
     mo.add_argument("--yes-spend", action="store_true")
+    tk = sub.add_parser("takes", help="Wonder watches several takes and picks one per section; the picks are cut "
+                                      "together into one edited clip for the render")
+    tk.add_argument("--take", action="append", required=True, help="a phone take of the song (repeat, in order)")
+    tk.add_argument("--song", required=True)
+    tk.add_argument("--treatment", required=True, help="the treatment: its sections, lyric and subtext")
+    tk.add_argument("--out", required=True, help="the edited clip to write (.mov)")
+    tk.add_argument("--picks", help="skip Wonder: one take number per section, comma list (e.g. 2,3,2,2)")
+    tk.add_argument("--tag", default="main")
+    tk.add_argument("--effort", default="medium", choices=["minimal", "low", "medium", "high", "xhigh", "max"])
+    tk.add_argument("--dry-run", action="store_true")
+    tk.add_argument("--script", default=DEFAULT_SCRIPT)
+    tk.add_argument("--cap-usd", type=float, default=0.60, help="refuse a ceiling over this (US$)")
+    tk.add_argument("--yes-spend", action="store_true")
     rv = sub.add_parser("review", help="watch one render against its treatment")
     rv.add_argument("--render", required=True, help="an MP4 under out/")
     rv.add_argument("--treatment", required=True, help="the treatment file it was made from")
@@ -161,6 +175,75 @@ def plan_stage(a, backend, meter, prefix, timeline):
     return rec, path, ly, res
 
 
+def takes_cmd(a):
+    """Several takes -> one edited clip: sync each take, Wonder picks a take per section (or --picks), check the
+    phone did not move between takes, cut on the section downbeats. Writes the clip and <tag>_takes.json."""
+    import tempfile
+    from realone.director import takes as TK
+    for p in [a.song, a.treatment, *a.take]:
+        _exists(p)
+    rec = json.loads(Path(a.treatment).read_text())
+    secs = sorted(rec.get("sections") or [], key=lambda s: s["start_s"])
+    if not secs:
+        raise Refuse(f"{a.treatment}: not a treatment (no sections)")
+    spans = TK.spans(a.take, a.song)
+    for k, sp in enumerate(spans):
+        print(f"director: take {k + 1}: song {sp['song_start_s']:.2f}-{sp['song_end_s']:.2f} s "
+              f"(sync r={sp['sync']['r_peak']:.2f}, margin {sp['sync']['margin']:.2f})")
+    ref = spans[0]
+    for k, sp in enumerate(spans[1:], 2):
+        lo = max(ref["song_start_s"], sp["song_start_s"], 0.0) + 1.0
+        hi = min(ref["song_end_s"], sp["song_end_s"]) - 1.0
+        moments = [lo + (hi - lo) * f for f in (0.2, 0.5, 0.8)]  # the same song moments in both takes
+        shift = sorted(TK.background_shift(ref["path"], sp["path"], t - ref["offset_s"], t - sp["offset_s"])
+                       for t in moments)[1]
+        if shift > TK.MAX_SHIFT_PX:
+            raise Refuse(f"takes: the phone moved between take 1 and take {k} ({shift:.0f} px at 1080 wide); the "
+                         f"tracked stage reads one camera. Cut these takes as separate videos.")
+        print(f"director: take {k} background vs take 1: {shift:.1f} px")
+    meter = None
+    if a.picks:
+        nums = [int(x) for x in a.picks.split(",")]
+        if len(nums) != len(secs):
+            raise Refuse(f"--picks has {len(nums)} numbers for {len(secs)} sections")
+        obj = {"picks": [{"section": s["index"], "take": n, "why": "--picks (by hand)"} for s, n in zip(secs, nums)]}
+        picks, info = TK.check(obj, secs, spans), {"source": "--picks (by hand)", **obj}
+    else:
+        if a.dry_run:
+            backend, meter = FixtureBackend(a.script), None
+        else:
+            key = budget.require_key()
+            song_end = max(s["end_s"] for s in secs)
+            est = 2500 + int(len(spans) * song_end * budget.VIDEO_TOKENS_PER_S)
+            q = {"lines": [], "ceiling_usd": budget.wonder_ceiling("takes", est)}
+            q["ceiling_cad"] = round(q["ceiling_usd"] * budget.USD_TO_CAD, 2)
+            print(f"director: takes quote: up to US${q['ceiling_usd']:.3f} (about CA${q['ceiling_cad']:.2f}), one "
+                  f"call with {len(spans)} videos")
+            # one Wonder call; each take's upload counts against the call cap too (it costs nothing)
+            meter = budget.Meter(budget.gate({**q, "expected_usd": q["ceiling_usd"]}, a.cap_usd, a.yes_spend),
+                                 1 + len(spans))
+            backend = MetaBackend(key, meter)
+        with tempfile.TemporaryDirectory() as work:
+            picks, info = TK.pick(backend, spans, rec, work, effort=a.effort)
+    segs = TK.segments(secs, picks, spans, max(s["end_s"] for s in secs))
+    for (k, c0, c1, s0), sec in zip(segs, secs):
+        why = next((p["why"] for p in info.get("picks", []) if p["section"] == sec["index"]), "")
+        print(f"  #{sec['index']} {sec.get('role', ''):6s} take {k + 1}  (clip {c0:.2f}-{c1:.2f} s)  {why}")
+    prefix = LOCAL_PREFIX if a.dry_run else ""
+    OUT.mkdir(exist_ok=True)
+    # the record first: a paid pick is kept even if the cut fails
+    path = write_json(OUT / f"{prefix}director_{a.tag}_takes.json",
+                      {"takes": spans, "picks": info, "segments": [
+                          {"section": sec["index"], "take": k + 1, "clip_start_s": c0, "clip_end_s": c1,
+                           "song_start_s": s0} for (k, c0, c1, s0), sec in zip(segs, secs)],
+                       "spend": meter.summary() if not a.picks and meter else {"spent_usd": 0.0},
+                       "out": str(a.out)})
+    print(f"director: record -> {path}")
+    TK.assemble(spans, segs, a.out)
+    print(f"director: edited clip -> {a.out}")
+    return 0
+
+
 def moments_cmd(a):
     """One Wonder call: the treatment's lyric moments. Writes a copy of the treatment with `moments` per section."""
     from realone.director import moments as dmo
@@ -200,6 +283,8 @@ def main(argv=None):
             return review(a)
         if a.cmd == "moments":
             return moments_cmd(a)
+        if a.cmd == "takes":
+            return takes_cmd(a)
         _exists(a.song, a.lyrics, getattr(a, "clip", None))
         brain = getattr(a, "brain", "wonder")
         if brain == "spark-open" and not a.no_transcribe:

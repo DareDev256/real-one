@@ -140,6 +140,9 @@ downbeat within one beat, or is refused).
   `--look collage,receipt`; `scripts/serve_watch_page.py` serves it locally. Test renders carry a TEST banner.
 - **README media:** `scripts/readme_media.py --tag TAG --section SECTION` regenerates the two images above. Test
   renders are stamped TEST RENDER.
+- **Several takes:** `python -m realone.director takes --take A --take B --take C --song SONG --treatment T --out edited.mov`
+  has Muse Wonder pick the strongest take per section and cuts them together on the section downbeats; render the
+  edited clip like a single take.
 - **Director:** `python -m realone.director plan|direct|review`; `plan --brain spark-open` is wired to write the
   treatment on Muse Spark Open (Baseten) instead of Muse Wonder, not yet run with a key; see `docs/director.md`.
 

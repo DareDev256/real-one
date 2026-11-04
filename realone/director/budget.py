@@ -42,9 +42,9 @@ FX_NOTE = f"US$1 = CA${USD_TO_CAD:.2f} (rough, fixed; realone/meta_api.py)"
 
 # Output ceilings per call kind (max_output_tokens sent with the call) and typical output sizes.
 MAX_OUT = {"treatment": 12000, "treatment_repair": 12000, "guard_reask": 4000, "loop": 3000, "watch": 3000,
-           "decide": 3000, "moments": 8000}
+           "decide": 3000, "moments": 8000, "takes": 4000}
 TYPICAL_OUT = {"treatment": 6000, "treatment_repair": 6000, "guard_reask": 2000, "loop": 1200, "watch": 1500,
-               "decide": 1500, "moments": 1500}
+               "decide": 1500, "moments": 1500, "takes": 1200}
 LOOP_BASE_TOKENS = 5000     # the loop's opening context (treatment, coverage, rules, tool specs)
 LOOP_GROWTH_TOKENS = 1500   # history added per turn (tool outputs, model text)
 

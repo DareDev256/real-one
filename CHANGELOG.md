@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+- **Several takes, one edit (`python -m realone.director takes`, Nov 4).** James filmed three run-throughs of song B
+  in one phone file and asked: "imagine you're able to give multiple takes and it cuts them together to give you an
+  edited video." Each take is synced to the master on its own. Muse Wonder watches all of them in one call (each as
+  a 360x640 proxy on the song's own clock, black until that take started) with the treatment's sections, lyric and
+  subtext, and picks one take per section with a line of why. A pick is refused locally when its take does not cover
+  the whole section (take 1 started 6 s in, so it cannot carry the intro). The picks are cut from the original 4K HLG
+  takes on the section downbeats, where the world cuts too, into one clip the render treats like any phone take
+  (synced at -1 ms). The phone must not move between takes, since the tracked stage reads one camera: the first
+  check (phase correlation over the whole frame) read 299 px between two takes from an unmoved phone because it was
+  measuring the artist; it is now ORB features with a RANSAC homography (the artist is the outlier), calibrated on a
+  known 47 px shift (reads 48.7) and reading 0.9 and 1.9 px on James's takes. His picks (US$0.099, response
+  resp_6aeb4bf2ef7f8f32c70b47ca): intro take 3, first hook take 1, verse take 3, last hook take 2. `--picks 3,1,3,2`
+  skips Wonder. 5 tests; RANSAC removed = red.
 - **Lyric moments are per section on a full-song render (Nov 4).** The first full render of James's take landed its
   four moments at 3.0, 7.3, 11.9 and 14.1 s: one on the intro's "real one", which the director never picked for the
   intro, and then the per-render cap of 4 was spent, so the verse's "ignite" and every moment of the last hook were
