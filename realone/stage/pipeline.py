@@ -316,7 +316,7 @@ class StageWorlds:
         anything else in the scene. The depth test hides it wherever the world is nearer (a pillar)."""
         from realone import lyrictext as LT
         if not hasattr(self, "sign_paint"):
-            self.sign_paint, self.sign_depth = LT.sign_painter(self.lyric_lines), {}
+            self.sign_paint, self.sign_depth = LT.sign_painter(self.lyric_lines, getattr(self, "lyric_colors", None)), {}
         got = self.sign_paint.rgba(line, shown, age)
         if got is None:
             return None

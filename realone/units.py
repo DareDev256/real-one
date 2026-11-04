@@ -162,6 +162,8 @@ class Ctx:
         self.mo = ((arr["mo_ign"], arr["mo_ign_id"], arr["mo_ign_box"], arr["mo_slam"], arr["mo_slam_age"])
                    if "mo_ign" in arr.files else None)
         self.slam_words = d.get("slam_words") or []
+        self.slam_colors = d.get("slam_colors") or []
+        self.lyric_colors = d.get("lyric_colors")
         # tracked effects (realone/fx.py): frames since it started, which effect, the tracked part's box (source px)
         self.fx = (arr["fx_age"], arr["fx_id"], arr["fx_box"]) if "fx_age" in arr.files else None
         self.fx_bursts = {}
@@ -202,7 +204,7 @@ def _with_lyrics(c, i, wid, world):
         got = c.stage.last_text
     else:  # no stage: the words sit in screen space, still behind the artist
         if "screen" not in c.painters:
-            c.painters["screen"] = LT.LyricPainter(c.lyric_lines, W, H)
+            c.painters["screen"] = LT.LyricPainter(c.lyric_lines, W, H, line_colors=c.lyric_colors)
         got = c.painters["screen"].rgba(*(int(a[i]) for a in c.lyrics))
     return world if got is None else LT.blend(world, *got)
 
@@ -254,6 +256,7 @@ def render_unit(u):
                 lyr = None
                 if c.lyrics is not None and c.lyrics[0][i] >= 0:
                     c.stage.lyric_lines = c.lyric_lines
+                    c.stage.lyric_colors = c.lyric_colors
                     c.stage.lyric_start = c.lyric_start
                     c.stage.crops = c.crops
                     c.stage.boxes = c.boxes
@@ -314,12 +317,12 @@ def render_unit(u):
             if card and not slamming:  # a medium or close shot: the line comes to the front as a card
                 from realone import lyrictext as LT
                 if c.card_painter is None:
-                    c.card_painter = LT.CardPainter(c.lyric_lines)
+                    c.card_painter = LT.CardPainter(c.lyric_lines, line_colors=c.lyric_colors)
                 frames = LT.card_looks(frames, c.card_painter, card, *(int(x[i]) for x in c.lyrics))
             if c.mo is not None and c.mo[3][i] >= 0:  # a slam: the word in front of him, never on the Real Receipt
                 from realone import moments as MO
                 if c.slam_painter is None:
-                    c.slam_painter = MO.SlamPainter(c.slam_words)
+                    c.slam_painter = MO.SlamPainter(c.slam_words, colors=c.slam_colors)
                 sbox = None if np.isnan(c.boxes[i, 0]) else MO.box_out(c.boxes[i], crop)
                 frames = MO.slam_looks(frames, c.slam_painter, int(c.mo[3][i]), int(c.mo[4][i]), sbox)
             if c.bullet:  # the punch and the flash on the freeze downbeat, once per look

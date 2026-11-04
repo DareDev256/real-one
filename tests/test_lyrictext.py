@@ -58,7 +58,9 @@ def test_the_painter_writes_only_the_words_and_more_words_mean_more_ink():
     rgb, al = p.rgba(0, 3, 9)
     out = LT.blend(world, rgb, al)
     assert np.array_equal(out[al == 0], world[al == 0])                           # untouched where no word is
-    assert out[al > 0.99].mean() > 200                                            # the letters are white
+    v = out[al > 0.99].mean(axis=1)                                   # fully covered: the letters and their edge
+    assert np.percentile(v, 75) > 200                                 # the letters are white (no palette given)
+    assert (v < 80).mean() > 0.05                                     # with a dark edge, readable on a bright world
 
 
 def test_the_newest_word_lands_with_a_short_pop_then_settles():

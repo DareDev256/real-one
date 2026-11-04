@@ -18,7 +18,27 @@ proves the world itself stood still while the lyrics carry on with the vocal."""
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-DEFAULT_FONT = ("/System/Library/Fonts/HelveticaNeue.ttc", 9)  # Helvetica Neue Condensed Black
+DEFAULT_FONT = ("/Library/Fonts/Anton-Regular.ttf", 0)  # Anton (SIL OFL): a tall condensed display face; James
+#   Nov 4: "the text should have some effects or font style so it seems more creative". _font falls back to Helvetica
+#   when it is not installed.
+STROKE = 28            # the letters' dark edge: row height / this, so a coloured word reads on any world
+
+
+def accent_of(palette):
+    """The section's accent from the director's palette (hex strings): the most saturated colour bright enough to
+    read on a dark edge, as BGR floats; None when the palette has no colour (a grey section stays white)."""
+    import colorsys
+    best, score = None, 0.0
+    for h in palette or []:
+        h = str(h).lstrip("#")
+        if len(h) != 6:
+            continue
+        r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        _, sat, val = colorsys.rgb_to_hsv(r, g, b)
+        sc = sat * val
+        if val >= 0.55 and sat >= 0.35 and sc > score:
+            best, score = (b * 255, g * 255, r * 255), sc
+    return best
 POP_FRAMES = 4          # the newest word slides up and fades in over this many frames
 MAX_ROWS = 3
 
@@ -221,8 +241,9 @@ class LyricPainter:
     frame's in 2D). Layouts are cached per line; one frame costs a few milliseconds."""
 
     def __init__(self, lines, width, height, font_spec=DEFAULT_FONT, size_frac=0.085, center=0.30, max_words=None,
-                 max_rows=MAX_ROWS):
+                 max_rows=MAX_ROWS, line_colors=None):
         self.lines, self.w, self.h, self.font_spec = lines, int(width), int(height), font_spec
+        self.line_colors = line_colors  # per line: the section accent (BGR) for the word being sung, or None
         self.size_frac, self.center, self.max_words, self.max_rows = size_frac, center, max_words, max_rows
         self._layouts = {}
 
@@ -235,24 +256,30 @@ class LyricPainter:
                                          self.center, self.max_words, self.max_rows)
         f, rows, row_h = self._layouts[line]
         flat = [p for row in rows for p in row]
-        text = Image.new("L", (self.w, self.h), 0)
-        d = ImageDraw.Draw(text)
+        old, new, outer = (Image.new("L", (self.w, self.h), 0) for _ in range(3))
+        do, dn, du = ImageDraw.Draw(old), ImageDraw.Draw(new), ImageDraw.Draw(outer)
+        sw = max(1, row_h // STROKE)
         for k, (word, x, y) in enumerate(flat[:shown]):
             a = 255
             dy = 0
-            if k == shown - 1 and age < POP_FRAMES:  # the newest word lands: slides up and fades in
+            newest = k == shown - 1
+            if newest and age < POP_FRAMES:  # the newest word lands: slides up and fades in
                 u = (age + 1) / POP_FRAMES
                 a = int(255 * (0.35 + 0.65 * u))
                 dy = int(row_h * 0.18 * (1 - u))
-            d.text((x, y + dy), word, font=f, fill=a)
-        al = np.asarray(text, np.float32) / 255
-        shadow = np.asarray(text.filter(ImageFilter.GaussianBlur(max(2, row_h // 14))), np.float32) / 255
+            (dn if newest else do).text((x, y + dy), word, font=f, fill=a)
+            du.text((x, y + dy), word, font=f, fill=a, stroke_width=sw, stroke_fill=a)
+        fo, fn = np.asarray(old, np.float32) / 255, np.asarray(new, np.float32) / 255
+        ou = np.asarray(outer, np.float32) / 255
+        shadow = np.asarray(outer.filter(ImageFilter.GaussianBlur(max(2, row_h // 14))), np.float32) / 255
         shadow = np.roll(np.roll(shadow, row_h // 30 + 1, axis=0), row_h // 40 + 1, axis=1)
-        # white letters over a soft dark shadow: readable on any world, bright or dark
-        alpha = np.clip(al + 0.55 * shadow * (1 - al), 0, 1)
-        grey = 255.0 * al / np.maximum(alpha, 1e-6)  # white letters, black shadow: the colour under the coverage
-        rgb = np.repeat(grey[..., None], 3, axis=2)  # three channels: cv2 warps keep them (one would be dropped)
-        return rgb.astype(np.float32), alpha.astype(np.float32)
+        # the letters with a dark edge over a soft dark shadow: readable on any world, bright or dark; the word
+        # being sung takes the section's accent from the director's palette, the words before it stay white
+        alpha = np.clip(ou + 0.55 * shadow * (1 - ou), 0, 1)
+        col = None if self.line_colors is None or line >= len(self.line_colors) else self.line_colors[line]
+        col = np.float32(col if col is not None else (255, 255, 255))
+        rgb = (255.0 * fo[..., None] + col * fn[..., None]) / np.maximum(alpha, 1e-6)[..., None]
+        return np.clip(rgb, 0, 255).astype(np.float32), alpha.astype(np.float32)
 
 
 # Cards: in a medium or close shot a sign behind the artist lands behind his head and is cut in half by it (the
@@ -298,10 +325,11 @@ def card_changes(line_id, card):
 class CardPainter:
     """A line as a front card: the frame's width, CARD_ROWS rows at most, each word landing with the usual pop."""
 
-    def __init__(self, lines, font_spec=DEFAULT_FONT):
+    def __init__(self, lines, font_spec=DEFAULT_FONT, line_colors=None):
         from realone import moments as MO
         from realone.common import H as _H, W as _W
-        self.p = {place: LyricPainter(lines, _W, _H, font_spec, CARD_SIZE, MO.SLAM_Y[place - 1], CARD_WORDS, CARD_ROWS)
+        self.p = {place: LyricPainter(lines, _W, _H, font_spec, CARD_SIZE, MO.SLAM_Y[place - 1], CARD_WORDS, CARD_ROWS,
+                                      line_colors)
                   for place in (1, 2)}
 
     def apply(self, frame, place, line, shown, age):
@@ -361,8 +389,9 @@ def occlude(alpha, world_zinv, sign_zinv, tol=0.05):
     return (alpha * (world_zinv <= sign_zinv * (1 + tol))).astype(np.float32)
 
 
-def sign_painter(lines):
-    return LyricPainter(lines, *SIGN_CANVAS, size_frac=0.24, center=0.5, max_words=2, max_rows=4)
+def sign_painter(lines, line_colors=None):
+    return LyricPainter(lines, *SIGN_CANVAS, size_frac=0.24, center=0.5, max_words=2, max_rows=4,
+                        line_colors=line_colors)
 
 
 def blend(world, rgb, alpha):

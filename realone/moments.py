@@ -252,9 +252,10 @@ class SlamPainter:
     """A word slammed in front of the artist: Helvetica Neue Condensed Black, white with a black edge and a soft
     shadow, as wide as the frame allows, upper third. Rendered once per word, scaled per frame."""
 
-    def __init__(self, words, font_spec=None):
+    def __init__(self, words, font_spec=None, colors=None):
         from realone import lyrictext as LT
         self.words = [str(w).upper().strip(",.!?;:") for w in words]
+        self.colors = list(colors or [])  # per slam: the section accent (BGR) or None for white
         self.font_spec = font_spec or LT.DEFAULT_FONT
         self.cache = {}
 
@@ -286,7 +287,9 @@ class SlamPainter:
                                 stroke_width=size // 30, stroke_fill=(0, 0, 0, 200))
         sh = sh.filter(ImageFilter.GaussianBlur(size // 18))
         img.alpha_composite(sh)
-        ImageDraw.Draw(img).text((pad - l, pad - t), word, font=font, fill=(255, 255, 255, 255),
+        c = self.colors[j] if j < len(self.colors) and self.colors[j] is not None else None
+        fill = (255, 255, 255, 255) if c is None else (int(c[2]), int(c[1]), int(c[0]), 255)  # PIL is RGB
+        ImageDraw.Draw(img).text((pad - l, pad - t), word, font=font, fill=fill,
                                  stroke_width=stroke, stroke_fill=(20, 20, 20, 255))
         arr = np.asarray(img).astype(np.float32) / 255
         self.cache[j] = arr

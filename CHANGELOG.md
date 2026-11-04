@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **The lyric type: Anton, a dark edge, and the director's colour (Nov 4).** James: "the text should have some effects
+  or font style so it seems more creative". Cards, signs and slams are set in Anton (SIL OFL), a tall condensed
+  display face, with a dark edge and the soft shadow, and the word being sung takes its section's accent, picked
+  from the palette Muse Wonder wrote for that section (`lyrictext.accent_of`: the boldest colour bright enough to
+  read on the edge; a grey section, like the last hook's receipt world, stays white). Slams take the same accent.
+  So the type changes with the world: amber on the plaza hook, coral on the collage verse. 3 tests; 3 mutations
+  red. The old "letters are white" test now also requires the dark edge.
 - **Wet floors reflect him; an edit's fire is bigger and glows (Nov 4, gauntlet round 5).** Both blind critics of
   round 5 named the same gap: he is not grounded in his worlds, and "the puddle at 4.5 s reflects the sky but not
   him". Both hooks are wet worlds (the plaza's wet granite, the last hook's puddles), so in a world whose prompt makes

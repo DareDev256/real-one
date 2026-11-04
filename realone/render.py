@@ -179,6 +179,7 @@ def apply_treatment(a):
     a._treatment_reveal = [s["index"] for s in t["sections"] if s.get("look") == "receipt"]
     a._treatment_particles = {s["index"]: s["particles"] for s in t["sections"] if s.get("particles")}
     a._treatment_lyrics = {s["index"]: list(s.get("lyric") or []) for s in t["sections"]}
+    a._treatment_palettes = {s["index"]: list(s.get("palette") or []) for s in t["sections"]}
     a._treatment_moments = ({s["index"]: list(s.get("moments") or []) for s in t["sections"]}
                             if any("moments" in s for s in t["sections"]) else None)
     if getattr(a, "word_times", None):
@@ -544,7 +545,12 @@ def render(a):
     elif getattr(a, "_lyrics_off_why", None):
         plan["lyrics_in_world"] = {"off": a._lyrics_off_why}
         print(f"lyrics in the world: off ({a._lyrics_off_why})")
-    slam_words = []
+    slam_words, slam_colors = [], []
+    from realone import lyrictext as LTX
+    # the type takes each section's accent from the director's palette (realone/lyrictext.accent_of)
+    accents = {i: LTX.accent_of(pal) for i, pal in (getattr(a, "_treatment_palettes", None) or {}).items()}
+    line_sec = (plan.get("lyrics_in_world") or {}).get("line_section") or []
+    lyric_colors = [accents.get(sec) for sec in line_sec] if lyric_lines is not None else None
     if getattr(a, "moments", False) or getattr(a, "moment", None):  # lyric moments (realone/moments.py)
         from realone import lyrictext as LT
         from realone import moments as MO
@@ -576,6 +582,7 @@ def render(a):
             chosen, source = None, "no director pick: words about fire ignite"
         picked = MO.pick(mo_lines, chosen, line_section=mo_sec)
         mo_arr, slam_words, mo_designed, mo_rep = MO.profile(picked, mo_line, mo_shown, n, boxes, line_section=mo_sec)
+        slam_colors = [accents.get(m.get("section")) for m in mo_rep if m["effect"] == "slam"]
         arrays.update(mo_arr)
         beat_designed = set(beat_designed) | mo_designed  # a slam or an ignite flash changes the frame on purpose
         plan["moments"] = {"source": source, "moments": mo_rep}
@@ -627,7 +634,7 @@ def render(a):
            "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
            "cv_threads": max(1, (os.cpu_count() or 4) // workers),
            "stage": stage_rep, "stage_cache": str(OUT / "work" / "depth"), "lyric_lines": lyric_lines,
-           "slam_words": slam_words,
+           "slam_words": slam_words, "slam_colors": slam_colors, "lyric_colors": lyric_colors,
            "beat_grid": None if getattr(a, "still_world", False) else
            {"beats": tl.get("beats") or [], "downbeats": tl.get("downbeats") or [],
             "beats_per_bar": tl.get("beats_per_bar") or 4}}
