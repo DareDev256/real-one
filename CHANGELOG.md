@@ -1,6 +1,17 @@
 # Changelog
 
 ## Unreleased
+- **Tracked effects, and edit by sentence (`render --edits`, `python -m realone.director edit`; Nov 4).** James, at
+  work: "imagine it has an app ... once you're done, you're able to edit ... place tracked explosions and visual
+  effects down ... like a real video editor, all with Meta's abilities". The spine is an edit file on the song clock,
+  `{"fx": [{"track": "his hands", "at_s": 32.82, "effect": "fire"}]}`: SAM 3.1 segments the named part on every
+  frame of the take (one cached call per phrase), and the effect is drawn from that part's box frame by frame, so
+  the fire moves with his hands. It is generated, in the world and front layers, never on him, so the Receipt
+  counts it. Refused when SAM finds the part on under 60% of the effect's frames, or the file names nothing to
+  track. The first front door is a sentence: `director edit --say "put fire coming off my hands when I say heat"`
+  asks Muse Wonder for the part, the word, its section and the effect (US$0.07 ceiling); the time comes from the
+  word times, never from the model, and a word not sung in that section is dropped. On the demo it placed fire on
+  "his hands" at 32.82 s ("heat", the verse). 5 tests; 5 mutations red.
 - **Close shots keep his head in; dolly lines are cards (Nov 4, gauntlet round 4).** The round's one gap: a close
   punch-in on "Every pixel's real" ran his head off the top of the frame, because the smoothed camera lagged him
   standing up. Medium and close crops now never start below his head (`plan.head_limit`: the box top, minimum over

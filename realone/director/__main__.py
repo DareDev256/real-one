@@ -89,6 +89,17 @@ def build_parser():
     tk.add_argument("--script", default=DEFAULT_SCRIPT)
     tk.add_argument("--cap-usd", type=float, default=0.60, help="refuse a ceiling over this (US$)")
     tk.add_argument("--yes-spend", action="store_true")
+    ed = sub.add_parser("edit", help="edit by sentence: Wonder turns what the artist says into tracked effects "
+                                     "(an edit file for render --edits)")
+    ed.add_argument("--treatment", required=True)
+    ed.add_argument("--word-times", required=True, help="scripts/align_lyrics.py output for this treatment")
+    ed.add_argument("--say", required=True, help='what to add, e.g. "fire from his hands on heat"')
+    ed.add_argument("--out", required=True, help="the edit file to write (.json)")
+    ed.add_argument("--effort", default="medium", choices=["minimal", "low", "medium", "high", "xhigh", "max"])
+    ed.add_argument("--dry-run", action="store_true")
+    ed.add_argument("--script", default=DEFAULT_SCRIPT)
+    ed.add_argument("--cap-usd", type=float, default=0.25, help="refuse a ceiling over this (US$)")
+    ed.add_argument("--yes-spend", action="store_true")
     rv = sub.add_parser("review", help="watch one render against its treatment")
     rv.add_argument("--render", required=True, help="an MP4 under out/")
     rv.add_argument("--treatment", required=True, help="the treatment file it was made from")
@@ -173,6 +184,36 @@ def plan_stage(a, backend, meter, prefix, timeline):
                                                    "spend": meter.summary() if meter else None}))
     path = write_json(f"{stem}_treatment.json", rec)
     return rec, path, ly, res
+
+
+def edit_cmd(a):
+    """One Wonder call: a sentence -> tracked effects placed on the sung words -> an edit file."""
+    from realone import fx as FX
+    from realone.director import edit as ED
+    _exists(a.treatment)
+    rec = json.loads(Path(a.treatment).read_text())
+    if not rec.get("sections"):
+        raise Refuse(f"{a.treatment}: not a treatment (no sections)")
+    words = ED.load_word_times(a.word_times)
+    if a.dry_run:
+        backend, meter = FixtureBackend(a.script), None
+    else:
+        key = budget.require_key()
+        est = len(json.dumps(rec["sections"])) // 4 + 900
+        q = {"lines": [], "ceiling_usd": budget.wonder_ceiling("edit", est)}
+        q["ceiling_cad"] = round(q["ceiling_usd"] * budget.USD_TO_CAD, 2)
+        print(f"director: edit quote: up to US${q['ceiling_usd']:.3f} (about CA${q['ceiling_cad']:.2f}), one call")
+        meter = budget.Meter(budget.gate({**q, "expected_usd": q["ceiling_usd"]}, a.cap_usd, a.yes_spend), 1)
+        backend = MetaBackend(key, meter)
+    out = ED.edit(backend, rec, words, a.say, sorted(FX.EFFECTS), effort=a.effort)
+    out["spend"] = meter.summary() if meter else {"spent_usd": 0.0}
+    Path(a.out).write_text(json.dumps(out, indent=1))
+    for e in out["fx"]:
+        print(f"  {e['effect']} on '{e['track']}' at {e['at_s']:.2f} s ('{e['word']}', section {e['section']}): {e['why']}")
+    for d in out["dropped"]:
+        print(f"  dropped: {d['why']}")
+    print(f"director: edit [{out['source']}] -> {a.out}; render it with --edits {a.out}")
+    return 0
 
 
 def takes_cmd(a):
@@ -285,6 +326,8 @@ def main(argv=None):
             return moments_cmd(a)
         if a.cmd == "takes":
             return takes_cmd(a)
+        if a.cmd == "edit":
+            return edit_cmd(a)
         _exists(a.song, a.lyrics, getattr(a, "clip", None))
         brain = getattr(a, "brain", "wonder")
         if brain == "spark-open" and not a.no_transcribe:

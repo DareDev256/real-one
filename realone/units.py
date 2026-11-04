@@ -161,6 +161,9 @@ class Ctx:
         self.mo = ((arr["mo_ign"], arr["mo_ign_id"], arr["mo_ign_box"], arr["mo_slam"], arr["mo_slam_age"])
                    if "mo_ign" in arr.files else None)
         self.slam_words = d.get("slam_words") or []
+        # tracked effects (realone/fx.py): frames since it started, which effect, the tracked part's box (source px)
+        self.fx = (arr["fx_age"], arr["fx_id"], arr["fx_box"]) if "fx_age" in arr.files else None
+        self.fx_bursts = {}
         self.bursts, self.slam_painter = {}, None
         bg = d.get("beat_grid")  # the living world (realone/livingworld.py): None = a still world
         if bg is not None:
@@ -278,6 +281,11 @@ def render_unit(u):
                 j = int(c.mo[1][i])
                 burst = c.bursts.setdefault(j, MO.EmberBurst(j))
                 world, front = MO.ignite(world, front, int(c.mo[0][i]), MO.box_out(c.mo[2][i], crop), burst)
+            if c.fx is not None and c.fx[0][i] >= 0:  # a tracked effect: the fire follows the part SAM tracks
+                from realone import moments as MO
+                j = int(c.fx[1][i])
+                burst = c.fx_bursts.setdefault(j, MO.EmberBurst(500 + j))
+                world, front = MO.ignite(world, front, int(c.fx[0][i]), MO.box_out(c.fx[2][i], crop), burst)
             per_out = _looks_for(c, i)
             looks = sorted(set(per_out.values()))
             use_nat = nf if c.native_frames[i] else None

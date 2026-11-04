@@ -346,6 +346,13 @@ def render(a):
     elif not local and not any((OUT / "masks").glob(f"{mtag}__*.txt")):
         usd += sam_cost(n)
     usd += IMAGE_USD * len(new_prompts)
+    fx_list = None
+    if getattr(a, "edits", None):  # tracked effects (realone/fx.py): one SAM 3.1 call per part named, cached
+        from realone import fx as FX
+        fx_list = FX.load_edits(a.edits)
+        if local:
+            raise Refuse("--edits: tracked effects need SAM 3.1 (a keyed render); the local test masks have no parts")
+        usd += sam_cost(n) * len(sam_uncached(mtag, sorted({e["track"] for e in fx_list})))
     if usd:
         print(f"spend quote: US${usd:.3f} (about CA${usd * USD_TO_CAD:.2f}) for SAM {n} frames + "
               f"{len(new_prompts)} images")
@@ -365,6 +372,17 @@ def render(a):
         billed += b
     masks = np.load(mpath, mmap_mode="r")
     stages["masks_s"] = round(time.time() - t, 1)
+
+    fx_boxes = {}
+    if fx_list:
+        from realone.masks import _decoded, sam_text_one, slug
+        for track in sorted({e["track"] for e in fx_list}):
+            text, b = sam_text_one(client, norm, mtag, n, track)
+            billed += b
+            if not text.strip():
+                raise Refuse(f"--edits: SAM 3.1 found no '{track}' in this take")
+            fx_boxes[track] = bboxes(np.load(_decoded(text, n, OUT / "masks" / f"{mtag}__{slug(track)}.masks.npy"),
+                                             mmap_mode="r"))
 
     # 6. camera
     t = time.time()
@@ -559,6 +577,13 @@ def render(a):
         plan["moments"] = {"source": source, "moments": mo_rep}
         print(f"lyric moments ({source}): " + (", ".join(f"{m['word']} {m['effect']} @{m['frame']}" for m in mo_rep)
                                                 or "none in this render"))
+    if fx_list:  # the tracked effects (realone/fx.py): each drawn from its part's box, frame by frame
+        from realone import fx as FX
+        fx_arr, fx_designed, plan["fx"] = FX.plan(fx_list, s0, n, lambda tr: fx_boxes[tr], FPS)
+        arrays.update(fx_arr)
+        beat_designed = set(beat_designed) | fx_designed
+        print("tracked effects: " + ", ".join(f"{e['effect']} on '{e['track']}' @{e['at_s']:.2f}s"
+                                             + ("" if e["placed"] else f" ({e['why']})") for e in plan["fx"]))
     stage_rep = None
     if getattr(a, "stage", "off") == "tracked":
         from realone.stage import pipeline as STG

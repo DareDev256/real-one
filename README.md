@@ -140,6 +140,8 @@ downbeat within one beat, or is refused).
   `--look collage,receipt`; `scripts/serve_watch_page.py` serves it locally. Test renders carry a TEST banner.
 - **README media:** `scripts/readme_media.py --tag TAG --section SECTION` regenerates the two images above. Test
   renders are stamped TEST RENDER.
+- **Tracked effects:** `render --edits edits.json` draws an effect that follows a part SAM 3.1 tracks ("his hands");
+  `python -m realone.director edit --say "fire from my hands on heat"` writes that file from a sentence (Muse Wonder).
 - **Several takes:** `python -m realone.director takes --take A --take B --take C --song SONG --treatment T --out edited.mov`
   has Muse Wonder pick the strongest take per section and cuts them together on the section downbeats; render the
   edited clip like a single take.
