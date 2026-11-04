@@ -11,9 +11,10 @@ composited, so the Real Receipt greys it and counts it as generated, and his own
 import numpy as np
 
 WET_WORDS = ("wet", "rain", "puddle", "reflect", "mirror", "flood")
-STRENGTH = 0.42      # the reflection right at his feet (it fades to 0 over FADE of the room below)
+STRENGTH = 0.62      # the reflection right at his feet (it fades to 0 over FADE of the room below); 0.42
+#                      read as nothing at phone size on the plaza (Nov 4)
 FADE = 0.9
-DARKEN = 0.62        # wet stone gives back a darker image than the thing itself
+DARKEN = 0.55        # wet stone gives back a darker image than the thing itself
 SMEAR_PX = 5         # vertical smear (water), px at 1080 wide
 
 
