@@ -180,6 +180,8 @@ class Ctx:
             self.lyric_start = {int(k): int((np.nonzero(ln == k)[0][0] + np.nonzero(ln == k)[0][-1]) // 2)
                                 for k in np.unique(ln[ln >= 0])}
         self.crash = (arr["crash_scale"], arr["crash_cx"], arr["crash_cy"]) if "crash_scale" in arr.files else None
+        # the entrance (realone/entrance.py): the world's gain per frame while it waits for him to step in
+        self.ent = arr["ent_gain"] if "ent_gain" in arr.files else None
         # Hook Freeze v2 (`bullet`): the camera truck, the motion-blur clock rate and the hit, per frame
         self.bullet = "cam_dx" in arr.files
         if self.bullet:
@@ -241,6 +243,9 @@ def render_unit(u):
             cam = (float(c.cam_dx[i]), float(c.vel[i]), float(c.cam_zoom[i])) if c.bullet else None
             wkey = (sh_world, float(wt), float(c.pushf[i]), tuple(crop), cam)  # exactly world_layer's inputs
             m = unpack_mask(c.masks[i])
+            if c.ent is not None:  # before he steps in, a matte is not him (realone/entrance.py)
+                from realone import entrance as EN
+                m = EN.matte(m, float(c.ent[i]))
             if c.stage is not None:  # every frame has its own camera pose: nothing to cache
                 lyr = None
                 if c.lyrics is not None and c.lyrics[0][i] >= 0:
@@ -260,6 +265,9 @@ def render_unit(u):
                 world = c.living.apply(world, wt)
             if c.bullet and c.grade[i] > 0:  # the frozen world grades cool; the artist is composited in colour
                 world, front = grade_world(world, float(c.grade[i])), grade_world(front, float(c.grade[i]))
+            if c.ent is not None and c.ent[i] < 1:  # dark until he steps in, then the lights come up
+                from realone import entrance as EN
+                world, front = EN.apply(world, front, float(c.ent[i]))
             wk = world_key(world, front)  # the freeze proof is the world itself, taken before any lyrics
             slamming = c.mo is not None and c.mo[3][i] >= 0
             card = int(c.cards[i]) if c.cards is not None and c.lyrics[0][i] >= 0 else 0

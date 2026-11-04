@@ -464,12 +464,23 @@ def render(a):
             ox[i], oy[i] = (fx[i] - x0) * W / cw, (fy[i] - y0) * W / cw
         arrays["crash_scale"], arrays["crash_cx"], arrays["crash_cy"] = sc, ox, oy
     beat_designed = set()
+    ent_g = None
+    if getattr(a, "entrance", "auto") == "auto":  # the world stays dark until he steps in (realone/entrance.py)
+        from realone import entrance as EN
+        ent_g, plan["entrance"] = EN.plan(boxes, n, FPS)
+        if plan["entrance"]["on"]:
+            arrays["ent_gain"] = ent_g
+            beat_designed = set(range(plan["entrance"]["entry_frame"], plan["entrance"]["lit_frame"] + 1))
+            print(f"entrance: the world stays dark until he steps in at frame {plan['entrance']['entry_frame']} "
+                  f"({plan['entrance']['entry_s']:.2f} s), lit by frame {plan['entrance']['lit_frame']}")
+        else:
+            ent_g = None
     if getattr(a, "hits", False):  # the frame kicks on the beat (realone/hits.py)
         from realone import hits as HT
         hp = HT.profile(tl, s0, n, FPS)
         arrays["hit_punch"], arrays["hit_flash"], arrays["hit_dx"], arrays["hit_dy"] = (
             hp["punch"], hp["flash"], hp["dx"], hp["dy"])
-        beat_designed = hp["designed"]
+        beat_designed = set(beat_designed) | set(hp["designed"])
         plan["hits"] = {"frames_punched": int((hp["punch"] > 1.0).sum()), "flashes": int((hp["flash"] > 0).sum()),
                         "jolts": int((np.abs(hp["dx"]) > 0).sum())}
         print(f"hits on the beat: {plan['hits']}")
@@ -492,8 +503,11 @@ def render(a):
             plan["lyrics_in_world"]["mode"] = mode
             framing = [sh.get("framing") for sh in plan["shots"]]
             from realone import moments as MO
+            # a line that starts while the world is still dark (the entrance) is a front card: a sign in a dark
+            # world would be dark too
             arrays["lyr_card"] = LT.card_places(
-                lyr_arr["lyr_line"], len(lyric_lines), lambda i: framing[int(shot_of[i])],
+                lyr_arr["lyr_line"], len(lyric_lines),
+                lambda i: "close" if ent_g is not None and ent_g[i] < 1 else framing[int(shot_of[i])],
                 lambda i: None if np.isnan(boxes[i, 0]) else MO.box_out(boxes[i], crops[i]))
             plan["lyrics_in_world"]["cards"] = sorted({int(g) for g in lyr_arr["lyr_line"][arrays["lyr_card"] > 0]})
             print(f"lyrics in the world ({mode}): {len(lyric_lines)} lines, {plan['lyrics_in_world']['words']} "

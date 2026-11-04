@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+- **The entrance: dark until he steps in (`--entrance auto`, the default; Nov 4, gauntlet round 1).** Every one of
+  James's takes starts with an empty wall while he walks to his mark, so the video opened on an empty generated
+  world for 5.5 s and the intro line played over nobody. The blind critic scored the first three seconds 3/10 ("a
+  judge has read 'AI background loop' before the real one appears"), and that was its one gap. The song answers it:
+  "Lights go up when I step in". When the artist is not in the first frame, the world layers sit at 6% until his box
+  is a body (4% of the frame wide, 30% high, 3 frames in a row), then the lights come up over 0.7 s. Lines sung in
+  the dark are front cards; before the entry the matte is empty (the critic saw a pale sliver at the edge of the
+  empty take, which a dark world would make glare), so the filmed share reads 0 there; the ramp is a designed change
+  for the cut check. Nothing changes when he is in the first frame. 5 tests; 7 mutations red (the width rule
+  survived until a test with a thin sliver down the frame edge).
 
 ## 0.3.0 (2026-11-04): his take, several takes, and the vocal
 - **Several takes, one edit (`python -m realone.director takes`, Nov 4).** James filmed three run-throughs of song B

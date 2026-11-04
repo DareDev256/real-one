@@ -34,6 +34,9 @@ def build_parser():
     r.add_argument("--sync-near", type=float, help="song time (s) the take starts near, when sync is ambiguous")
     r.add_argument("--tag", default="floor", help="output name stem (out/<tag>_<section>_<look>.mp4)")
     r.add_argument("--final", action="store_true", help="x264 slow / crf 17 (default veryfast / crf 20)")
+    r.add_argument("--entrance", choices=["auto", "off"], default="auto",
+                   help="auto: when the take starts before the artist is in frame, the world stays dark until he "
+                        "steps in, then its lights come up (lines sung in the dark are front cards)")
     r.add_argument("--particles", choices=["dust", "rain", "embers", "none"], default="dust",
                    help="particle layer for --world / --world-image worlds")
     r.add_argument("--push", type=float, default=0.04, help="world push-in over each shot")
