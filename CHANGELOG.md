@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+- **Several takes, spliced render by render (`scripts/splice_takes.py`, Nov 4).** The multi-take edit could not go
+  through the renderer as one clip: at its first take change the floor track refused ("frame 206: 0 ground points
+  survived") and SAM's video tracking lost him on 96 frames. Each take now renders the sections the director picked
+  from its own continuous footage, and the finished renders are cut together frame-exact on the song clock, with the
+  master audio laid under the whole thing (1,646 frames, -0.4 ms). Blind round 2: the multi-take cut beat the single
+  take, first 3 s 4 vs 3, the rest level. 2 tests; 2 mutations red.
+- **The cut check knows the entrance and the cards (Nov 4).** Three false alarms on James's intros, each fixed at its
+  cause: a cut planned while the world is still dark is invisible, so it is reported (`cuts_in_the_dark`), not
+  required; the dark frames are left out of the detector's baseline (take 2's intro is dark for 183 of 206 frames,
+  and ordinary motion after the lights came up read as a cut); a front card leaving changes a band of the frame on
+  purpose and is a designed change. And `hits` now reports the whole flash decay on a downbeat as designed, as its
+  docstring always said (a close-up crouch made the flash's third frame read as a cut). 4 tests; 4 mutations red.
 - **The Receipt counter keeps off his face (Nov 4, gauntlet round 1 flag).** The counter takes the place its block
   overlaps the artist least. In a close shot his body covers every place equally, so the rule tied and took the
   first one, top left, which was over his mouth at 0:45. His head (the top quarter of his box, as for slams) now

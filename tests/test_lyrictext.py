@@ -171,3 +171,12 @@ def test_card_never_on_the_receipt_and_sits_low():
     assert rows.size and rows.min() > 0.5 * H
     top = cp.apply(fr, 2, 0, 4, 9)
     assert np.nonzero((top > 200).any(axis=(1, 2)))[0].max() < 0.5 * H
+
+
+
+def test_front_card_changes_are_designed_frames():
+    from realone import lyrictext as LT
+    line = np.array([-1, -1, 0, 0, 0, 1, 1, 1, -1, -1])
+    card = np.array([0, 0, 1, 1, 1, 1, 1, 1, 0, 0])
+    assert LT.card_changes(line, card) == {2, 3, 5, 6, 8, 9}
+    assert LT.card_changes(line, np.zeros(10)) == set()  # signs in the world are not front cards

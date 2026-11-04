@@ -73,12 +73,15 @@ def planned_cut_found(d, p, tol=1, ratio=2.5, win=15):
     return bool(d[k] >= near.max() and d[k] >= ratio * (np.median(local) + 1e-6) and d[k] > 6.0)
 
 
-def detect_cuts(path, min_ratio=6.0):
+def detect_cuts(path, min_ratio=6.0, quiet=None):
     """Find hard cuts in the rendered video itself: frames whose difference from the previous frame stands far
     above the clip's typical frame-to-frame change. Returns frame indices (the first frame of each new shot).
     Each 135x240 thumbnail is median-filtered (5 px) first: that removes particle streaks and dots, which change
     every frame and, once the Hook Freeze v2 rain landed, raised the baseline until a real world swap measured 5.7x
-    (refused); a cut changes whole regions and survives the filter (measured: cuts 9.2x+, other frames 3x or less)."""
+    (refused); a cut changes whole regions and survives the filter (measured: cuts 9.2x+, other frames 3x or less).
+    quiet: frames held still on purpose (the entrance's dark world) are left out of the typical change: take 2's
+    intro is dark for 183 of its 206 frames, and a baseline from them read ordinary motion after the lights came up
+    as a cut (Nov 4)."""
     import cv2
     prev, diffs = None, []
     for fr in read_frames(path, size=(135, 240)):
@@ -88,6 +91,10 @@ def detect_cuts(path, min_ratio=6.0):
     d = np.array(diffs)
     if len(d) < 3:
         return [], d
-    base = np.median(d[1:]) + 1e-6
+    keep = np.ones(len(d), bool)
+    keep[0] = False
+    if quiet is not None:
+        keep[[i for i in quiet if 0 <= i < len(d)]] = False
+    base = np.median(d[keep] if keep.sum() >= 3 else d[1:]) + 1e-6
     cuts = [i for i in range(1, len(d)) if d[i] > min_ratio * base and d[i] > 6.0]
     return cuts, d

@@ -510,6 +510,9 @@ def render(a):
                 lambda i: "close" if ent_g is not None and ent_g[i] < 1 else framing[int(shot_of[i])],
                 lambda i: None if np.isnan(boxes[i, 0]) else MO.box_out(boxes[i], crops[i]))
             plan["lyrics_in_world"]["cards"] = sorted({int(g) for g in lyr_arr["lyr_line"][arrays["lyr_card"] > 0]})
+            # a front card appearing, changing line or leaving changes a band of the frame on purpose: the cut
+            # check must not read it as a cut (Nov 4: the intro's card leaving at frame 149 did)
+            beat_designed = set(beat_designed) | LT.card_changes(lyr_arr["lyr_line"], arrays["lyr_card"])
             print(f"lyrics in the world ({mode}): {len(lyric_lines)} lines, {plan['lyrics_in_world']['words']} "
                   f"words, on {plan['lyrics_in_world']['frames_with_words']} of {n} frames")
     elif getattr(a, "_lyrics_off_why", None):
@@ -652,11 +655,16 @@ def render(a):
                                             for r in recs],
               "billed_usd": round(billed, 4), "looks": {}}
     planned = [s["start_frame"] for s in plan["shots"][1:]]
+    # a planned cut while the world is still dark (the entrance) changes a near-black frame: nothing a viewer or the
+    # detector can see, so it is reported, not required (Nov 4: take 2 steps in at 6.1 s, after the intro's cut)
+    from realone import entrance as EN
+    in_dark = EN.dark_cuts(planned, ent_g)
+    planned = [p for p in planned if p not in in_dark]
     all_good = True
     for look in looks:
         rep, good = verify_output(outs[look], dur)
         frames_out = count_frames(outs[look])
-        cuts, diffs = detect_cuts(outs[look])
+        cuts, diffs = detect_cuts(outs[look], quiet=None if ent_g is None else np.nonzero(ent_g < 1)[0])
         # the bullet freeze's hit (punch + flash on its downbeat, decaying over the 3 frames after; the downbeat
         # is not a cut in `bullet`) changes the whole frame like a cut does: a detection there is the hit
         hit = ({f["start_frame"] + j for f in plan["freezes"] for j in range(0, len(FZ.FLASH) + 1)}
@@ -679,6 +687,7 @@ def render(a):
         all_good &= ok
         report["looks"][look] = {"video": str(outs[look]), "spec": rep, "spec_ok": good, "frames": frames_out,
                                  "frames_planned": n, "cuts_detected": cuts, "cuts_planned": planned,
+                                 "cuts_in_the_dark": in_dark,
                                  "cuts_on_plan": f"{len(matched)}/{len(planned)}", "cuts_off_plan": extra,
                                  "detections_on_the_freeze_hit": sorted(c for c in cuts if c in hit),
                                  "audio_vs_master_error_ms": round(av_err_ms, 2), "ok": ok}

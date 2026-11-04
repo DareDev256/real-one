@@ -59,7 +59,9 @@ def profile(timeline, s0, n, fps=30):
             i = f0 + k
             if i < n:
                 punch[i] = max(punch[i], 1.0 + amp * _ease(k, PUNCH_FRAMES))
-        designed.update(range(f0, min(n, f0 + 2)))
+        # every frame a hit changes is designed: the punch's step (2 frames), and on a downbeat the flash's whole
+        # decay (Nov 4: a close-up crouch made the flash's third frame read as a cut on James's intro)
+        designed.update(range(f0, min(n, f0 + (FLASH_FRAMES + 1 if is_down else 2))))
         if is_down:
             for k in range(FLASH_FRAMES + 1):
                 i = f0 + k

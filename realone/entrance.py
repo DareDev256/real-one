@@ -76,3 +76,11 @@ def before_entry(g):
 def matte(mask, g):
     """The artist's matte for a frame with world gain g: empty before he steps in, untouched after."""
     return np.zeros_like(mask) if before_entry(g) else mask
+
+
+def dark_cuts(planned, g):
+    """The planned cuts that fall while the world is still dark (both sides of the cut below full light): a cut
+    between two near-black frames is invisible, so the render's cut check reports these instead of requiring them."""
+    if g is None:
+        return []
+    return [p for p in planned if 0 < p < len(g) and g[p] < 1 and g[p - 1] < 1]

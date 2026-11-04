@@ -58,3 +58,9 @@ def test_before_he_steps_in_the_matte_is_empty():
     assert not EN.matte(m, float(g[50])).any()      # a sliver on the wall before he arrives: not him
     assert EN.matte(m, float(g[120])).all()         # from the entry frame on, his matte as filmed
     assert EN.matte(m, 1.0) is m
+
+
+def test_a_cut_in_the_dark_is_reported_not_required():
+    g = EN.gain(N, 183, FPS)                       # take 2: he steps in at 6.1 s
+    assert EN.dark_cuts([103, 206, 400], g) == [103]   # only the cut while it is still dark
+    assert EN.dark_cuts([103], np.ones(N)) == [] and EN.dark_cuts([103], None) == []

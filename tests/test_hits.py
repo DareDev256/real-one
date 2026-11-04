@@ -76,3 +76,14 @@ def test_apply_identity_and_effects():
     assert (zoomed > 100).sum() > (img > 100).sum()  # the bright square grew
     moved = HT.apply(img, 1.0, 0.0, dx=8.0)
     assert moved[32, 44, 0] > 100 and img[32, 44, 0] == 0
+
+
+
+def test_a_downbeat_flash_is_designed_for_its_whole_decay():
+    """Nov 4: on a close-up the flash's third frame read as a cut. Every frame a hit changes is designed."""
+    tl = {"beats": [0.5, 1.0, 1.5, 2.0], "downbeats": [0.5, 2.5], "sections": []}
+    p = HT.profile(tl, 0.0, 4 * FPS, FPS)
+    f0 = int(0.5 * FPS)
+    assert set(range(f0, f0 + HT.FLASH_FRAMES + 1)) <= p["designed"]
+    f1 = int(1.0 * FPS)  # a backbeat: the punch's step only
+    assert {f1, f1 + 1} <= p["designed"] and f1 + 2 not in p["designed"]

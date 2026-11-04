@@ -284,6 +284,17 @@ def card_places(line_id, n_lines, framing_at, box_at):
     return out
 
 
+def card_changes(line_id, card):
+    """The frames on which a front card appears, changes line or leaves (and the frame after, for the encoder's
+    smear): designed whole-band changes for the render's cut check."""
+    line_id, card = np.asarray(line_id), np.asarray(card)
+    on = np.where((card > 0) & (line_id >= 0), line_id, -1)
+    out = set()
+    for i in np.nonzero(on[1:] != on[:-1])[0] + 1:
+        out.update((int(i), int(i) + 1))
+    return {i for i in out if i < len(on)}
+
+
 class CardPainter:
     """A line as a front card: the frame's width, CARD_ROWS rows at most, each word landing with the usual pop."""
 
