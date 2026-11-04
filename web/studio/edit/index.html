@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Real One Editor</title>
+<meta name="description" content="Make it yours: pick each section's lyric colour, the particles, a tracked effect on a sung word and a world, and get the exact files and command the renderer reads.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="edit.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/" aria-label="Real One, back to the video">Real One</a>
+  <a class="back" href="../#step-6">How it's made</a>
+  <p class="honest">Rendering runs on a Mac from the command line today; the editor writes the files it reads.</p>
+</header>
+
+<main class="ed">
+  <section class="controls" aria-label="Editor">
+    <h1 class="display">Make it <span class="accent">yours.</span></h1>
+
+    <div class="ctl" role="group" aria-labelledby="l-sec">
+      <p class="lab" id="l-sec">Section</p>
+      <div class="seg" id="secs"></div>
+    </div>
+
+    <div class="ctl" role="group" aria-labelledby="l-col">
+      <p class="lab" id="l-col">Lyric colour <span class="soft" id="col-note"></span></p>
+      <div class="swatches" id="swatches"></div>
+      <p class="fine">Font: Anton with the dark edge, fixed in code today.</p>
+    </div>
+
+    <div class="ctl" role="group" aria-labelledby="l-par">
+      <p class="lab" id="l-par">Particles <span class="soft">the whole video</span></p>
+      <div class="seg" id="parts"></div>
+    </div>
+
+    <div class="ctl" role="group" aria-labelledby="l-fx">
+      <p class="lab" id="l-fx">Tracked effect <span class="soft">tap a sung word</span></p>
+      <div class="line">
+        <button class="arrow" id="line-prev" type="button" aria-label="Previous line">&#8249;</button>
+        <div class="words" id="words"></div>
+        <button class="arrow" id="line-next" type="button" aria-label="Next line">&#8250;</button>
+      </div>
+      <div class="fxrow">
+        <label class="trk"><span class="soft">Track</span><input id="track" type="text" value="his hands" maxlength="40" spellcheck="false"></label>
+        <div class="chips" id="chips"></div>
+        <label class="secs"><span class="soft">Fire</span><input id="seconds" type="range" min="0.3" max="4" step="0.1" value="1.4"><output id="sec-out">1.4 s</output></label>
+        <button class="add" id="add" type="button" disabled>Add fire</button>
+      </div>
+      <ul class="fxlist" id="fxlist" aria-live="polite"></ul>
+    </div>
+
+    <div class="ctl" role="group" aria-labelledby="l-world">
+      <p class="lab" id="l-world">World <span class="soft" id="world-note">the director's prompt; change it for a new Muse Image world</span></p>
+      <input id="world" type="text" spellcheck="false" aria-labelledby="l-world">
+    </div>
+
+    <div class="out">
+      <pre id="cmd" aria-label="The command"></pre>
+      <div class="outbtns">
+        <button class="go" id="copy" type="button">Copy the command</button>
+        <button class="go" id="dl-edits" type="button">Download edits.json</button>
+        <button class="go" id="dl-treat" type="button">Download treatment.json</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="preview" aria-label="Preview">
+    <figure class="phone">
+      <img id="frame" alt="A frame of the final cut in the chosen section">
+      <canvas id="parts-canvas" aria-hidden="true"></canvas>
+      <div class="card" id="card" aria-hidden="true"></div>
+      <figcaption class="tag">Preview. The render makes the real thing.</figcaption>
+      <p class="fxtag" id="fxtag"></p>
+    </figure>
+  </section>
+</main>
+
+<script src="edit.js"></script>
+</body>
+</html>

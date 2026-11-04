@@ -1,5 +1,5 @@
 """Living world: the generated world is one still image, so its lamps sat dead while the artist moved (James, Nov 2,
-on the Savv render: "even how they had the lamps, the background should technically be active ... moving"). Muse
+on an artist's test render: "even how they had the lamps, the background should technically be active ... moving"). Muse
 Wonder's own world prompt asked for "flickering amber security lamps"; a still cannot flicker.
 
 What moves, on the world layer before the artist is composited (his pixels are never touched):

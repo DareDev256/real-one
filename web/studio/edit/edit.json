@@ -1,0 +1,1340 @@
+{
+ "sections": [
+  {
+   "index": 0,
+   "role": "intro",
+   "start_s": 0.037,
+   "end_s": 6.8985,
+   "palette": [
+    "#8A9BA8",
+    "#D9C7A7",
+    "#3E4A52",
+    "#E8E6DF"
+   ],
+   "accent": null,
+   "choices": [],
+   "world_prompt": "Vertical 9:16, dawn glow through tall loft windows, dust suspended across worn concrete and pale plaster, scuffed flooring, muted blue-grey stillness, photographic depth, empty, unoccupied",
+   "take": 3,
+   "frame": "media/f0.jpg",
+   "lines": [
+    {
+     "text": "One take, I'm the real one.",
+     "words": [
+      {
+       "w": "One",
+       "start": 2.44,
+       "end": 2.561
+      },
+      {
+       "w": "take,",
+       "start": 2.601,
+       "end": 2.801
+      },
+      {
+       "w": "I'm",
+       "start": 2.841,
+       "end": 2.901
+      },
+      {
+       "w": "the",
+       "start": 2.921,
+       "end": 2.981
+      },
+      {
+       "w": "real",
+       "start": 3.041,
+       "end": 3.241
+      },
+      {
+       "w": "one.",
+       "start": 3.641,
+       "end": 3.781
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "index": 1,
+   "role": "hook",
+   "start_s": 6.8985,
+   "end_s": 20.6331,
+   "palette": [
+    "#0F4C5C",
+    "#F2A541",
+    "#D64550",
+    "#F5E6C8",
+    "#1A1A1E"
+   ],
+   "accent": "#F2A541",
+   "choices": [
+    "#F2A541",
+    "#D64550"
+   ],
+   "world_prompt": "Vertical 9:16, vast brutalist plaza at golden hour, long shadows across wet granite, dramatic cumulus parting above angular towers, saturated teal and amber reflections, empty, photographic, unoccupied",
+   "take": 2,
+   "frame": "media/f1.jpg",
+   "lines": [
+    {
+     "text": "I'm the real one in the frame",
+     "words": [
+      {
+       "w": "I'm",
+       "start": 7.06,
+       "end": 7.161
+      },
+      {
+       "w": "the",
+       "start": 7.181,
+       "end": 7.241
+      },
+      {
+       "w": "real",
+       "start": 7.321,
+       "end": 7.481
+      },
+      {
+       "w": "one",
+       "start": 7.582,
+       "end": 7.742
+      },
+      {
+       "w": "in",
+       "start": 7.822,
+       "end": 7.902
+      },
+      {
+       "w": "the",
+       "start": 7.922,
+       "end": 7.982
+      },
+      {
+       "w": "frame",
+       "start": 8.102,
+       "end": 8.462
+      }
+     ]
+    },
+    {
+     "text": "One phone take, they know my name",
+     "words": [
+      {
+       "w": "One",
+       "start": 8.642,
+       "end": 8.742
+      },
+      {
+       "w": "phone",
+       "start": 8.762,
+       "end": 8.962
+      },
+      {
+       "w": "take,",
+       "start": 9.002,
+       "end": 9.202
+      },
+      {
+       "w": "they",
+       "start": 9.222,
+       "end": 9.362
+      },
+      {
+       "w": "know",
+       "start": 9.402,
+       "end": 9.582
+      },
+      {
+       "w": "my",
+       "start": 9.642,
+       "end": 9.782
+      },
+      {
+       "w": "name",
+       "start": 9.862,
+       "end": 10.162
+      }
+     ]
+    },
+    {
+     "text": "Lights go up when I step in",
+     "words": [
+      {
+       "w": "Lights",
+       "start": 10.302,
+       "end": 10.502
+      },
+      {
+       "w": "go",
+       "start": 10.542,
+       "end": 10.602
+      },
+      {
+       "w": "up",
+       "start": 10.822,
+       "end": 10.942
+      },
+      {
+       "w": "when",
+       "start": 10.982,
+       "end": 11.122
+      },
+      {
+       "w": "I",
+       "start": 11.262,
+       "end": 11.282
+      },
+      {
+       "w": "step",
+       "start": 11.322,
+       "end": 11.522
+      },
+      {
+       "w": "in",
+       "start": 11.662,
+       "end": 11.802
+      }
+     ]
+    },
+    {
+     "text": "Fire on stage, let the show begin",
+     "words": [
+      {
+       "w": "Fire",
+       "start": 11.982,
+       "end": 12.222
+      },
+      {
+       "w": "on",
+       "start": 12.262,
+       "end": 12.342
+      },
+      {
+       "w": "stage,",
+       "start": 12.382,
+       "end": 12.663
+      },
+      {
+       "w": "let",
+       "start": 12.683,
+       "end": 12.743
+      },
+      {
+       "w": "the",
+       "start": 12.763,
+       "end": 12.823
+      },
+      {
+       "w": "show",
+       "start": 12.863,
+       "end": 13.023
+      },
+      {
+       "w": "begin",
+       "start": 13.083,
+       "end": 13.543
+      }
+     ]
+    },
+    {
+     "text": "I'm the real one, can't be cloned",
+     "words": [
+      {
+       "w": "I'm",
+       "start": 13.543,
+       "end": 14.023
+      },
+      {
+       "w": "the",
+       "start": 14.043,
+       "end": 14.103
+      },
+      {
+       "w": "real",
+       "start": 14.163,
+       "end": 14.343
+      },
+      {
+       "w": "one,",
+       "start": 14.423,
+       "end": 14.543
+      },
+      {
+       "w": "can't",
+       "start": 14.583,
+       "end": 14.783
+      },
+      {
+       "w": "be",
+       "start": 14.81,
+       "end": 14.883
+      },
+      {
+       "w": "cloned",
+       "start": 14.963,
+       "end": 15.343
+      }
+     ]
+    },
+    {
+     "text": "Every pixel's real, my own",
+     "words": [
+      {
+       "w": "Every",
+       "start": 15.503,
+       "end": 15.743
+      },
+      {
+       "w": "pixel's",
+       "start": 15.843,
+       "end": 16.243
+      },
+      {
+       "w": "real,",
+       "start": 16.303,
+       "end": 16.483
+      },
+      {
+       "w": "my",
+       "start": 16.523,
+       "end": 16.663
+      },
+      {
+       "w": "own",
+       "start": 16.783,
+       "end": 16.943
+      }
+     ]
+    },
+    {
+     "text": "Real one, real one, yeah that's me",
+     "words": [
+      {
+       "w": "Real",
+       "start": 17.183,
+       "end": 17.343
+      },
+      {
+       "w": "one,",
+       "start": 17.423,
+       "end": 17.544
+      },
+      {
+       "w": "real",
+       "start": 17.604,
+       "end": 17.704
+      },
+      {
+       "w": "one,",
+       "start": 17.704,
+       "end": 17.764
+      },
+      {
+       "w": "yeah",
+       "start": 17.764,
+       "end": 17.844
+      },
+      {
+       "w": "that's",
+       "start": 17.844,
+       "end": 17.964
+      },
+      {
+       "w": "me",
+       "start": 17.964,
+       "end": 18.004
+      }
+     ]
+    },
+    {
+     "text": "Now the whole world's watchin' me",
+     "words": [
+      {
+       "w": "Now",
+       "start": 18.004,
+       "end": 18.064
+      },
+      {
+       "w": "the",
+       "start": 18.064,
+       "end": 18.124
+      },
+      {
+       "w": "whole",
+       "start": 18.124,
+       "end": 18.244
+      },
+      {
+       "w": "world's",
+       "start": 18.244,
+       "end": 18.484
+      },
+      {
+       "w": "watchin'",
+       "start": 18.484,
+       "end": 19.064
+      },
+      {
+       "w": "me",
+       "start": 19.144,
+       "end": 19.244
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "index": 2,
+   "role": "verse",
+   "start_s": 20.6331,
+   "end_s": 41.1712,
+   "palette": [
+    "#E94F37",
+    "#F6AE2D",
+    "#2EC4B6",
+    "#FFF3B0",
+    "#342E37"
+   ],
+   "accent": "#F6AE2D",
+   "choices": [
+    "#E94F37",
+    "#F6AE2D",
+    "#2EC4B6"
+   ],
+   "world_prompt": "Vertical 9:16, layered torn-paper boulevard, visible seams and glue edges, unfinished facades propped by cardboard struts, flat mustard coral and turquoise geometry, uneven handmade sky, empty, unoccupied",
+   "take": 3,
+   "frame": "media/f2.jpg",
+   "lines": [
+    {
+     "text": "One take, phone up, that's the start",
+     "words": [
+      {
+       "w": "One",
+       "start": 20.644,
+       "end": 20.784
+      },
+      {
+       "w": "take,",
+       "start": 20.844,
+       "end": 21.104
+      },
+      {
+       "w": "phone",
+       "start": 21.184,
+       "end": 21.444
+      },
+      {
+       "w": "up,",
+       "start": 21.484,
+       "end": 21.584
+      },
+      {
+       "w": "that's",
+       "start": 21.61,
+       "end": 21.744
+      },
+      {
+       "w": "the",
+       "start": 21.744,
+       "end": 21.804
+      },
+      {
+       "w": "start",
+       "start": 21.844,
+       "end": 22.104
+      }
+     ]
+    },
+    {
+     "text": "Typed the prompt, it made the art",
+     "words": [
+      {
+       "w": "Typed",
+       "start": 22.284,
+       "end": 22.485
+      },
+      {
+       "w": "the",
+       "start": 22.485,
+       "end": 22.545
+      },
+      {
+       "w": "prompt,",
+       "start": 22.585,
+       "end": 22.885
+      },
+      {
+       "w": "it",
+       "start": 23.005,
+       "end": 23.085
+      },
+      {
+       "w": "made",
+       "start": 23.145,
+       "end": 23.345
+      },
+      {
+       "w": "the",
+       "start": 23.345,
+       "end": 23.405
+      },
+      {
+       "w": "art",
+       "start": 23.485,
+       "end": 23.585
+      }
+     ]
+    },
+    {
+     "text": "Muse is the model, built the scene",
+     "words": [
+      {
+       "w": "Muse",
+       "start": 23.605,
+       "end": 23.825
+      },
+      {
+       "w": "is",
+       "start": 23.845,
+       "end": 23.885
+      },
+      {
+       "w": "the",
+       "start": 23.885,
+       "end": 23.945
+      },
+      {
+       "w": "model,",
+       "start": 23.985,
+       "end": 24.185
+      },
+      {
+       "w": "built",
+       "start": 24.205,
+       "end": 24.325
+      },
+      {
+       "w": "the",
+       "start": 24.345,
+       "end": 24.405
+      },
+      {
+       "w": "scene",
+       "start": 24.425,
+       "end": 24.645
+      }
+     ]
+    },
+    {
+     "text": "Director cut it sharp and clean",
+     "words": [
+      {
+       "w": "Director",
+       "start": 24.665,
+       "end": 25.045
+      },
+      {
+       "w": "cut",
+       "start": 25.065,
+       "end": 25.185
+      },
+      {
+       "w": "it",
+       "start": 25.205,
+       "end": 25.245
+      },
+      {
+       "w": "sharp",
+       "start": 25.285,
+       "end": 25.465
+      },
+      {
+       "w": "and",
+       "start": 25.485,
+       "end": 25.565
+      },
+      {
+       "w": "clean",
+       "start": 25.585,
+       "end": 25.765
+      }
+     ]
+    },
+    {
+     "text": "Tokens in, now the lights ignite",
+     "words": [
+      {
+       "w": "Tokens",
+       "start": 25.785,
+       "end": 26.105
+      },
+      {
+       "w": "in,",
+       "start": 26.145,
+       "end": 26.285
+      },
+      {
+       "w": "now",
+       "start": 26.325,
+       "end": 26.425
+      },
+      {
+       "w": "the",
+       "start": 26.445,
+       "end": 26.505
+      },
+      {
+       "w": "lights",
+       "start": 26.565,
+       "end": 26.765
+      },
+      {
+       "w": "ignite",
+       "start": 26.785,
+       "end": 27.125
+      }
+     ]
+    },
+    {
+     "text": "Render risin' up through the night",
+     "words": [
+      {
+       "w": "Render",
+       "start": 27.446,
+       "end": 27.686
+      },
+      {
+       "w": "risin'",
+       "start": 27.726,
+       "end": 28.066
+      },
+      {
+       "w": "up",
+       "start": 28.086,
+       "end": 28.186
+      },
+      {
+       "w": "through",
+       "start": 28.27,
+       "end": 28.426
+      },
+      {
+       "w": "the",
+       "start": 28.426,
+       "end": 28.486
+      },
+      {
+       "w": "night",
+       "start": 28.506,
+       "end": 28.646
+      }
+     ]
+    },
+    {
+     "text": "Every frame got me in the zone",
+     "words": [
+      {
+       "w": "Every",
+       "start": 28.646,
+       "end": 28.786
+      },
+      {
+       "w": "frame",
+       "start": 28.846,
+       "end": 29.026
+      },
+      {
+       "w": "got",
+       "start": 29.046,
+       "end": 29.146
+      },
+      {
+       "w": "me",
+       "start": 29.186,
+       "end": 29.226
+      },
+      {
+       "w": "in",
+       "start": 29.306,
+       "end": 29.366
+      },
+      {
+       "w": "the",
+       "start": 29.366,
+       "end": 29.426
+      },
+      {
+       "w": "zone",
+       "start": 29.466,
+       "end": 29.686
+      }
+     ]
+    },
+    {
+     "text": "Every pixel real, it's my own",
+     "words": [
+      {
+       "w": "Every",
+       "start": 29.726,
+       "end": 29.846
+      },
+      {
+       "w": "pixel",
+       "start": 29.906,
+       "end": 30.126
+      },
+      {
+       "w": "real,",
+       "start": 30.186,
+       "end": 30.346
+      },
+      {
+       "w": "it's",
+       "start": 30.346,
+       "end": 30.426
+      },
+      {
+       "w": "my",
+       "start": 30.466,
+       "end": 30.566
+      },
+      {
+       "w": "own",
+       "start": 30.626,
+       "end": 30.726
+      }
+     ]
+    },
+    {
+     "text": "No green screen, just me and the beat",
+     "words": [
+      {
+       "w": "No",
+       "start": 30.746,
+       "end": 30.786
+      },
+      {
+       "w": "green",
+       "start": 30.846,
+       "end": 31.066
+      },
+      {
+       "w": "screen,",
+       "start": 31.106,
+       "end": 31.346
+      },
+      {
+       "w": "just",
+       "start": 31.366,
+       "end": 31.506
+      },
+      {
+       "w": "me",
+       "start": 31.566,
+       "end": 31.626
+      },
+      {
+       "w": "and",
+       "start": 31.826,
+       "end": 31.886
+      },
+      {
+       "w": "the",
+       "start": 31.886,
+       "end": 31.946
+      },
+      {
+       "w": "beat",
+       "start": 31.986,
+       "end": 32.146
+      }
+     ]
+    },
+    {
+     "text": "World built 'round me, feel the heat",
+     "words": [
+      {
+       "w": "World",
+       "start": 32.166,
+       "end": 32.306
+      },
+      {
+       "w": "built",
+       "start": 32.306,
+       "end": 32.427
+      },
+      {
+       "w": "'round",
+       "start": 32.467,
+       "end": 32.607
+      },
+      {
+       "w": "me,",
+       "start": 32.607,
+       "end": 32.667
+      },
+      {
+       "w": "feel",
+       "start": 32.687,
+       "end": 32.787
+      },
+      {
+       "w": "the",
+       "start": 32.787,
+       "end": 32.847
+      },
+      {
+       "w": "heat",
+       "start": 32.867,
+       "end": 33.007
+      }
+     ]
+    },
+    {
+     "text": "Meta hackathon, now it's live",
+     "words": [
+      {
+       "w": "Meta",
+       "start": 33.007,
+       "end": 33.147
+      },
+      {
+       "w": "hackathon,",
+       "start": 33.187,
+       "end": 33.567
+      },
+      {
+       "w": "now",
+       "start": 33.607,
+       "end": 33.727
+      },
+      {
+       "w": "it's",
+       "start": 33.747,
+       "end": 33.827
+      },
+      {
+       "w": "live",
+       "start": 33.887,
+       "end": 34.107
+      }
+     ]
+    },
+    {
+     "text": "Main character mode, I arrive",
+     "words": [
+      {
+       "w": "Main",
+       "start": 34.147,
+       "end": 34.267
+      },
+      {
+       "w": "character",
+       "start": 34.307,
+       "end": 34.687
+      },
+      {
+       "w": "mode,",
+       "start": 34.727,
+       "end": 34.987
+      },
+      {
+       "w": "I",
+       "start": 35.027,
+       "end": 35.047
+      },
+      {
+       "w": "arrive",
+       "start": 35.067,
+       "end": 35.467
+      }
+     ]
+    },
+    {
+     "text": "Crowd in the clouds goin' loud",
+     "words": [
+      {
+       "w": "Crowd",
+       "start": 35.567,
+       "end": 35.787
+      },
+      {
+       "w": "in",
+       "start": 35.807,
+       "end": 35.867
+      },
+      {
+       "w": "the",
+       "start": 35.867,
+       "end": 35.927
+      },
+      {
+       "w": "clouds",
+       "start": 35.967,
+       "end": 36.187
+      },
+      {
+       "w": "goin'",
+       "start": 36.207,
+       "end": 36.347
+      },
+      {
+       "w": "loud",
+       "start": 36.447,
+       "end": 36.687
+      }
+     ]
+    },
+    {
+     "text": "I bring the show, make 'em proud",
+     "words": [
+      {
+       "w": "I",
+       "start": 36.967,
+       "end": 36.987
+      },
+      {
+       "w": "bring",
+       "start": 37.027,
+       "end": 37.167
+      },
+      {
+       "w": "the",
+       "start": 37.167,
+       "end": 37.227
+      },
+      {
+       "w": "show,",
+       "start": 37.287,
+       "end": 37.428
+      },
+      {
+       "w": "make",
+       "start": 37.468,
+       "end": 37.608
+      },
+      {
+       "w": "'em",
+       "start": 37.628,
+       "end": 37.668
+      },
+      {
+       "w": "proud",
+       "start": 37.708,
+       "end": 37.968
+      }
+     ]
+    },
+    {
+     "text": "Machine built the world, I shine",
+     "words": [
+      {
+       "w": "Machine",
+       "start": 38.008,
+       "end": 38.288
+      },
+      {
+       "w": "built",
+       "start": 38.308,
+       "end": 38.448
+      },
+      {
+       "w": "the",
+       "start": 38.468,
+       "end": 38.528
+      },
+      {
+       "w": "world,",
+       "start": 38.588,
+       "end": 38.848
+      },
+      {
+       "w": "I",
+       "start": 38.888,
+       "end": 38.908
+      },
+      {
+       "w": "shine",
+       "start": 39.008,
+       "end": 39.268
+      }
+     ]
+    },
+    {
+     "text": "Real one forever, this moment's mine",
+     "words": [
+      {
+       "w": "Real",
+       "start": 39.468,
+       "end": 39.628
+      },
+      {
+       "w": "one",
+       "start": 39.648,
+       "end": 39.748
+      },
+      {
+       "w": "forever,",
+       "start": 39.748,
+       "end": 40.128
+      },
+      {
+       "w": "this",
+       "start": 40.168,
+       "end": 40.288
+      },
+      {
+       "w": "moment's",
+       "start": 40.348,
+       "end": 40.668
+      },
+      {
+       "w": "mine",
+       "start": 40.748,
+       "end": 41.048
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "index": 3,
+   "role": "hook",
+   "start_s": 41.1712,
+   "end_s": 54.9174,
+   "palette": [
+    "#6B7280",
+    "#9CA3AF",
+    "#D1D5DB",
+    "#374151"
+   ],
+   "accent": null,
+   "choices": [],
+   "world_prompt": "Vertical 9:16, rain-washed grey boulevard under heavy overcast, still puddles mirroring pale monochrome towers, low mist, hushed desaturated concrete, empty, unoccupied",
+   "take": 2,
+   "frame": "media/f3.jpg",
+   "lines": [
+    {
+     "text": "I'm the real one in the frame",
+     "words": [
+      {
+       "w": "I'm",
+       "start": 41.068,
+       "end": 41.188
+      },
+      {
+       "w": "the",
+       "start": 41.228,
+       "end": 41.568
+      },
+      {
+       "w": "real",
+       "start": 41.848,
+       "end": 42.028
+      },
+      {
+       "w": "one",
+       "start": 42.028,
+       "end": 42.088
+      },
+      {
+       "w": "in",
+       "start": 42.128,
+       "end": 42.168
+      },
+      {
+       "w": "the",
+       "start": 42.208,
+       "end": 42.288
+      },
+      {
+       "w": "frame",
+       "start": 42.388,
+       "end": 42.729
+      }
+     ]
+    },
+    {
+     "text": "One phone take, they know my name",
+     "words": [
+      {
+       "w": "One",
+       "start": 42.929,
+       "end": 43.049
+      },
+      {
+       "w": "phone",
+       "start": 43.049,
+       "end": 43.269
+      },
+      {
+       "w": "take,",
+       "start": 43.289,
+       "end": 43.509
+      },
+      {
+       "w": "they",
+       "start": 43.529,
+       "end": 43.649
+      },
+      {
+       "w": "know",
+       "start": 43.689,
+       "end": 43.869
+      },
+      {
+       "w": "my",
+       "start": 43.929,
+       "end": 44.069
+      },
+      {
+       "w": "name",
+       "start": 44.069,
+       "end": 44.429
+      }
+     ]
+    },
+    {
+     "text": "Lights go up when I step in",
+     "words": [
+      {
+       "w": "Lights",
+       "start": 44.609,
+       "end": 44.789
+      },
+      {
+       "w": "go",
+       "start": 44.829,
+       "end": 44.889
+      },
+      {
+       "w": "up",
+       "start": 45.109,
+       "end": 45.229
+      },
+      {
+       "w": "when",
+       "start": 45.269,
+       "end": 45.409
+      },
+      {
+       "w": "I",
+       "start": 45.549,
+       "end": 45.569
+      },
+      {
+       "w": "step",
+       "start": 45.609,
+       "end": 45.809
+      },
+      {
+       "w": "in",
+       "start": 45.949,
+       "end": 46.109
+      }
+     ]
+    },
+    {
+     "text": "Fire on stage, let the show begin",
+     "words": [
+      {
+       "w": "Fire",
+       "start": 46.269,
+       "end": 46.509
+      },
+      {
+       "w": "on",
+       "start": 46.549,
+       "end": 46.629
+      },
+      {
+       "w": "stage,",
+       "start": 46.669,
+       "end": 46.949
+      },
+      {
+       "w": "let",
+       "start": 46.969,
+       "end": 47.029
+      },
+      {
+       "w": "the",
+       "start": 47.049,
+       "end": 47.109
+      },
+      {
+       "w": "show",
+       "start": 47.149,
+       "end": 47.309
+      },
+      {
+       "w": "begin",
+       "start": 47.369,
+       "end": 47.85
+      }
+     ]
+    },
+    {
+     "text": "I'm the real one, can't be cloned",
+     "words": [
+      {
+       "w": "I'm",
+       "start": 47.85,
+       "end": 48.31
+      },
+      {
+       "w": "the",
+       "start": 48.33,
+       "end": 48.39
+      },
+      {
+       "w": "real",
+       "start": 48.47,
+       "end": 48.63
+      },
+      {
+       "w": "one,",
+       "start": 48.71,
+       "end": 48.83
+      },
+      {
+       "w": "can't",
+       "start": 48.87,
+       "end": 49.07
+      },
+      {
+       "w": "be",
+       "start": 49.09,
+       "end": 49.17
+      },
+      {
+       "w": "cloned",
+       "start": 49.27,
+       "end": 49.63
+      }
+     ]
+    },
+    {
+     "text": "Every pixel's real, my own",
+     "words": [
+      {
+       "w": "Every",
+       "start": 49.79,
+       "end": 50.01
+      },
+      {
+       "w": "pixel's",
+       "start": 50.13,
+       "end": 50.53
+      },
+      {
+       "w": "real,",
+       "start": 50.59,
+       "end": 50.77
+      },
+      {
+       "w": "my",
+       "start": 50.81,
+       "end": 50.95
+      },
+      {
+       "w": "own",
+       "start": 51.07,
+       "end": 51.25
+      }
+     ]
+    },
+    {
+     "text": "Real one, real one, yeah that's me",
+     "words": [
+      {
+       "w": "Real",
+       "start": 51.47,
+       "end": 51.63
+      },
+      {
+       "w": "one,",
+       "start": 51.71,
+       "end": 51.83
+      },
+      {
+       "w": "real",
+       "start": 51.89,
+       "end": 52.07
+      },
+      {
+       "w": "one,",
+       "start": 52.17,
+       "end": 52.27
+      },
+      {
+       "w": "yeah",
+       "start": 52.33,
+       "end": 52.491
+      },
+      {
+       "w": "that's",
+       "start": 52.511,
+       "end": 52.671
+      },
+      {
+       "w": "me",
+       "start": 52.771,
+       "end": 52.831
+      }
+     ]
+    },
+    {
+     "text": "Now the whole world's watchin' me",
+     "words": [
+      {
+       "w": "Now",
+       "start": 53.351,
+       "end": 53.451
+      },
+      {
+       "w": "the",
+       "start": 53.471,
+       "end": 53.531
+      },
+      {
+       "w": "whole",
+       "start": 53.571,
+       "end": 53.751
+      },
+      {
+       "w": "world's",
+       "start": 53.791,
+       "end": 54.011
+      },
+      {
+       "w": "watchin'",
+       "start": 54.011,
+       "end": 54.851
+      },
+      {
+       "w": "me",
+       "start": 54.851,
+       "end": 54.891
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "effects": {
+  "fire": "embers burst from the part and rise, the part glows, the world takes a warm flash"
+ },
+ "seconds": [
+  0.3,
+  4.0
+ ],
+ "lead_s": 0.05,
+ "particles": [
+  "dust",
+  "rain",
+  "embers",
+  "none"
+ ],
+ "particles_default": "dust",
+ "font": "Anton (fixed in code: lyrictext.DEFAULT_FONT)"
+}

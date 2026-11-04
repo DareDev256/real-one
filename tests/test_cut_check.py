@@ -1,5 +1,5 @@
 """realone.encode.planned_cut_found: a planned cut in a busy handheld take is confirmed as a clear local peak of the
-frame-difference curve, even where it never reaches the global 6x rule (Savv's reel, Nov 2: median 8.4, cuts 2.0
+frame-difference curve, even where it never reaches the global 6x rule (an artist's handheld reel, Nov 2: median 8.4, cuts 2.0
 to 3.0x); a frame that is not the sharpest change around it is not a cut."""
 import numpy as np
 

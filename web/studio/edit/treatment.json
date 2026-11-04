@@ -1,0 +1,304 @@
+{
+ "director": "realone.director",
+ "created": "2026-11-04T08:19:09",
+ "mode": "keyed",
+ "song": "footage/song_b/real_one.wav",
+ "model": "muse-wonder-1.0",
+ "timeline": "out/director_real_timeline.json",
+ "lyrics": "out/director_real_lyrics.json",
+ "spend": {
+  "calls": 4,
+  "spent_usd": 0.1161,
+  "spent_cad": 0.16,
+  "cap_usd": 2.0,
+  "max_calls": 40,
+  "ledger": [
+   {
+    "kind": "voice:transcribe",
+    "usd": 0.00285,
+    "audio_ms": 57120,
+    "session": "realone-f1f482018500"
+   },
+   {
+    "kind": "files:upload",
+    "usd": 0.0,
+    "file": "song_7944cd8d8d97.mp3",
+    "id": "file-2580900639077008",
+    "bytes": 685484
+   },
+   {
+    "kind": "wonder:treatment",
+    "usd": 0.080804,
+    "input_tokens": 2096,
+    "cached_tokens": 0,
+    "output_tokens": 3621,
+    "reasoning_tokens": 2890
+   },
+   {
+    "kind": "wonder:treatment_repair",
+    "usd": 0.032436,
+    "input_tokens": 2984,
+    "cached_tokens": 0,
+    "output_tokens": 1025,
+    "reasoning_tokens": 294
+   }
+  ]
+ },
+ "song_subtext": "In an environment where surroundings can be generated instantly, an artist stakes his value on an unrepeatable embodied presence; early bravado becomes credible only after the manufactured nature of everything around him is revealed.",
+ "audio_in": "sent as input_audio (file id)",
+ "attempts": [
+  {
+   "purpose": "treatment",
+   "source": "muse-wonder-1.0",
+   "response_id": "resp_6aeb309b2f9f673c57624288",
+   "usd": 0.0808,
+   "errors": [
+    "$.sections[0].world_prompt: describes people (people); the filmed artist is the only person in frame, so the world must be empty of people",
+    "$.sections[1].world_prompt: describes people (people); the filmed artist is the only person in frame, so the world must be empty of people",
+    "$.sections[2].world_prompt: describes people (people); the filmed artist is the only person in frame, so the world must be empty of people",
+    "$.sections[3].world_prompt: describes people (people); the filmed artist is the only person in frame, so the world must be empty of people"
+   ]
+  },
+  {
+   "purpose": "treatment_repair",
+   "source": "muse-wonder-1.0",
+   "response_id": "resp_6aeb30c41ffe322a1e9046ce",
+   "usd": 0.03244,
+   "errors": []
+  }
+ ],
+ "guard_reask": null,
+ "still_literal": [],
+ "guard_threshold": 0.2,
+ "sections": [
+  {
+   "index": 0,
+   "role": "intro",
+   "is_hook": false,
+   "start_s": 0.037,
+   "end_s": 6.8985,
+   "bars": 4,
+   "lyric": [
+    "One take, I'm the real one."
+   ],
+   "lyric_source": "artist",
+   "camera_energy": "low",
+   "freeze": false,
+   "look": "clean",
+   "move": "none",
+   "palette": [
+    "#8A9BA8",
+    "#D9C7A7",
+    "#3E4A52",
+    "#E8E6DF"
+   ],
+   "subtext": "A claim made quietly before any proof or applause, with vulnerability underneath the bravado and a need to be believed before anything spectacular happens.",
+   "why": "A bare, hushed dawn interior leaves the claim unsupported, so belief has to come from presence alone.",
+   "world_prompt": "Vertical 9:16, dawn glow through tall loft windows, dust suspended across worn concrete and pale plaster, scuffed flooring, muted blue-grey stillness, photographic depth, empty, unoccupied",
+   "guard": {
+    "verdict": "pass",
+    "score": 0.0,
+    "threshold": 0.2,
+    "shared": [],
+    "concrete": [],
+    "prompt_words": 23,
+    "lyric_words": 1
+   },
+   "guard_first_pass": null,
+   "moments": []
+  },
+  {
+   "index": 1,
+   "role": "hook",
+   "is_hook": true,
+   "start_s": 6.8985,
+   "end_s": 20.6331,
+   "bars": 8,
+   "lyric": [
+    "I'm the real one in the frame",
+    "One phone take, they know my name",
+    "Lights go up when I step in",
+    "Fire on stage, let the show begin",
+    "I'm the real one, can't be cloned",
+    "Every pixel's real, my own",
+    "Real one, real one, yeah that's me",
+    "Now the whole world's watchin' me"
+   ],
+   "lyric_source": "artist",
+   "camera_energy": "high",
+   "freeze": false,
+   "look": "clean",
+   "move": "none",
+   "palette": [
+    "#0F4C5C",
+    "#F2A541",
+    "#D64550",
+    "#F5E6C8",
+    "#1A1A1E"
+   ],
+   "subtext": "Confidence is being performed at full volume to secure recognition and convince both audience and performer that this presence cannot be replaced.",
+   "why": "Grand architecture and breaking golden weather give the declaration public scale without literalising its claims.",
+   "world_prompt": "Vertical 9:16, vast brutalist plaza at golden hour, long shadows across wet granite, dramatic cumulus parting above angular towers, saturated teal and amber reflections, empty, photographic, unoccupied",
+   "guard": {
+    "verdict": "pass",
+    "score": 0.0,
+    "threshold": 0.2,
+    "shared": [],
+    "concrete": [],
+    "prompt_words": 23,
+    "lyric_words": 15
+   },
+   "guard_first_pass": null,
+   "moments": [
+    {
+     "word": "real",
+     "effect": "slam",
+     "why": "The hook's identity claim turns on being the real one."
+    },
+    {
+     "word": "Fire",
+     "effect": "ignite",
+     "why": "A literal fire word that earns the ember burst and warm flash."
+    }
+   ]
+  },
+  {
+   "index": 2,
+   "role": "verse",
+   "is_hook": false,
+   "start_s": 20.6331,
+   "end_s": 41.1712,
+   "bars": 12,
+   "lyric": [
+    "One take, phone up, that's the start",
+    "Typed the prompt, it made the art",
+    "Muse is the model, built the scene",
+    "Director cut it sharp and clean",
+    "Tokens in, now the lights ignite",
+    "Render risin' up through the night",
+    "Every frame got me in the zone",
+    "Every pixel real, it's my own",
+    "No green screen, just me and the beat",
+    "World built 'round me, feel the heat",
+    "Meta hackathon, now it's live",
+    "Main character mode, I arrive",
+    "Crowd in the clouds goin' loud",
+    "I bring the show, make 'em proud",
+    "Machine built the world, I shine",
+    "Real one forever, this moment's mine"
+   ],
+   "lyric_source": "artist",
+   "camera_energy": "high",
+   "freeze": false,
+   "look": "collage",
+   "move": "dolly",
+   "palette": [
+    "#E94F37",
+    "#F6AE2D",
+    "#2EC4B6",
+    "#FFF3B0",
+    "#342E37"
+   ],
+   "subtext": "Pride in a fast, technology-assisted process sits beside dependence on it; everything surrounding the performer can be manufactured, leaving embodied presence as the sole unrepeatable element.",
+   "why": "Visible seams expose an assembled environment while the single dolly shift makes his stable presence feel like the fixed centre.",
+   "world_prompt": "Vertical 9:16, layered torn-paper boulevard, visible seams and glue edges, unfinished facades propped by cardboard struts, flat mustard coral and turquoise geometry, uneven handmade sky, empty, unoccupied",
+   "guard": {
+    "verdict": "pass",
+    "score": 0.0,
+    "threshold": 0.2,
+    "shared": [],
+    "concrete": [],
+    "prompt_words": 24,
+    "lyric_words": 48
+   },
+   "guard_first_pass": null,
+   "moments": [
+    {
+     "word": "ignite",
+     "effect": "ignite",
+     "why": "The lights literally catching is the verse's natural ignition point."
+    }
+   ]
+  },
+  {
+   "index": 3,
+   "role": "hook",
+   "is_hook": true,
+   "start_s": 41.1712,
+   "end_s": 54.9174,
+   "bars": 8,
+   "lyric": [
+    "I'm the real one in the frame",
+    "One phone take, they know my name",
+    "Lights go up when I step in",
+    "Fire on stage, let the show begin",
+    "I'm the real one, can't be cloned",
+    "Every pixel's real, my own",
+    "Real one, real one, yeah that's me",
+    "Now the whole world's watchin' me"
+   ],
+   "lyric_source": "artist",
+   "camera_energy": "low",
+   "freeze": true,
+   "look": "receipt",
+   "move": "none",
+   "palette": [
+    "#6B7280",
+    "#9CA3AF",
+    "#D1D5DB",
+    "#374151"
+   ],
+   "subtext": "The repeated claim now feels tested rather than merely asserted: after the artificial surroundings have been exposed, continued living presence becomes its own evidence.",
+   "why": "A frozen grey environment drained of colour leaves motion and colour in the performer as the proof.",
+   "world_prompt": "Vertical 9:16, rain-washed grey boulevard under heavy overcast, still puddles mirroring pale monochrome towers, low mist, hushed desaturated concrete, empty, unoccupied",
+   "guard": {
+    "verdict": "pass",
+    "score": 0.0,
+    "threshold": 0.2,
+    "shared": [],
+    "concrete": [],
+    "prompt_words": 19,
+    "lyric_words": 15
+   },
+   "guard_first_pass": null,
+   "moments": [
+    {
+     "word": "real",
+     "effect": "slam",
+     "why": "The repeated hook returns to the same identity word for its recurring hit."
+    },
+    {
+     "word": "Fire",
+     "effect": "ignite",
+     "why": "The repeated fire line carries the same ember moment back with the hook."
+    }
+   ]
+  }
+ ],
+ "moments_pick": {
+  "source": "muse-wonder-1.0",
+  "response_id": "resp_6aeb30e0b1d944fe5f064b9e",
+  "usd": 0.03681,
+  "why": "Restraint preserves the quiet intro and lets the repeated hook moments define the song.",
+  "dropped": [],
+  "kept": 5,
+  "from_treatment": "out/director_real_treatment.json",
+  "spend": {
+   "calls": 1,
+   "spent_usd": 0.0368,
+   "spent_cad": 0.05,
+   "cap_usd": 0.25,
+   "max_calls": 1,
+   "ledger": [
+    {
+     "kind": "wonder:moments",
+     "usd": 0.036808,
+     "input_tokens": 952,
+     "cached_tokens": 0,
+     "output_tokens": 1650,
+     "reasoning_tokens": 1439
+    }
+   ]
+  }
+ }
+}

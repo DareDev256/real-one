@@ -2,23 +2,28 @@
 
 **On the hook, the world freezes and only you keep moving.**
 
-Film your song on your phone, once. Real One turns the take into a music video: you stay real, pixel for pixel, and
-only the world around you is made, one world for each section of the song, every cut on a downbeat.
+Film your song on your phone, once or a few takes. Real One turns it into a vertical music video for Reels, TikTok
+and Shorts: you stay real, every pixel of you filmed, and only the world around you is made, one world for each
+section of the song, every cut on a downbeat. Muse Wonder directs: it hears the song, picks a take for each section,
+lands the lyrics on the sung words, and turns "put fire coming off my hands when I say heat" into an effect that
+follows your hands.
+
+**Watch it:** https://real-one-watch.vercel.app (the music video from my own takes, with the Real Receipt toggle).
 
 <p>
-<img src="docs/media/hook_freeze.gif" width="270" align="top" alt="Hook Freeze on a stand-in stock clip: the rain hangs mid-air while the performer keeps dancing, then falls again on the release">
-<img src="docs/media/receipt.jpg" width="405" align="top" alt="Real Receipt: the same frame finished, and with every generated pixel grey; the counter reads 17.6% filmed">
+<img src="docs/media/hook_freeze.gif" width="270" align="top" alt="From my own take: me in the brutalist plaza Muse Image built for the hook, around the hook's freeze downbeat">
+<img src="docs/media/receipt.jpg" width="405" align="top" alt="Real Receipt: the same frame finished, and with every generated pixel grey; the counter reads 21.9% filmed on this frame">
 </p>
 
-*Stand-in: a stock clip (Mixkit, free license) and the repo's synthetic test song, through the real pipeline. SAM 3.1
-cut the performer out, Muse Image built the world from Muse Wonder's world prompt, and the tracked stage filmed it
-through the clip's own camera. Both images are regenerated from the artist's own take once it is filmed
-(`scripts/readme_media.py`).*
+*My own takes (an iPhone on a tripod, three run-throughs in one file), performing "Real One", a song made for the
+demo: lyrics by Muse Wonder, music and vocal by ElevenLabs Music. SAM 3.1 cut me out of every frame, Muse Image built
+each section's world from Muse Wonder's prompt, and the tracked stage filmed it through the phone's camera. The voice
+is not mine; I perform to it. Images regenerated from the final cut with `scripts/readme_media.py`.*
 
 [How the director works](docs/director.md) · [Implementation notes](docs/implementation-notes.md) ·
 [Watch page](web/) · [Build status](docs/status.md) · [Changelog](CHANGELOG.md)
 
-Built for the Meta Global AI Developer Hackathon (Cerebral Valley), Oct 27 to Nov 4, 2026. Everything in this repo
+Built for the Meta Global AI Developer Hackathon (Cerebral Valley), Oct 26 to Nov 4, 2026. Everything in this repo
 was written during the event window.
 
 ## Why
@@ -83,11 +88,11 @@ loop, render, watch, revise, re-render, on a stand-in clip). Muse Glimmer and Sp
 
 ## For judges
 
-- **Watch first:** the 3-minute demo video. [PENDING: link once the video is cut from the artist's real take]
-- **Open now:** [real-one-watch.vercel.app](https://real-one-watch.vercel.app), the watch page. Play the cut, toggle
-  the Real Receipt (generated pixels go grey, the filmed artist stays in colour, with the filmed share per frame),
-  and read the director watching its own cut: Muse Wonder's notes with timestamps, verbatim, and the one change it
-  made. Until the artist's take is filmed it runs on a stand-in (a stock clip and a synthetic song), and says so.
+- **Watch first:** the live page, https://real-one-watch.vercel.app, and the 3-minute demo video (link on the submission).
+- **Open now:** [real-one-watch.vercel.app](https://real-one-watch.vercel.app), the watch page. Play the cut from my
+  own takes, toggle the Real Receipt (generated pixels go grey, the filmed artist stays in colour, with the filmed
+  share per frame), and read which Meta model made what, generated from the run's own records. The director's
+  watch-and-revise loop (`python -m realone.director direct`) ran keyed on a stand-in clip on Nov 1, not on this cut.
 - **What was built during the event:** everything in this repo. The repo was created on Oct 28 2026, inside the
   event window, and the git history is the record.
 - **Run it with no key** (macOS, Python 3.12+, ffmpeg): `pip install -r requirements.txt`, then
@@ -107,7 +112,7 @@ under the SAM License (LICENSES/SAM-LICENSE.txt).
 
 ## Engineering
 
-- 247 tests (collected 2026-11-01). Each guard was also broken on purpose to prove its test goes red, then restored byte-identical; the
+- 388 tests (collected 2026-11-04, all passing on the submit commit). The guards were broken on purpose to check their tests go red, then restored byte-identical (one surviving mutation is named); the
   log is in `docs/implementation-notes.md` and the CHANGELOG.
 - Every render reads its own output back: cuts within 1 frame of the plan, audio within 1 frame of the master, and the
   freeze proven by hashing the world state. A failed check exits non-zero.
@@ -144,8 +149,9 @@ downbeat within one beat, or is refused).
 - **Tracked effects:** `render --edits edits.json` draws an effect that follows a part SAM 3.1 tracks ("his hands");
   `python -m realone.director edit --say "fire from my hands on heat"` writes that file from a sentence (Muse Wonder).
 - **Several takes:** `python -m realone.director takes --take A --take B --take C --song SONG --treatment T --out edited.mov`
-  has Muse Wonder pick the strongest take per section and cuts them together on the section downbeats; render the
-  edited clip like a single take.
+  has Muse Wonder pick the strongest take per section. Then render each take's own sections and join the renders
+  frame-exact on the song clock with `scripts/splice_takes.py` (a glued clip is refused at the take change, see the
+  CHANGELOG); `scripts/splice_record.py` writes the joined cut's records for the watch page.
 - **Director:** `python -m realone.director plan|direct|review`; `plan --brain spark-open` is wired to write the
   treatment on Muse Spark Open (Baseten) instead of Muse Wonder, not yet run with a key; see `docs/director.md`.
 
@@ -154,6 +160,7 @@ Every render writes `out/<tag>_<section>_<look>.mp4`, its contact sheet, `_shots
 
 ## Rules this repo follows
 
-- Footage and music are the artist's own.
+- The demo footage is my own phone takes. The demo song was made for the demo: lyrics by Muse Wonder, music and vocal
+  by ElevenLabs Music, cleared for commercial use. Test renders use synthetic material or a stock clip under its licence.
 - No tools built before the event are part of this project.
 - API keys live outside the repo (`MODEL_API_KEY` in the environment).

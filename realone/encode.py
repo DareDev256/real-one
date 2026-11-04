@@ -58,7 +58,7 @@ def verify_output(path, want_s):
 
 def planned_cut_found(d, p, tol=1, ratio=2.5, win=15):
     """Is there a cut at planned frame p in the frame-difference curve d (from detect_cuts)? A busy handheld take
-    (Savv's reel, Nov 2: median frame difference 8.4, real cuts only 2.8 to 4.6x it) never reaches the global 6x
+    (an artist's handheld reel, Nov 2: median frame difference 8.4, real cuts only 2.8 to 4.6x it) never reaches the global 6x
     rule, yet each cut is still the sharpest change around it. So: the largest difference within +-tol of p must
     be the peak of its +-3 frame neighbourhood and at least `ratio` times the median of the second around it.
     Used only to confirm PLANNED cuts; an unplanned cut is still judged by the strict global rule."""

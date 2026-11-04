@@ -1,6 +1,29 @@
 # Changelog
 
 ## Unreleased
+
+## 0.4.0 (2026-11-04): the final cut, the studio, the site
+- **The final cut (final4), from my three takes.** Intro and verse from take 3, both hooks from take 2 (Muse Wonder
+  picked take 1 for the first hook; a blind critic saw my head out of frame there, so it was overridden). Each part
+  rendered on its own and joined frame-exact on the song clock (`splice_takes.py --start-bar 3`): 1,492 frames,
+  49.7 s, audio 0.36 ms from the master, 37.0% of the pixels filmed (`out/final4_all_receipt.json`). The verse
+  carries the edit by sentence: fire tracked to my hands on "heat" (song 32.867 s), checked at full size.
+- **Studio (`web/studio/`): the app's flow, step by step.** The first-run UI a new artist would see: the takes on
+  the song's clock, the sections, the director's pick per section with its reason, the worlds, the words on the
+  voice, edit by sentence, the finished cut beside the Receipt. It replays the real Nov 4 run from its records; a new
+  sentence shows the CLI command instead of a model reply (rendering still runs on a Mac from the command line).
+- **The editor (`web/studio/edit/`).** James: "showing UI for users to edit and how easy it is to use, ways you can
+  customize text". Every control writes something the renderer reads: the lyric colour per section (a treatment patch,
+  so `accent_of` returns the pick), particles (`--particles`), a world prompt (`--section-world`), and a tracked
+  effect on a tapped sung word (an `--edits` file in fx.py's format; "heat" gives at_s 32.817, the word start minus
+  0.05). It shows the exact command and downloads edits.json and treatment.json; the downloaded edits.json parses
+  with `fx.load_edits`. The preview is a real final4 frame with the card drawn in CSS, labelled as a preview; the
+  font is fixed in code (Anton) and shown as fixed.
+- **The watch page, rebuilt as one screen.** James: "it shouldn't be scrollable ... all available from one scroll on
+  mobile and instantly on desktop", and no AI-looking UI. The page is generated from the render's records as before.
+- **README and rights wording.** The demo footage is my own; the demo song's rights are stated (lyrics by Muse
+  Wonder, music and vocal by ElevenLabs Music, cleared for commercial use). The several-takes instructions now
+  describe the per-take render and splice (the glued clip is refused). README images regenerated from final4.
 - **The lyric type: Anton, a dark edge, and the director's colour (Nov 4).** James: "the text should have some effects
   or font style so it seems more creative". Cards, signs and slams are set in Anton (SIL OFL), a tall condensed
   display face, with a dark edge and the soft shadow, and the word being sung takes its section's accent, picked
@@ -135,25 +158,25 @@
   the sign in the world; a medium or close shot brings the line to the front as a bold card in the lower third
   (or the top when his head is low), word by word on the beat, never on the Real Receipt.
   `lyrictext.card_places`, `CardPainter`, `card_looks`; 2 tests, 3 mutations all red.
-- **The world is alive (on by default, `--still-world` to turn it off; Nov 2).** James on the Savv render: "even how
+- **The world is alive (on by default, `--still-world` to turn it off; Nov 2).** James on an artist's test render: "even how
   they had the lamps, the background should technically be active ... moving". Wonder's own world prompt asked for
   "flickering amber security lamps", and a still cannot flicker. `realone/livingworld.py` finds the lights in every
   frame of the world layer (warm bright pixels, or any colour brighter than its surroundings: warm-only found
   nothing in the stand-in's blue world, where the lights are neon reflections in puddles), then they flicker per
   region, swell on the kick (a downbeat, smaller on the backbeat), one stutters out on about a third of the bars,
   and haze drifts through their light. All of it runs on the world clock, so a Hook Freeze freezes the lamps too and
-  the freeze proof stays true. The first pass was measured too weak to see (the halo around Savv's lamps moved 41
+  the freeze proof stays true. The first pass was measured too weak to see (the halo around the test render's lamps moved 41
   to 43 of 255, frame-to-frame change 0.07); now 42 to 51 with lamp cores 142 to 184, about 54 ms a frame. 7 tests;
   8 mutations all red after two tests were tightened (a dying lamp on every bar passed "rare", and the haze test
   passed through the flicker alone).
 - **Lyrics in the world are on by default** when the treatment carries lyric lines (`--no-lyrics` turns them off;
   `--lyrics-in-world` still forces them and refuses without words). A lyric with any word on the violence list
-  stays off unless forced, so Savv's verse cannot reach the screen by default. 4 tests, 6 mutations all red.
+  stays off unless forced, so such a line cannot reach the screen by default. 4 tests, 6 mutations all red.
 - **The slam moved off his face.** The first moments render put "GOOD" across the performer's head (it sat at 30%
   of the frame height). It now takes the lower third, or the top when his head is low, whichever misses the top
   quarter of his box; the in-world sign hides while a slam is on (the slam is the lyric on that beat). The slam
   never reaching the Real Receipt is now a tested function (`moments.slam_looks`).
-- **Hits on the beat (`--hits`, Nov 2).** James on the Savv render: "it should have hit or effects based off the
+- **Hits on the beat (`--hits`, Nov 2).** James on the same test render: "it should have hit or effects based off the
   beat ... it just looks like a rotoscoped person with a background." The finished frame now kicks with the song:
   every downbeat a zoom punch (4.5%, easing back over 6 frames) and an exposure kick (x1.22 for 3 frames; a first
   version mixed toward white and read as haze, so it is a gain now and blacks stay black), the backbeats a smaller
@@ -244,7 +267,7 @@
   architecture, the vision projector and the chat template (read in its source, Nov 1). 2 tests.
 - **README:** the Muse Spark Open row said it writes treatments; it never ran with a key. It now says "wired, not
   yet run".
-- **First real artist footage (Nov 2): Savv4x's own reel.** A handheld ultra-wide phone performance of his song
+- **First real artist footage (Nov 2): an artist's own reel, shared for testing and not in the demo.** A handheld ultra-wide phone performance of his song
   (34.5 s, 143.6 BPM), the master taken from the reel's own audio (sync +0.0 ms, r = 1.00). What it taught:
   - The tracked stage refused it, as it should: at frame 71 the floor leaves the frame and only 38 floor points
     survive (it needs 40). The 2D world path renders it.

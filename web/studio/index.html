@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Real One Studio</title>
+<meta name="description" content="How you make a Real One video: your takes, your song, the director, the worlds, the words, edit by sentence. A replay of a real run.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="studio.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/" aria-label="Real One, back to the video">Real One</a>
+  <p class="honest">How it's made, replaying my real run from Nov 4. Today it renders on a Mac from the command line.</p>
+  <p class="count" id="count" aria-live="polite"></p>
+</header>
+
+<nav class="rail" aria-label="Steps">
+  <ol id="rail"></ol>
+</nav>
+
+<main id="steps">
+
+<section class="step" id="step-1" data-n="1" data-name="Takes" aria-labelledby="h1">
+  <div class="copy">
+    <p class="readout mono" id="ro-1"></p>
+    <h1 class="display" id="h1">Drop your <span class="accent">takes.</span></h1>
+    <p class="body">Film yourself performing to the song, once or a few times, with the master playing out loud. Real One listens to each take and finds where it sits on the song's clock.</p>
+    <div class="facts mono" id="takes-facts"></div>
+  </div>
+  <div class="media">
+    <p class="note mono">ALL THREE TAKES AT THE SAME MOMENT OF THE SONG, 9.5 S</p>
+    <div class="takes" id="takes"></div>
+    <div class="clockchart" id="clockchart" aria-label="Where each take sits on the song's clock"></div>
+  </div>
+</section>
+
+<section class="step" id="step-2" data-n="2" data-name="Song" aria-labelledby="h2">
+  <div class="copy">
+    <p class="readout mono" id="ro-2"></p>
+    <h1 class="display" id="h2">Your song, in <span class="accent">sections.</span></h1>
+    <p class="body">Say where each section starts and Real One snaps it to the bar. Every cut, world and lyric hangs off this clock.</p>
+    <button class="btn" id="song-play" type="button"><span class="tri" aria-hidden="true"></span><span class="lbl">PLAY THE SONG</span></button>
+    <p class="credit mono" id="song-credit"></p>
+  </div>
+  <div class="media">
+    <div class="wave" id="wave">
+      <div class="wave-secs" id="wave-secs"></div>
+      <canvas id="wave-canvas" aria-hidden="true"></canvas>
+      <div class="playhead" id="song-head" aria-hidden="true"></div>
+    </div>
+    <div class="wave-axis mono" id="wave-axis"></div>
+    <p class="note mono bars-note">THE BAR GRID. CUTS LAND ON THE DOWNBEAT; A NEW SECTION GETS A NEW WORLD.</p>
+    <div class="bars" id="wave-bars" aria-hidden="true"></div>
+  </div>
+</section>
+
+<section class="step" id="step-3" data-n="3" data-name="Director" aria-labelledby="h3">
+  <div class="copy">
+    <p class="readout mono" id="ro-3"></p>
+    <h1 class="display" id="h3">The director picks a <span class="accent">take.</span></h1>
+    <p class="body">Muse Wonder watches every take on the song's clock and picks the strongest one for each section, with a line on why. One pick here was overridden after a blind critic.</p>
+  </div>
+  <div class="media">
+    <div class="picks" id="picks"></div>
+  </div>
+</section>
+
+<section class="step" id="step-4" data-n="4" data-name="Worlds" aria-labelledby="h4">
+  <div class="copy">
+    <p class="readout mono" id="ro-4"></p>
+    <h1 class="display" id="h4">A world for every <span class="accent">section.</span></h1>
+    <p class="body">Muse Image builds each world from the director's prompt, lit like your take. Then each world is rebuilt in depth on the floor you stood on, so you stand in it instead of on top of it.</p>
+  </div>
+  <div class="media">
+    <div class="worlds" id="worlds"></div>
+  </div>
+</section>
+
+<section class="step" id="step-5" data-n="5" data-name="Words" aria-labelledby="h5">
+  <div class="copy">
+    <p class="readout mono" id="ro-5"></p>
+    <h1 class="display" id="h5">Every word on your <span class="accent">voice.</span></h1>
+    <p class="body">Demucs pulls the vocal out of the beat, and MMS forced alignment places each word of the lyric sheet on it. Every lyric card lands when the word is sung.</p>
+    <div class="bignum"><span class="num mono" id="words-num"></span><span class="numsub mono" id="words-sub"></span></div>
+  </div>
+  <div class="media">
+    <div class="lyric display" id="lyric"></div>
+    <div class="wordstrip" id="wordstrip" aria-hidden="true"><div class="playhead" id="word-head"></div></div>
+    <div class="wordaxis mono" id="wordaxis"></div>
+    <button class="btn" id="words-play" type="button"><span class="tri" aria-hidden="true"></span><span class="lbl">PLAY THE LINE</span></button>
+  </div>
+</section>
+
+<section class="step" id="step-6" data-n="6" data-name="Edit" aria-labelledby="h6">
+  <div class="copy">
+    <p class="readout mono" id="ro-6"></p>
+    <h1 class="display" id="h6">Edit it by <span class="accent">saying it.</span></h1>
+    <p class="body">Type what to add. Muse Wonder names the part of you to track and the word it lands on. The time comes from your word timings, never from the model. SAM 3.1 then follows that part on every frame.</p>
+    <form class="say" id="say" autocomplete="off">
+      <label class="say-label mono" for="say-input">WHAT SHOULD IT ADD?</label>
+      <div class="say-row">
+        <input id="say-input" name="say" type="text" maxlength="160" spellcheck="false">
+        <button class="btn btn-solid" type="submit" id="say-go"><span class="lbl">ADD IT</span></button>
+      </div>
+    </form>
+    <a class="btn btn-solid" href="edit/" id="open-editor"><span class="lbl">OPEN THE EDITOR</span></a>
+  </div>
+  <div class="media media-edit">
+    <div class="editcard mono" id="editcard" aria-live="polite"></div>
+    <figure class="phone phone-edit">
+      <video id="heat" muted playsinline preload="auto" poster="media/heat_poster.jpg"><source src="media/heat.mp4" type="video/mp4"></video>
+      <figcaption class="mono" id="heat-cap">THE CUT AT "HEAT"</figcaption>
+      <button class="mini mono" id="heat-sound" type="button" aria-pressed="false">SOUND OFF</button>
+    </figure>
+  </div>
+</section>
+
+<section class="step" id="step-7" data-n="7" data-name="Video" aria-labelledby="h7">
+  <div class="copy">
+    <p class="readout mono" id="ro-7"></p>
+    <h1 class="display" id="h7">Your <span class="accent">video.</span></h1>
+    <p class="body">A vertical music video for Reels, TikTok and Shorts, with the master audio in sync. On the watch page, press <kbd>R</kbd> for the Real Receipt: every generated pixel turns grey, you stay in colour, and a counter reads how much of each frame was filmed.</p>
+    <a class="btn btn-solid btn-big" href="/"><span class="lbl">WATCH THE VIDEO</span></a>
+    <details class="run">
+      <summary class="mono">RUN IT YOURSELF</summary>
+      <p>On a Mac with Python and a Meta Model API key, from the repo:</p>
+      <pre class="mono" id="run-cmd"></pre>
+    </details>
+  </div>
+  <div class="media finals">
+    <figure class="phone phone-final">
+      <video id="fin-clean" muted loop playsinline preload="auto" poster="media/poster.jpg" aria-label="The finished cut"><source src="media/final_loop.mp4" type="video/mp4"></video>
+      <figcaption class="mono">FINISHED</figcaption>
+    </figure>
+    <figure class="phone phone-final">
+      <video id="fin-receipt" muted loop playsinline preload="auto" aria-label="The same moment in the Real Receipt look"><source src="media/receipt_loop.mp4" type="video/mp4"></video>
+      <figcaption class="mono"><b>REAL RECEIPT</b> &middot; YOU IN COLOUR</figcaption>
+    </figure>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <button class="btn" id="back" type="button"><span class="lbl">BACK</span></button>
+  <p class="keys mono"><kbd>&larr;</kbd><kbd>&rarr;</kbd> TO MOVE</p>
+  <button class="btn btn-solid" id="next" type="button"><span class="lbl">NEXT</span></button>
+</footer>
+
+<script src="studio.js"></script>
+<script src="studio-look.js"></script>
+</body>
+</html>

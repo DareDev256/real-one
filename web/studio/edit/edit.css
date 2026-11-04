@@ -1,0 +1,125 @@
+/* Real One Editor. Same look as the watch page and the Studio: true black, the video's own lettering (Anton, amber,
+   the dark edge). No cards, no boxes, no label rows. One screen on desktop. */
+:root {
+  --amber: #f2a541;
+  --edge: #0b0806;
+  --ink: #ffffff;
+  --soft: #b9b6b0;
+  --line: rgba(255, 255, 255, 0.2);
+  --display: "Anton", "Arial Narrow", Impact, sans-serif;
+  --body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --e: 0.034em;
+  --ring: var(--e) 0 0 var(--edge), calc(var(--e) * -1) 0 0 var(--edge), 0 var(--e) 0 var(--edge),
+    0 calc(var(--e) * -1) 0 var(--edge), calc(var(--e) * 0.7) calc(var(--e) * 0.7) 0 var(--edge),
+    calc(var(--e) * -0.7) calc(var(--e) * 0.7) 0 var(--edge), calc(var(--e) * 0.7) calc(var(--e) * -0.7) 0 var(--edge),
+    calc(var(--e) * -0.7) calc(var(--e) * -0.7) 0 var(--edge);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: #000; color: var(--ink); font: 400 16px/1.4 var(--body); overflow-x: hidden; }
+button, input { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+
+.top { height: 56px; display: flex; align-items: center; gap: 26px; padding: 0 4vw; }
+.brand { font-family: var(--display); text-transform: uppercase; font-size: 30px; line-height: 1; color: var(--amber);
+  text-decoration: none; text-shadow: var(--ring); flex: none; }
+.back { font-size: 15px; font-weight: 600; text-decoration: none; border-bottom: 2px solid var(--amber); flex: none; }
+.honest { margin: 0; font-size: 13px; color: var(--soft); }
+
+.ed { height: calc(100vh - 56px); height: calc(100svh - 56px); display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4vw; padding: 0 4vw 2.4vh; }
+.controls { min-width: 0; display: flex; flex-direction: column; gap: clamp(8px, 1.6vh, 18px); overflow: hidden; }
+.display { font-family: var(--display); font-weight: 400; text-transform: uppercase; line-height: 0.9; margin: 0;
+  font-size: clamp(44px, 7.2vh, 86px); text-shadow: var(--ring); }
+.accent { color: var(--amber); }
+.soft { color: var(--soft); font-weight: 400; }
+.lab { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+.fine { margin: 6px 0 0; font-size: 13px; color: var(--soft); }
+
+/* segmented choices: big type, an amber underline marks the pick */
+.seg { display: flex; flex-wrap: wrap; gap: 4px 22px; }
+.seg button { font-family: var(--display); text-transform: uppercase; font-size: clamp(22px, 3.1vh, 32px); line-height: 1;
+  min-height: 44px; padding: 4px 0 6px; color: var(--soft); border-bottom: 3px solid transparent; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--amber); }
+
+/* colour: the director's swatches, white, any colour */
+.swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.sw { width: 44px; height: 44px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); position: relative; }
+.sw[aria-pressed="true"] { box-shadow: 0 0 0 3px #000, 0 0 0 6px var(--ink); }
+.sw-any { width: auto; height: 44px; border-radius: 0; box-shadow: none; display: inline-flex; align-items: center; gap: 10px;
+  font-size: 15px; font-weight: 600; }
+.sw-any input { width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; }
+.sw-any input::-webkit-color-swatch-wrapper { padding: 0; }
+.sw-any input::-webkit-color-swatch { border: 0; border-radius: 50%; }
+
+/* the sung line: every word is a tap target */
+.line { display: flex; align-items: center; gap: 8px; }
+.arrow { font-size: 34px; line-height: 1; width: 44px; height: 44px; color: var(--soft); flex: none; }
+.arrow:hover { color: var(--ink); }
+.words { display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; }
+.words button { font-family: var(--display); text-transform: uppercase; font-size: clamp(24px, 3.6vh, 38px); line-height: 1;
+  min-height: 44px; padding: 2px 0 6px; color: var(--ink); text-shadow: var(--ring); border-bottom: 3px solid transparent; }
+.words button:hover { color: var(--amber); }
+.words button[aria-pressed="true"] { color: var(--amber); border-bottom-color: var(--amber); }
+.fxrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin-top: 8px; }
+.trk, .secs { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; }
+.trk input { width: 150px; min-height: 44px; background: none; border: 0; border-bottom: 2px solid var(--line); padding: 0 2px;
+  font-size: 18px; font-weight: 600; }
+.trk input:focus { border-bottom-color: var(--amber); outline: none; }
+.chips { display: inline-flex; gap: 14px; }
+.chips button { font-size: 14px; color: var(--soft); min-height: 44px; }
+.chips button:hover { color: var(--ink); }
+.secs input { width: 120px; accent-color: var(--amber); }
+.secs output { font-weight: 600; min-width: 3.2em; }
+.add { font-family: var(--display); text-transform: uppercase; font-size: 24px; color: var(--amber); min-height: 44px;
+  border-bottom: 3px solid var(--amber); text-shadow: var(--ring); }
+.add[disabled] { opacity: 0.35; cursor: default; }
+.fxlist { list-style: none; margin: 6px 0 0; padding: 0; font-size: 15px; }
+.fxlist li { display: flex; align-items: center; gap: 12px; min-height: 30px; }
+.fxlist b { color: var(--amber); font-weight: 600; }
+.fxlist button { font-size: 13px; color: var(--soft); text-decoration: underline; min-height: 30px; }
+
+#world { width: 100%; min-height: 40px; background: none; border: 0; border-bottom: 2px solid var(--line); padding: 0 2px;
+  font-size: 15px; color: var(--soft); text-overflow: ellipsis; }
+#world:focus { border-bottom-color: var(--amber); outline: none; color: var(--ink); }
+#world.changed { color: var(--ink); border-bottom-color: var(--amber); }
+
+/* the files the renderer reads */
+.out { margin-top: auto; }
+#cmd { margin: 0 0 8px; font: 400 clamp(11px, 1.35vh, 13px)/1.45 var(--mono); color: var(--soft); white-space: pre-wrap;
+  word-break: break-word; border-left: 3px solid var(--amber); padding: 2px 0 2px 14px; max-height: 21vh; overflow: auto; }
+.outbtns { display: flex; flex-wrap: wrap; gap: 6px 26px; }
+.go { font-size: 16px; font-weight: 600; min-height: 44px; border-bottom: 2px solid var(--amber); }
+.go:hover { color: var(--amber); }
+.go.done { color: var(--amber); }
+
+/* the preview: a real frame of the final cut, the lyric card drawn on top in CSS */
+.preview { display: flex; align-items: center; justify-content: center; }
+.phone { position: relative; margin: 0; height: calc(100svh - 56px - 3vh); aspect-ratio: 9 / 16; overflow: hidden; background: #111; }
+.phone img, .phone canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.card { position: absolute; left: 6%; right: 6%; bottom: 17%; text-align: center; font-family: var(--display);
+  text-transform: uppercase; font-size: clamp(28px, 6.2vh, 64px); line-height: 0.95; color: var(--ink); --e: 0.05em;
+  text-shadow: var(--ring), 0 0.06em 0.2em rgba(0,0,0,0.55); }
+.card .now { color: var(--c, var(--ink)); }
+.tag { position: absolute; left: 0; right: 0; top: 0; padding: 10px 14px; font-size: 13px; font-weight: 600;
+  background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0)); }
+.fxtag { position: absolute; left: 14px; right: 14px; bottom: 10px; margin: 0; font-size: 13px; font-weight: 600; color: var(--amber);
+  text-shadow: 0 1px 4px #000; }
+
+@media (max-width: 760px), (max-aspect-ratio: 4/5) {
+  .top { height: auto; flex-wrap: wrap; gap: 6px 16px; padding: 12px 6vw 6px; }
+  .honest { flex-basis: 100%; font-size: 12px; }
+  .ed { height: auto; display: flex; flex-direction: column-reverse; gap: 18px; padding: 0 6vw 28px; }
+  .controls { overflow: visible; gap: 14px; }
+  .preview { justify-content: flex-start; }
+  .phone { height: 50svh; }
+  .card { font-size: 4.2svh; bottom: 14%; }
+  .display { font-size: 44px; }
+  .trk input { width: 130px; }
+  #cmd { max-height: none; }
+}
