@@ -204,3 +204,27 @@ def refine_masks(proxy, n, masks, H_to0, contact, out_path, log=print, capture_s
         f"{int(removed.sum())} px removed (median {int(np.median(removed[removed > 0])) if removed.any() else 0}"
         f" px on those frames)")
     return out_path, removed
+
+
+def refine_masks_cached(proxy, n, masks, mask_path, H_to0, contact, log=print, capture_shadow=False):
+    """refine_masks once per (masks file, floor track): the refined matte is keyed by the masks file's size and mtime
+    and the exact homographies and contact points, so a changed track or matte always refines again. The shadow
+    capture (--contact real) writes a file beside it; asking for one that was never captured refines again.
+    -> (path, removed px per frame)."""
+    import hashlib
+    from pathlib import Path
+    mask_path = Path(str(mask_path))
+    st = mask_path.stat()
+    h = hashlib.blake2b(digest_size=6)
+    h.update(f"{mask_path.name}|{st.st_size}|{st.st_mtime_ns}|{n}".encode())
+    h.update(np.ascontiguousarray(H_to0, np.float64).tobytes())
+    h.update(np.ascontiguousarray(contact, np.float64).tobytes())
+    out = mask_path.with_name(f"{mask_path.stem}_stagefeet_{h.hexdigest()}.npy")
+    rem = out.with_name(out.stem + "_removed.npy")
+    shadow = out.with_name(out.stem + "_shadow.npy")
+    if out.exists() and rem.exists() and (shadow.exists() or not capture_shadow):
+        log(f"stage: clean-plate feet reused ({out.name})")
+        return out, np.load(rem)
+    path, removed = refine_masks(proxy, n, masks, H_to0, contact, out, log=log, capture_shadow=capture_shadow)
+    np.save(rem, removed)
+    return path, removed

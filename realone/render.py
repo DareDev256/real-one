@@ -550,10 +550,9 @@ def render(a):
         arrays.update(st_arr)
         # the real floor out of the matte at his feet (clean plate from the tracked floor): every later stage,
         # the Receipt included, uses the refined matte
-        from realone.stage.cleanplate import refine_masks
-        mpath, removed = refine_masks(norm, n, masks, st_arr["stage_H"], st_arr["stage_contact"],
-                                      Path(str(mpath)).with_name(Path(str(mpath)).stem + "_stagefeet.npy"),
-                                      capture_shadow=getattr(a, "contact", "synthetic") == "real")
+        from realone.stage.cleanplate import refine_masks_cached
+        mpath, removed = refine_masks_cached(norm, n, masks, mpath, st_arr["stage_H"], st_arr["stage_contact"],
+                                             capture_shadow=getattr(a, "contact", "synthetic") == "real")
         masks = np.load(mpath, mmap_mode="r")
         stage_rep["feet_px_removed"] = {"frames": int((removed > 0).sum()), "total": int(removed.sum())}
         if getattr(a, "contact", "synthetic") == "real":

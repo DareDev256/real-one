@@ -54,6 +54,38 @@ def _mask(masks, i):
     return np.unpackbits(masks[i])[: W * H].reshape(H, W).astype(bool)
 
 
+GROUND_CACHE_V = 1  # bump when CAM.ground_track changes what it computes
+
+
+def take_key(proxy, masks, n):
+    """A short key for "this take's proxy with these masks": the proxy file's name, size and mtime, plus a sample of
+    64 mask frames (a re-cut matte changes the key)."""
+    import hashlib
+    st = Path(proxy).stat()
+    h = hashlib.blake2b(digest_size=8)
+    h.update(f"v{GROUND_CACHE_V}|{Path(proxy).name}|{st.st_size}|{st.st_mtime_ns}|{n}|{tuple(masks.shape)}".encode())
+    for i in range(0, n, max(1, n // 64)):
+        h.update(np.ascontiguousarray(masks[i]).tobytes())
+    return h.hexdigest()
+
+
+def ground_track_cached(proxy, n, masks, cache_dir, log=print):
+    """The floor track depends only on the take and its masks, never on the treatment, so it is computed once per
+    take and reused by every later render (Nov 4: the stage prep of a 1,646-frame take took 43 min under memory
+    pressure before a single frame rendered, and a gauntlet re-renders the same take all day)."""
+    p = Path(cache_dir) / f"ground_{take_key(proxy, masks, n)}.npz"
+    if p.exists():
+        z = np.load(p)
+        log(f"stage: floor track reused ({p.name})")
+        return {k: z[k] for k in z.files}
+    track = CAM.ground_track(read_frames(proxy), lambda i: _mask(masks, i))
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.stem + ".tmp.npz")
+    np.savez(tmp, **track)
+    tmp.rename(p)
+    return track
+
+
 def _measure_look(proxy, frames, masks, world_full, R, t, corr, contact):
     """On up to 5 of the world's frames: the take's own background/performer focus ratio (the depth of field the
     world must match), its grain, and the world's key light read off the still.
@@ -102,7 +134,7 @@ def prepare(proxy, n, masks, worlds, plan, shot_of, lens_mm, cache_dir, figure_m
             dolly_dz=None, locked_camera_m=1.3):
     """-> (arrays dict for arrays.npz, report dict). worlds: [(name, still path, particles)]."""
     t0 = time.time()
-    track = CAM.ground_track(read_frames(proxy), lambda i: _mask(masks, i))
+    track = ground_track_cached(proxy, n, masks, cache_dir, log)
     Hs = track["H_to0"]
     if len(Hs) != n:
         raise Refuse(f"stage: tracked {len(Hs)} frames, the take has {n}")

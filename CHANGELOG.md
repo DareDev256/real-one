@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **The stage prep is cached per take (Nov 4).** On James's 1,646-frame take the stage prep ran 43 minutes, under
+  memory pressure from other jobs on the Mac, before the first frame rendered, and it re-ran on every render. The
+  floor track (`ground_track_cached`) and the foot clean-plate (`refine_masks_cached`) depend only on the take and
+  its matte, never on the treatment, so they are computed once and reused. The floor track is keyed by the proxy's
+  name, size and mtime and a sample of the masks; the clean-plate by the masks file and the exact homographies and
+  contact points, so a re-cut matte or a changed track always computes again. 2 tests; 8 mutations red (a shadow
+  flag in the key turned out to do nothing, since a missing shadow file already forces a refine, and was removed).
 - **Lyrics land on the vocal, word by word (`--word-times`, Nov 4).** The render placed lyric words on the beat grid
   (its own report said "not aligned to the vocal"). Song B's verse sings about 110 words over 48 beats, so each
   verse phrase got one beat and the words ran out at bar 20 of 24 while James was still rapping. New
