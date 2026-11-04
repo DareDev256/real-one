@@ -505,9 +505,13 @@ def render(a):
             from realone import moments as MO
             # a line that starts while the world is still dark (the entrance) is a front card: a sign in a dark
             # world would be dark too
+            # and while the dolly runs a sign standing in the stretching world is pushed out of frame ("PROM",
+            # "T", "ART" fragments behind him on the verse, gauntlet rounds 1 and 4): those lines are cards too
+            dolly_on = (MV.dolly_profile(n, moves, [sh["start_frame"] for sh in plan["shots"]]) > 0
+                        if getattr(a, "stage", "off") == "tracked" else np.zeros(n, bool))
             arrays["lyr_card"] = LT.card_places(
                 lyr_arr["lyr_line"], len(lyric_lines),
-                lambda i: "close" if ent_g is not None and ent_g[i] < 1 else framing[int(shot_of[i])],
+                lambda i: "close" if (ent_g is not None and ent_g[i] < 1) or dolly_on[i] else framing[int(shot_of[i])],
                 lambda i: None if np.isnan(boxes[i, 0]) else MO.box_out(boxes[i], crops[i]))
             plan["lyrics_in_world"]["cards"] = sorted({int(g) for g in lyr_arr["lyr_line"][arrays["lyr_card"] > 0]})
             # a front card appearing, changing line or leaving changes a band of the frame on purpose: the cut

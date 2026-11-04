@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **Close shots keep his head in; dolly lines are cards (Nov 4, gauntlet round 4).** The round's one gap: a close
+  punch-in on "Every pixel's real" ran his head off the top of the frame, because the smoothed camera lagged him
+  standing up. Medium and close crops now never start below his head (`plan.head_limit`: the box top, minimum over
+  a window twice the smoothing, less 6% of the crop for a hook's punch), at least half that headroom mid stand-up and
+  all of it once he is up, and the camera still tilts with him rather than snapping. And the critic again saw
+  "PROM", "T", "ART" fragments behind him on the verse: a sign standing in the world is pushed out of frame by the
+  dolly zoom, so lines that start while the dolly runs are front cards. 2 tests; the clamp removed = red.
 - **Several takes, spliced render by render (`scripts/splice_takes.py`, Nov 4).** The multi-take edit could not go
   through the renderer as one clip: at its first take change the floor track refused ("frame 206: 0 ground points
   survived") and SAM's video tracking lost him on 96 frames. Each take now renders the sections the director picked

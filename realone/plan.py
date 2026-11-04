@@ -21,6 +21,7 @@ FRAMINGS = {"wide": 1.0, "medium": 1.4, "close": 1.9}
 PATTERN = ("wide", "medium", "close", "medium")
 TARGET_Y = {"wide": 0.5, "medium": 0.40, "close": 0.17}  # fraction down the artist's bbox the camera centres on
 SMOOTH_S = 0.6
+HEAD_ROOM = 0.06  # medium and close shots keep this share of the crop above his head (a hook's punch takes ~3.4%)
 
 
 def plan_shots(tl, section, cut_bars=2, n_worlds=3, pattern=PATTERN, freezes=(), freeze_style="still"):
@@ -133,6 +134,16 @@ def _smooth(x, sigma):
     return np.convolve(xp, k, mode="valid")
 
 
+def head_limit(tops, ch):
+    """The lowest the crop's top may sit on each frame of a shot: above his head (the box top) by HEAD_ROOM of the
+    crop, over a window wide enough that the smoothed track cannot lag him standing up or jumping. The smoothed
+    centre alone cut his head off at the top on a close shot of "Every pixel's real" (gauntlet round 4, Nov 4)."""
+    from scipy.ndimage import minimum_filter1d
+    w = max(1, int(2 * SMOOTH_S * FPS))
+    lim = minimum_filter1d(np.asarray(tops, float), size=w, mode="nearest") - HEAD_ROOM * ch
+    return np.minimum(_smooth(lim, SMOOTH_S * FPS / 2), lim + HEAD_ROOM * ch * 0.5)
+
+
 def camera_tracks(plan, boxes):
     """Per-frame crop (x0, y0, cw, ch) in source pixels, per shot: centre on the smoothed bbox, clamp to frame."""
     n = plan["n_frames"]
@@ -160,5 +171,7 @@ def camera_tracks(plan, boxes):
             continue
         x0 = np.clip(cx - cw / 2, 0, W - cw)
         y0 = np.clip(ty - ch / 2, 0, H - ch)
+        if sh["framing"] in ("medium", "close"):
+            y0 = np.clip(np.minimum(y0, head_limit(seg[:, 1], ch)), 0, H - ch)
         crops[f0:f1, 0], crops[f0:f1, 1], crops[f0:f1, 2], crops[f0:f1, 3] = x0, y0, cw, ch
     return crops
