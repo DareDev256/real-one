@@ -127,6 +127,8 @@ Flags: `--section hook|verse|hook:2|bars:A-B|#i|all`, `--look clean|collage|rece
 `--cut-bars 1|2|4|8`, `--mask sam|local`, `--freeze [SECTION]`, `--freeze-bars N`, `--freeze-style bullet|still`,
 `--worlds-json FILE`, `--section-world KEY=PROMPT`, `--receipt-reveal SECTION`, `--receipt-counter`,
 `--sam-prompt PHRASE` (repeat for a union), `--workers N`, `--final`, `--sync-near <s>`, `--max-usd`, `--max-minutes`.
+`--sections ROLE@TIME,...` gives the section starts when the beat does not change between them (each snaps to a
+downbeat within one beat, or is refused).
 
 - **First keyed runs:** `scripts/first_keyed_run.sh probe` runs SAM 3.1 and Muse Image on the synthetic take, capped
   at US$0.50. `scripts/first_keyed_run.sh real CLIP SONG` renders one hook, capped at US$1. The script loads the key

@@ -143,8 +143,9 @@ class Renderer:
     plus a freeze flag found in `--help` at runtime."""
 
     def __init__(self, clip, song, *, dry_run, max_minutes=20.0, sync_near=None, runner=None, help_text=None,
-                 stage=False):
+                 stage=False, sections=None):
         self.clip, self.song = str(clip), str(song)
+        self.sections = sections  # the artist's section marks: a render re-analyzes the song, so `#N` must mean the same N
         self.dry_run = dry_run
         self.stage = stage  # keyed renders through the tracked stage (needed for a dolly)
         self.max_minutes = max_minutes
@@ -164,6 +165,8 @@ class Renderer:
              "--section", f"#{section}", "--look", look, "--tag", tag, "--max-minutes", f"{self.max_minutes:g}"]
         if self.sync_near is not None:
             a += ["--sync-near", f"{self.sync_near:g}"]
+        if self.sections:
+            a += ["--sections", str(self.sections)]
         if self.dry_run:
             a += ["--mask", "local", "--local-plate"]
         else:

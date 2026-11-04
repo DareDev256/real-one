@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+- **The artist says where the sections start (`--sections`, Nov 4, on James's first real take).** Song B's hook,
+  verse and hook ride one unchanged ElevenLabs beat, so the analyzer heard two sections: a 7 s intro and one 48 s
+  "hook". The director would have written one world and one camera move for the whole song. `--sections
+  "intro@0:00,hook@6.86,verse@20.44,hook@41.2"` (or a file of the same marks) replaces the heard sections; the beat
+  grid is still measured from the master. Each mark snaps to the nearest downbeat when it is within one beat of it
+  (a sung pickup starts early: the verse's first word is 0.19 s before bar 12). A mark farther out sits between two
+  bars and is refused with the fix in the message, which is what happened to the lyric sheet's rough "0:42" (0.83 s
+  from bar 24, 0.89 s from bar 25); the first word's time from the transcript, 41.2 s, places it. Two marks on one
+  bar, a first mark after the first bar, and marks with no hook are refused. On `render`, `analyze` and the
+  director (`plan`, `direct`), and `direct` passes the marks on to every render it launches, so `#2` means the same
+  section in its subprocess. The timeline records `sections_from` and each mark's snap. 14 tests; 7 mutations all
+  red. The first rule was half a bar, which can never refuse anything on an even grid; its own test caught that.
 - **A moment lands each time its word is sung (Nov 2, critic round 2).** The second blind round scored the cards
   6/10 against the sign-only version's 4/10, and named the remaining gap: "the whole 20 s has one visual tempo, so
   nothing hits"; add 3 or 4 hits. Wonder is told a hook that repeats can carry its moment each time, but the

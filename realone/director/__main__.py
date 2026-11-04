@@ -44,6 +44,7 @@ def build_parser():
         sp.add_argument("--effort", default="high", choices=["minimal", "low", "medium", "high", "xhigh", "max"],
                         help="Muse Wonder reasoning effort for the treatment")
         sp.add_argument("--beats-per-bar", type=int)
+        sp.add_argument("--sections", metavar="MARKS", help="the artist's section starts, ROLE@TIME comma list or a file (e.g. intro@0:00,hook@0:06.9,verse@20.4): replaces the heard sections when the beat does not change between them")
         sp.add_argument("--cap-usd", type=float, default=budget.DEFAULT_CAP_USD,
                         help="refuse a run whose spend ceiling is over this (US$)")
         sp.add_argument("--yes-spend", action="store_true", help="accept a quote over --cap-usd")
@@ -218,7 +219,7 @@ def main(argv=None):
         OUT.mkdir(exist_ok=True)
         stem = OUT / f"{prefix}director_{a.tag}"
         from realone.audio import analyze
-        timeline = analyze(a.song, a.beats_per_bar)
+        timeline = analyze(a.song, a.beats_per_bar, getattr(a, "sections", None))
         write_json(f"{stem}_timeline.json", timeline)
         print(f"director: {timeline['bpm']:.1f} BPM, {len(timeline['sections'])} sections: " +
               ", ".join(f"#{s['index']} {s['role']}{'*' if s.get('is_hook') else ''}" for s in timeline["sections"]))
@@ -270,6 +271,7 @@ def main(argv=None):
         state = State(timeline=timeline, lyrics=lyr.lines_by_index(ly), treatment=res["treatment"],
                       covered=covered, tag=f"director_{a.tag}", dry_run=a.dry_run)
         renderer = Renderer(a.clip, a.song, dry_run=a.dry_run, max_minutes=a.render_minutes, sync_near=a.sync_near,
+                            sections=getattr(a, "sections", None),
                             stage=getattr(a, "stage", False))
         tools = Tools(backend, state, renderer, meter)
         print(f"director: driver = {a.driver} ({'Muse Wonder calls the tools' if a.driver == 'model' else 'our loop'}"

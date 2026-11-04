@@ -273,7 +273,79 @@ def segment(y, downbeats, end_s):
     return out, nov
 
 
-def analyze(song_path, beats_per_bar=None):
+MARK_ROLES = ("intro", "verse", "hook", "bridge", "outro")
+MARK_SNAP_BARS = 0.25  # one beat in 4/4: a mark farther than this from a downbeat is between two bars
+
+
+def parse_marks(spec):
+    """The artist's section starts: 'intro@0:00,hook@0:06.9,verse@20.4' (or a file holding that, commas or
+    newlines, '#' lines are comments) -> [(role, seconds)]. Refuses anything it cannot read exactly."""
+    from pathlib import Path
+    p = Path(str(spec))
+    text = p.read_text() if p.is_file() else str(spec)
+    toks = [t.strip() for line in text.splitlines() if not line.strip().startswith("#") for t in line.split(",")]
+    marks = []
+    for tok in filter(None, toks):
+        role, sep, t = tok.partition("@")
+        role = role.strip().lower()
+        if not sep or role not in MARK_ROLES:
+            raise Refuse(f"section mark '{tok}': write ROLE@TIME, ROLE one of {', '.join(MARK_ROLES)}")
+        try:
+            m, _, s = t.strip().rpartition(":")
+            sec = (int(m) * 60 if m else 0) + float(s)
+        except ValueError:
+            raise Refuse(f"section mark '{tok}': the time must be seconds or m:ss") from None
+        marks.append((role, sec))
+    if not marks:
+        raise Refuse("no section marks given")
+    return marks
+
+
+def sections_from_marks(marks, downbeats, end_s, energy):
+    """The artist says where each section starts (an analyzer cannot hear a verse over an unchanged beat: song B's
+    hook, verse and hook share one loop, Nov 4). Each start snaps to the nearest downbeat when it is within
+    MARK_SNAP_BARS of it (a sung pickup starts up to a beat early). A mark farther than that sits between two bars and
+    is refused, as are two marks on one bar and marks with no hook: never guessed. Same dicts as segment()."""
+    db = np.asarray(downbeats, float)
+    bar = float(np.median(np.diff(db))) if len(db) > 1 else 0.0
+    snapped = []
+    for role, t in marks:
+        k = int(np.argmin(np.abs(db - t)))
+        err = float(db[k] - t)
+        if abs(err) > bar * MARK_SNAP_BARS:
+            raise Refuse(f"section mark {role}@{t:.2f}s sits between bars: {abs(err):.2f}s from the nearest downbeat "
+                         f"(bar {k} at {db[k]:.2f}s). Give the time of the section's first word on the bar, within "
+                         f"{bar * MARK_SNAP_BARS:.2f}s of a downbeat")
+        snapped.append((role, k, t, err))
+    if snapped[0][1] != 0:
+        raise Refuse(f"the first section mark ({snapped[0][0]}@{snapped[0][2]:.2f}s) must be the song's first bar "
+                     f"(0:00); bars before it would belong to no section")
+    for (r0, k0, t0, _), (r1, k1, t1, _) in zip(snapped, snapped[1:]):
+        if k1 <= k0:
+            raise Refuse(f"section marks {r0}@{t0:.2f}s and {r1}@{t1:.2f}s land on bars {k0} and {k1}; each "
+                         f"section needs at least one bar, in order")
+    if not any(r == "hook" for r, *_ in snapped):
+        raise Refuse("the section marks name no hook; mark at least one hook")
+    edges = np.r_[db, end_s]
+    labels, count, seen, out = {}, {}, {}, []
+    for r, *_ in snapped:
+        labels.setdefault(r, chr(65 + len(labels)))
+        count[r] = count.get(r, 0) + 1
+    for i, (r, k, t, err) in enumerate(snapped):
+        e = snapped[i + 1][1] if i + 1 < len(snapped) else len(db)
+        seen[r] = seen.get(r, 0) + 1
+        out.append({"index": i, "label": labels[r], "role": r, "occurrence": seen[r],
+                    "start_bar": int(k), "end_bar": int(e), "start_s": round(float(edges[k]), 4),
+                    "end_s": round(float(edges[e]), 4), "bars": int(e - k),
+                    "energy_db": round(float(20 * np.log10(energy[k:e].mean() + 1e-9)), 2),
+                    "repeats": count[r], "is_hook": r == "hook",
+                    "mark": {"given_s": round(float(t), 3), "snap_s": round(err, 3)}})
+    return out
+
+
+def analyze(song_path, beats_per_bar=None, marks=None):
+    """marks: the artist's section starts (parse_marks), replacing the heard sections; the beat grid is still
+    measured from the master."""
     y = load_audio(song_path, SR)
     dur = len(y) / SR
     if dur < 8:
@@ -284,7 +356,13 @@ def analyze(song_path, beats_per_bar=None):
     bpb, phase, mscores = downbeat_phase(y, beats, beats_per_bar)
     downbeats = beats[phase::bpb]
     end_s = float(min(dur, downbeats[-1] + bpb * 60.0 / bpm))
-    sections, nov = segment(y, downbeats, end_s)
+    if marks:
+        F, energy = bar_features(y, downbeats, end_s)
+        nov = novelty(F)
+        sections = sections_from_marks(parse_marks(marks) if isinstance(marks, str) else marks,
+                                       downbeats, end_s, energy)
+    else:
+        sections, nov = segment(y, downbeats, end_s)
     hook = next(s for s in sections if s["is_hook"])
     return {
         "song": str(song_path), "duration_s": round(dur, 3), "analysis_sr": SR, "hop": HOP,
@@ -293,6 +371,7 @@ def analyze(song_path, beats_per_bar=None):
         "beats": [round(float(t), 4) for t in beats], "downbeats": [round(float(t), 4) for t in downbeats],
         "bar_novelty": [round(float(v), 4) for v in nov],
         "sections": sections, "hook_index": hook["index"],
+        "sections_from": "the artist's marks" if marks else "heard",
     }
 
 

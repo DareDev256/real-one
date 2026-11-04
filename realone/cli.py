@@ -30,6 +30,7 @@ def build_parser():
     r.add_argument("--no-world-wrap", action="store_true", help="send --world prompts without the plate instructions")
     r.add_argument("--cut-bars", type=int, default=2, help="cut every N bars (1, 2, 4 or 8)")
     r.add_argument("--beats-per-bar", type=int, help="override the detected meter")
+    r.add_argument("--sections", metavar="MARKS", help="the artist's section starts, ROLE@TIME comma list or a file (e.g. intro@0:00,hook@0:06.9,verse@20.4): replaces the heard sections when the beat does not change between them")
     r.add_argument("--sync-near", type=float, help="song time (s) the take starts near, when sync is ambiguous")
     r.add_argument("--tag", default="floor", help="output name stem (out/<tag>_<section>_<look>.mp4)")
     r.add_argument("--final", action="store_true", help="x264 slow / crf 17 (default veryfast / crf 20)")
@@ -121,6 +122,7 @@ def build_parser():
     an = sub.add_parser("analyze", help="beat grid, downbeats and sections of the master -> timeline json")
     an.add_argument("--song", required=True)
     an.add_argument("--beats-per-bar", type=int)
+    an.add_argument("--sections", metavar="MARKS", help="the artist's section starts, ROLE@TIME comma list or a file (e.g. intro@0:00,hook@0:06.9,verse@20.4): replaces the heard sections when the beat does not change between them")
     an.add_argument("--tag", default="floor")
     an.add_argument("--local", action="store_true", help="prefix outputs TEST_LOCAL_")
 
@@ -139,7 +141,7 @@ def main(argv=None):
             render(a)
         elif a.cmd == "analyze":
             from realone.audio import analyze
-            tl = analyze(a.song, a.beats_per_bar)
+            tl = analyze(a.song, a.beats_per_bar, getattr(a, "sections", None))
             OUT.mkdir(exist_ok=True)
             path = write_json(OUT / f"{LOCAL_PREFIX if a.local else ''}{a.tag}_timeline.json", tl)
             print(f"{tl['bpm']:.2f} BPM ({tl['grid']}), {tl['beats_per_bar']} beats/bar, first downbeat "

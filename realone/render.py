@@ -224,7 +224,7 @@ def render(a):
 
     # 1. audio
     t = time.time()
-    tl = analyze(song, a.beats_per_bar)
+    tl = analyze(song, a.beats_per_bar, getattr(a, "sections", None))
     tl_path = write_json(OUT / f"{base}_timeline.json", tl)
     whole = a.section == "all"
     secs = list(tl["sections"]) if whole else [pick_section(tl, a.section)]
