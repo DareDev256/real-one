@@ -31,17 +31,26 @@ PLACES = {1: (X0, Y0), 2: (W - X0 - BLOCK_W, Y0), 3: (X0, 1300)}  # top left, to
 #                                                                   the caption band a phone UI puts at the bottom)
 
 
+FACE_SHARE = 0.24   # the top of the artist's box this deep is his head (realone/moments.py uses the same)
+FACE_WEIGHT = 10.0  # covering his head costs this much more than covering his body
+
+
 def place_for(boxes_out):
     """Counter position code (1 top left, 2 top right, 3 lower left) for a shot: the place whose block the artist's
-    output-space bbox (x0, y0, x1, y1 per frame) overlaps least on average; ties go in that order."""
+    output-space bbox (x0, y0, x1, y1 per frame) overlaps least on average, his head weighted FACE_WEIGHT times
+    (in a close shot his body covers every place, and the counter sat over his mouth: gauntlet round 1, Nov 4);
+    ties go in that order."""
+    def area(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1):
+        return max(0.0, min(ax1, bx1) - max(ax0, bx0)) * max(0.0, min(ay1, by1) - max(ay0, by0))
+
     best, best_cost = 1, None
     for code, (x, y) in PLACES.items():
         bx0, by0, bx1, by1 = x - 16, y - 16, x + BLOCK_W + 16, y + BLOCK_H + 16
         ov = []
         for x0, y0, x1, y1 in boxes_out:
-            w = max(0.0, min(x1, bx1) - max(x0, bx0))
-            h = max(0.0, min(y1, by1) - max(y0, by0))
-            ov.append(w * h)
+            fy1 = y0 + FACE_SHARE * (y1 - y0)
+            ov.append(area(x0, y0, x1, y1, bx0, by0, bx1, by1)
+                      + FACE_WEIGHT * area(x0, y0, x1, fy1, bx0, by0, bx1, by1))
         cost = float(np.mean(ov)) if ov else 0.0
         if best_cost is None or cost < best_cost - 1e-6:
             best, best_cost = code, cost

@@ -117,3 +117,11 @@ def test_counter_drawn_at_its_place(scene):
 
 def test_a_free_place_beats_a_slightly_covered_one():
     assert R.place_for([(0.0, 0.0, 600.0, 900.0)] * 4) == 3  # the top right block would clip 30 px of the head
+
+
+def test_in_a_close_shot_the_counter_keeps_off_his_face():
+    """Gauntlet round 1 (Nov 4): in a close shot his body covers every place, and the counter sat over his mouth.
+    He fills the frame from y=120 down: every place overlaps his body by the same area, so the old rule tied and
+    took the first (top left, on his face). His head is the top quarter of his box; the counter goes lower left."""
+    from realone import receipt as R
+    assert R.place_for([(0.0, 120.0, 1080.0, 1920.0)] * 4) == 3

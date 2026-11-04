@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **The Receipt counter keeps off his face (Nov 4, gauntlet round 1 flag).** The counter takes the place its block
+  overlaps the artist least. In a close shot his body covers every place equally, so the rule tied and took the
+  first one, top left, which was over his mouth at 0:45. His head (the top quarter of his box, as for slams) now
+  costs ten times as much, so a close shot puts the counter lower left. 1 test; the weight set to 0 = red.
 - **The entrance: dark until he steps in (`--entrance auto`, the default; Nov 4, gauntlet round 1).** Every one of
   James's takes starts with an empty wall while he walks to his mark, so the video opened on an empty generated
   world for 5.5 s and the intro line played over nobody. The blind critic scored the first three seconds 3/10 ("a
