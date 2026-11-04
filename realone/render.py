@@ -404,7 +404,10 @@ def render(a):
                   f"{info['sky_grey']:.2f} / blue {info['sky_blue']:.2f}); appended to every world prompt:{light_txt}")
             plan["world_light"] = {k: (round(v, 2) if isinstance(v, float) else v) for k, v in info.items()}
     plates_local = local_plates() if any(kind == "plate" for kind, _ in entries) else []
+    from realone import reflect as RF
+    wet_worlds = []  # worlds whose ground is wet: they mirror him (realone/reflect.py)
     for kind, v in entries:
+        wet_worlds.append(kind == "prompt" and RF.is_wet(v))
         if kind == "plate":
             worlds.append(plates_local[v])
         elif kind == "image":
@@ -414,6 +417,7 @@ def render(a):
             billed += b
             worlds.append((v[:28], path, a.particles))
     names = [nm for nm, _, _ in worlds]
+    plan["wet_worlds"] = [nm for nm, wet in zip(names, wet_worlds) if wet]
     for sh in plan["shots"]:
         sh["world_name"] = names[sh["world"]]
         c = crops[sh["start_frame"]]
@@ -618,6 +622,7 @@ def render(a):
            "proxy": str(norm), "native": str(take["native"]) if take["native"] else None,
            "native_size": take["native_size"], "ns": list(take["ns"]), "masks": str(mpath),
            "plates": [str(p) for _, p, _ in worlds], "particles": [k for _, _, k in worlds], "freeze_style": style,
+           "wet_worlds": wet_worlds,
            "arrays": str(seg_dir / "arrays.npz"), "look_names": list(LOOKS), "outputs": looks,
            "s0": s0, "g0": int(round(s0 * FPS)), "seg_dir": str(seg_dir), "final": a.final,
            "cv_threads": max(1, (os.cpu_count() or 4) // workers),

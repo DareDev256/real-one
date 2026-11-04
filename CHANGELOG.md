@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- **Wet floors reflect him; an edit's fire is bigger and glows (Nov 4, gauntlet round 5).** Both blind critics of
+  round 5 named the same gap: he is not grounded in his worlds, and "the puddle at 4.5 s reflects the sky but not
+  him". Both hooks are wet worlds (the plaza's wet granite, the last hook's puddles), so in a world whose prompt makes
+  the ground wet (`reflect.is_wet`: rain, puddle, wet, reflect, mirror, flood) his composited pixels are mirrored at
+  the line his feet stand on, darkened, fading with distance and smeared like water, drawn into the world layer
+  before he is composited: the Real Receipt greys it and counts it as generated, and his pixels are untouched. No
+  reflection when his feet are cut by the frame edge. And the first tracked fire read as faint sparks at phone size:
+  an edit's fire now has 700 embers at 1.7x size and a warm glow on the tracked part. 4 tests; 3 mutations red (the
+  receipt's reflection survived until the test checked it is there, not only that the region is grey).
 - **Tracked effects, and edit by sentence (`render --edits`, `python -m realone.director edit`; Nov 4).** James, at
   work: "imagine it has an app ... once you're done, you're able to edit ... place tracked explosions and visual
   effects down ... like a real video editor, all with Meta's abilities". The spine is an edit file on the song clock,

@@ -17,7 +17,10 @@ import numpy as np
 
 from realone.common import Refuse
 
-EFFECTS = {"fire": "embers burst from the part and rise, the world takes a warm flash"}
+EFFECTS = {"fire": "embers burst from the part and rise, the part glows, the world takes a warm flash"}
+FIRE_EMBERS = 700      # an edit's fire is the subject of its moment: three times a lyric ignite's embers ...
+FIRE_SIZE = 1.7        # ... and bigger (the first render read as faint sparks at phone size, Nov 4)
+GLOW = np.float32([40, 150, 255])  # BGR: the warm light on and around the part
 MIN_FOUND = 0.6        # SAM must find the part on this share of the effect's frames
 SECONDS = (0.3, 4.0)   # an effect's length on screen
 
@@ -87,3 +90,24 @@ def plan(fx_list, s0, n, boxes_for, fps=30):
         designed.update(range(f0, min(n, f0 + 2)))   # the warm flash changes the whole frame on purpose
         report.append({**e, "placed": True, "frames": [f0, f1 - 1], "found": round(found, 3)})
     return {"fx_age": age, "fx_id": fid, "fx_box": fbox}, designed, report
+
+
+def burst(j):
+    """The ember burst for fx j (deterministic: the same edit renders the same fire)."""
+    from realone.moments import EmberBurst
+    return EmberBurst(500 + j, n=FIRE_EMBERS, size_mult=FIRE_SIZE)
+
+
+def part_glow(world, box, age, fps=30):
+    """A warm glow on and around the tracked part (box in output px), strongest as the fire catches and easing out:
+    the light the fire throws, drawn on the world layer behind him (his pixels are composited over it)."""
+    from realone.moments import IGNITE_FRAMES
+    x0, y0, x1, y1 = box
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    r = max(140.0, 0.6 * max(x1 - x0, y1 - y0))
+    h, w = world.shape[:2]
+    yy, xx = np.ogrid[:h, :w]
+    t = age / max(1, IGNITE_FRAMES)
+    k = min(1.0, age / 4) * max(0.0, 1 - t) ** 0.7
+    g = np.exp(-(((xx - cx) / r) ** 2) - (((yy - cy) / r) ** 2)).astype(np.float32)
+    return np.clip(world + g[..., None] * GLOW * (0.9 * k), 0, 255)

@@ -172,7 +172,7 @@ class EmberBurst:
     """One ignite's embers: spawned across the artist's base and up his body, rising fast and slowing, cooling from
     white-yellow to orange to red as they die. A fifth are near the camera (the front layer, drawn over him)."""
 
-    def __init__(self, seed, n=EMBERS):
+    def __init__(self, seed, n=EMBERS, size_mult=1.0):
         r = np.random.default_rng(1000 + seed)
         self.n = n
         self.u = r.normal(0, 0.55, n)               # across, in artist widths from his centre
@@ -181,7 +181,7 @@ class EmberBurst:
         self.vx = r.normal(0, 190, n)
         self.life = r.uniform(0.5, 1.0, n) * IGNITE_FRAMES / 30.0
         self.delay = r.exponential(0.06, n).clip(0, 0.3)  # the burst spreads over a few frames
-        self.size = r.uniform(1.6, 3.4, n) * np.where(r.uniform(0, 1, n) > 0.88, 2.4, 1.0)  # a few big ones
+        self.size = r.uniform(1.6, 3.4, n) * np.where(r.uniform(0, 1, n) > 0.88, 2.4, 1.0) * size_mult  # a few big
         self.ph = r.uniform(0, 6.28, n)
         self.front = r.uniform(0, 1, n) > 0.8
 

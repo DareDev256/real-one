@@ -386,13 +386,19 @@ class Compositor:
         else:
             f = self.match["clean"](fgd, al, wstats)
         f = self._wrap(f, al, wb)
+        if getattr(self, "reflect", False):  # a wet floor mirrors him (realone/reflect.py): drawn into the world
+            from realone import reflect as RF
+            world = RF.apply(world, f * 255, al)
         out = f * al[..., None] * 255 + world * (1 - al[..., None])
         return out + front * (1 - 0.35 * al[..., None]), st
 
     def _receipt(self, fg, alpha, hard, world, front, wb):
-        wg, fgr, wbg = luma3(world), luma3(front), luma3(wb)
-        fgd, cut, st = despill_apply(fg, self.est, wbg)
+        fgd, cut, st = despill_apply(fg, self.est, luma3(wb))
         al = alpha * (1 - cut)
+        if getattr(self, "reflect", False):  # the reflection is generated: grey, like the rest of the world
+            from realone import reflect as RF
+            world = RF.apply(world, fgd * 255, al)
+        wg, fgr, wbg = luma3(world), luma3(front), luma3(wb)
         out = fgd * al[..., None] * 255 + wg * (1 - al[..., None])
         return out + fgr * (1 - al[..., None]), st  # grey particles stay off the filmed artist
 

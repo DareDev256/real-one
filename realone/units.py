@@ -130,6 +130,7 @@ class Ctx:
         self.comp = Compositor(self.args)
         self.masks = np.load(d["masks"], mmap_mode="r")
         self.plates = [load_plate(p) for p in d["plates"]]
+        self.wet = list(d.get("wet_worlds") or [False] * len(self.plates))  # these worlds mirror him
         self.style = d.get("freeze_style", "still")
         self.parts = [make_particles(k, self.style) for k in d["particles"]]
         self.wstats = []
@@ -284,11 +285,15 @@ def render_unit(u):
             if c.fx is not None and c.fx[0][i] >= 0:  # a tracked effect: the fire follows the part SAM tracks
                 from realone import moments as MO
                 j = int(c.fx[1][i])
-                burst = c.fx_bursts.setdefault(j, MO.EmberBurst(500 + j))
-                world, front = MO.ignite(world, front, int(c.fx[0][i]), MO.box_out(c.fx[2][i], crop), burst)
+                from realone import fx as FX
+                burst = c.fx_bursts.setdefault(j, FX.burst(j))
+                bo = MO.box_out(c.fx[2][i], crop)
+                world, front = MO.ignite(world, front, int(c.fx[0][i]), bo, burst)
+                world = FX.part_glow(world, bo, int(c.fx[0][i]))
             per_out = _looks_for(c, i)
             looks = sorted(set(per_out.values()))
             use_nat = nf if c.native_frames[i] else None
+            c.comp.reflect = bool(c.wet[sh_world]) if sh_world < len(c.wet) else False
             frames, inf = c.comp.frame(fr, m, crop, world, front, c.wstats[sh_world], i, g0 + i, looks,
                                        native=use_nat, ns=tuple(d["ns"]), counter=int(c.counter[i]),
                                        ink=INK if c.shot_ink[c.shot_of[i]] else None)

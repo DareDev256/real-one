@@ -55,3 +55,13 @@ def test_fire_on_nothing_is_refused_and_an_effect_elsewhere_is_reported():
     out = [{"track": "his hands", "at_s": 5.0, "effect": "fire", "seconds": 1.4}]   # before this render starts
     arr, _, rep = FX.plan(out, S0, N, lambda tr: _hands(), FPS)
     assert not rep[0]["placed"] and (arr["fx_age"] == -1).all()
+
+
+def test_an_edits_fire_is_bigger_than_a_lyric_ignite_and_glows_on_the_part():
+    from realone import moments as MO
+    b = FX.burst(0)
+    assert b.n == FX.FIRE_EMBERS > MO.EMBERS and b.size.mean() > MO.EmberBurst(0).size.mean() * 1.5
+    world = np.zeros((400, 300, 3), np.float32)
+    lit = FX.part_glow(world, (100, 150, 160, 250), age=6)
+    assert lit[200, 130].sum() > lit[20, 10].sum() + 50     # warm at the hands, dark far away
+    assert FX.part_glow(world, (100, 150, 160, 250), age=200).max() == 0  # gone once the fire has burnt out
