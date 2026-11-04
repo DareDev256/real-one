@@ -101,6 +101,7 @@ loop, render, watch, revise, re-render, on a stand-in clip). Muse Glimmer and Sp
 
 ## Licenses
 
+Models fetched at run time and their licences (MMS forced alignment is CC-BY-NC 4.0): `LICENSES/THIRD-PARTY-MODELS.md`.
 MIT (LICENSE), except `realone/samcodec.py`, a compiled port of Meta's SAM 3.1 mask codec, which is distributed
 under the SAM License (LICENSES/SAM-LICENSE.txt).
 

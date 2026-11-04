@@ -53,9 +53,9 @@ def main(argv=None):
     ap.add_argument("--tag", required=True)
     ap.add_argument("--clean", required=True, help="the spliced finished look (…_clean.mp4)")
     ap.add_argument("--receipt", required=True, help="the same splice in the Real Receipt look (…_receipt.mp4)")
-    a = ap.parse_args(argv)
+    args = ap.parse_args(argv)
     sp = {lk: json.loads(Path(v).with_suffix(".splice.json").read_text()) for lk, v in
-          (("clean", a.clean), ("receipt", a.receipt))}
+          (("clean", args.clean), ("receipt", args.receipt))}
     ranges = {lk: [(p["section"], tuple(p["frames"])) for p in s["parts"]] for lk, s in sp.items()}
     if ranges["clean"] != ranges["receipt"] or sp["clean"]["s0"] != sp["receipt"]["s0"]:
         raise SystemExit("splice_record: REFUSED: the two looks were spliced from different frame ranges")
@@ -79,8 +79,7 @@ def main(argv=None):
             a, b = max(s["start_frame"], fa), min(s["end_frame"], fb)
             if a < b:
                 shots.append({**s, "index": len(shots), "start_frame": a - fa + offset, "end_frame": b - fa + offset,
-                              "frames": b - a, "from": Path(p["clean"][0] and "").name or None,
-                              "part_section": p["section"]})
+                              "frames": b - a, "part_section": p["section"]})
         for f in sh.get("freezes", []):
             if fa <= f["start_frame"] < fb:
                 freezes.append({**f, "start_frame": f["start_frame"] - fa + offset,
@@ -93,12 +92,17 @@ def main(argv=None):
             if fa <= m["frame"] < fb:
                 moments.append({**m, "frame": m["frame"] - fa + offset})
         offset += fb - fa
-    for j, s in enumerate(shots):
-        s.pop("from", None)
     base = parts[-1]["clean"][1]["shots"]
     timeline = parts[-1]["clean"][1]["run"]["timeline"]
     tl = json.loads(Path(timeline).read_text())
+    worlds, seen = [], set()
+    for p in parts:  # every part's worlds (one per section), so the page credits each Muse Image world once
+        for w in p["clean"][1]["shots"].get("world_sources", []):
+            if w.get("section") == p["section"] and w.get("section") not in seen:
+                seen.add(w.get("section"))
+                worlds.append(w)
     shots_rec = {**base, "section": "all", "sections": tl["sections"], "start_s": s0, "end_s": s0 + n / FPS,
+                 "world_sources": worlds,
                  "n_frames": n, "shots": shots, "freezes": freezes, "receipt_reveal": reveals,
                  "moments": {"source": (base.get("moments") or {}).get("source"), "moments": moments},
                  "spliced_from": [{"section": p["section"], "frames": p["frames"],
@@ -129,7 +133,7 @@ def main(argv=None):
     # run: the parts' checks, plus the joined files' own frame count and audio offset
     song = songs.pop()
     looks = {}
-    for look, video in (("clean", a.clean), ("receipt", a.receipt)):
+    for look, video in (("clean", args.clean), ("receipt", args.receipt)):
         got = frames_of(video)
         err = audio_error_ms(video, REPO / song if not Path(song).is_absolute() else song, s0)
         part_ok = all(p[look][1]["run"]["looks"][p[look][0]]["ok"] for p in parts)
@@ -141,15 +145,15 @@ def main(argv=None):
     base_run = parts[-1]["clean"][1]["run"]
     billed = sum(p[k][1]["run"].get("billed_usd", 0) for p in parts for k in ("clean", "receipt"))
     run_rec = {**base_run, "clip": [p["clean"][1]["run"]["clip"] for p in parts], "section": "all",
-               "timeline": timeline, "shots": str(OUT / f"{a.tag}_all_shots.json"), "looks": looks,
+               "timeline": timeline, "shots": str(OUT / f"{args.tag}_all_shots.json"), "looks": looks,
                "billed_usd": round(billed, 4), "spliced": True,
                "receipt": receipt_rec["outputs"]["clean"]["video"]}
     for k in ("units", "render_s", "fps", "workers", "workers_why", "stages", "total_s"):
         run_rec.pop(k, None)
     for kind, rec in (("shots", shots_rec), ("receipt", receipt_rec), ("run", run_rec)):
-        Path(OUT / f"{a.tag}_all_{kind}.json").write_text(json.dumps(rec, indent=1))
+        Path(OUT / f"{args.tag}_all_{kind}.json").write_text(json.dumps(rec, indent=1))
     ok = all(v["ok"] for v in looks.values())
-    print(f"splice_record: {a.tag}_all: {n} frames, clean filmed {outputs['clean']['video']['filmed_pct']}%, "
+    print(f"splice_record: {args.tag}_all: {n} frames, clean filmed {outputs['clean']['video']['filmed_pct']}%, "
           f"audio {looks['clean']['audio_vs_master_error_ms']} / {looks['receipt']['audio_vs_master_error_ms']} ms, "
           f"parts ok {all(v['parts_ok'] for v in looks.values())}, ok {ok}")
     return 0 if ok else 2
