@@ -6,10 +6,12 @@ painted on the backdrop, moving with the camera (the dolly zoom grows them with 
 front of them. They are drawn into the world layer before the artist is composited, so his pixels are never touched
 and the Real Receipt counts every letter as generated.
 
-Timing is the beat grid, not the vocal. Voice Transcribe gives a time per turn, not per word, and a lyric sheet has no
-times at all, so each lyric line gets an equal share of its section's bars (starting on a downbeat) and its words
-land on successive beats (half-beats when a line has more words than beats). That is what reads as "on the beat";
-it is not karaoke alignment, and the docs say so.
+Timing, two ways. With word times (`--word-times`, scripts/align_lyrics.py: Demucs isolates the vocal and MMS forced
+alignment places the artist's own words on it), each word lands when it is sung and each phrase stays up until the
+next one starts. Without them, the beat grid: Voice Transcribe gives a time per turn, not per word, so each lyric
+line gets an equal share of its section's bars (starting on a downbeat) and its words land on successive beats
+(half-beats when a line has more words than beats). That reads as "on the beat" for a hook sung a line a bar, and
+runs ahead of a fast verse (song B's verse ran out at bar 20 of 24, Nov 4); the report says which timing was used.
 
 The world layer's freeze key is taken before the words are blended in (realone/units.py), so the Hook Freeze still
 proves the world itself stood still while the lyrics carry on with the vocal."""
@@ -30,6 +32,8 @@ def words_of(line):
 
 
 PHRASE_WORDS = 4            # a lyric line is shown as phrases of at most this many words, a bar or so each
+LEAD_S = 0.05               # with word times: a word lands this much before it is sung (the eye is slower than the ear)
+HOLD_S = 1.2                # ... and a phrase stays up at most this long after its last word ends
 
 
 def phrases(words, most=PHRASE_WORDS):
@@ -42,23 +46,88 @@ def phrases(words, most=PHRASE_WORDS):
     return [words[j:j + size] for j in range(0, len(words), size)]
 
 
-def schedule(section_lines, timeline, s0, n, fps=30):
+def load_word_times(path, section_lines):
+    """The aligner's JSON (scripts/align_lyrics.py) -> {section index: [[(start_s, end_s) per word] per line]}.
+    Refuses unless every line is the same text the render will draw (a file aligned to another lyric would put
+    words on the wrong syllables), with one time per word of the render's own split."""
+    import json
+    from pathlib import Path
+    try:
+        rec = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as e:
+        raise LyricError(f"--word-times {path}: cannot read it ({e})") from None
+    got = {(ln.get("section"), ln.get("line")): ln for ln in rec.get("lines", [])}
+    out = {}
+    for sec, lines in (section_lines or {}).items():
+        rows = []
+        for j, text in enumerate(lines):
+            ln = got.get((sec, j))
+            if ln is None or ln.get("text") != text:
+                raise LyricError(f"--word-times {path}: section {sec} line {j} is not the treatment's line "
+                                 f"{text!r}; re-run scripts/align_lyrics.py on this treatment")
+            ws = words_of(text)
+            if len(ln.get("words", [])) != len(ws):
+                raise LyricError(f"--word-times {path}: section {sec} line {j} has {len(ln.get('words', []))} "
+                                 f"times for {len(ws)} words")
+            rows.append([(float(x["start"]), float(x["end"])) for x in ln["words"]])
+        if rows:
+            out[sec] = rows
+    return out
+
+
+def _sung_phrases(lines, times):
+    """One section's lines and their word times -> [(phrase words, starts, ends)] in sung order."""
+    items = []
+    for text, tt in zip(lines, times):
+        k = 0
+        for ph in phrases(words_of(text)):
+            seg = tt[k:k + len(ph)]
+            k += len(ph)
+            items.append((ph, [x[0] for x in seg], [x[1] for x in seg]))
+    return items
+
+
+def schedule(section_lines, timeline, s0, n, fps=30, word_times=None):
     """section_lines: {section index: [lyric line, ...]}; timeline: realone.audio.analyze output (beats, downbeats,
-    sections); s0: song time of the render's frame 0; n: frames.
+    sections); s0: song time of the render's frame 0; n: frames; word_times: load_word_times() output, or None for
+    the beat grid.
     -> (lines: [[word, ...], ...], line_id int16[n] (-1 none), shown int16[n] words visible, age int16[n] frames
     since the newest visible word landed)."""
     beats = np.asarray(timeline.get("beats") or [], float)
     downs = np.asarray(timeline.get("downbeats") or [], float)
-    if beats.size < 2:
+    if beats.size < 2 and not word_times:
         raise LyricError("the timeline has no beat grid; lyrics are placed on beats")
     lines, line_id = [], np.full(n, -1, np.int16)
     shown, age = np.zeros(n, np.int16), np.zeros(n, np.int16)
     t = s0 + np.arange(n) / fps
+
+    def paint(ws, lands, l0, l1):
+        inside = (t >= l0) & (t < l1)
+        if not inside.any():
+            return  # this line falls outside the rendered frames
+        gid = len(lines)
+        lines.append(ws)
+        for i in np.nonzero(inside)[0]:
+            k_shown = int(np.searchsorted(lands, t[i] + 1e-6, side="right"))
+            if k_shown == 0:
+                continue
+            line_id[i], shown[i] = gid, k_shown
+            age[i] = int(round((t[i] - lands[k_shown - 1]) * fps))
+
     for sec in timeline.get("sections", []):
+        a, b = float(sec["start_s"]), float(sec["end_s"])
+        if word_times and sec["index"] in word_times:
+            items = _sung_phrases(section_lines.get(sec["index"], []), word_times[sec["index"]])
+            for k, (ws, st, en) in enumerate(items):
+                lands = np.asarray(st, float) - LEAD_S
+                nxt = items[k + 1][1][0] - LEAD_S if k + 1 < len(items) else b
+                l1 = min(nxt, en[-1] + HOLD_S)
+                if l1 > lands[0]:
+                    paint(ws, lands, float(lands[0]), float(l1))
+            continue
         ls = [ph for x in section_lines.get(sec["index"], []) for ph in phrases(words_of(x))]
         if not ls:
             continue
-        a, b = float(sec["start_s"]), float(sec["end_s"])
         if b <= t[0] or a >= t[-1] + 1 / fps:
             continue  # not in this render
         bars = [d for d in downs if a - 1e-3 <= d < b - 1e-3] or [a]
@@ -77,31 +146,26 @@ def schedule(section_lines, timeline, s0, n, fps=30):
                 mids = (bt[:-1] + bt[1:]) / 2 if bt.size > 1 else np.array([])
                 bt = np.sort(np.concatenate([bt, mids, [bt[-1] + (bt[-1] - bt[-2]) / 2 if bt.size > 1 else l0]]))
             lands = bt[: len(ws)] if bt.size >= len(ws) else np.linspace(l0, l1, len(ws), endpoint=False)
-            inside = (t >= l0) & (t < l1)
-            if not inside.any():
-                continue  # this line falls outside the rendered frames
-            gid = len(lines)
-            lines.append(ws)
-            for i in np.nonzero(inside)[0]:
-                k_shown = int(np.searchsorted(lands, t[i] + 1e-6, side="right"))
-                if k_shown == 0:
-                    continue
-                line_id[i], shown[i] = gid, k_shown
-                age[i] = int(round((t[i] - lands[k_shown - 1]) * fps))
+            paint(ws, lands, l0, l1)
     return lines, line_id, shown, age
 
 
-def for_render(section_lines, timeline, s0, n, fps=30):
+BEAT_TIMING = "on the beat grid (a word per beat), not aligned to the vocal"
+
+
+def for_render(section_lines, timeline, s0, n, fps=30, word_times=None, word_source=None):
     """The render's entry: refuses with a reason instead of rendering a video with no words in it.
     -> (lines, {"lyr_line", "lyr_shown", "lyr_age"} arrays, a report for the shot plan)."""
     if not section_lines or not any(section_lines.values()):
         raise LyricError("--lyrics-in-world needs lyric lines: pass --from-treatment (the director's treatment "
                          "carries each section's lyric)")
-    lines, line, shown, age = schedule(section_lines, timeline, s0, n, fps)
+    lines, line, shown, age = schedule(section_lines, timeline, s0, n, fps, word_times)
     if not (line >= 0).any():
         raise LyricError("--lyrics-in-world: none of the treatment's lyric lines falls inside the rendered range")
+    timing = (f"each word when it is sung ({word_source or 'word times'}), {LEAD_S:.2f} s early"
+              if word_times else BEAT_TIMING)
     report = {"lines": len(lines), "words": sum(len(x) for x in lines), "frames_with_words": int((line >= 0).sum()),
-              "timing": "on the beat grid (a word per beat), not aligned to the vocal"}
+              "timing": timing}
     return lines, {"lyr_line": line, "lyr_shown": shown, "lyr_age": age}, report
 
 

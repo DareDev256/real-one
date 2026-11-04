@@ -87,6 +87,9 @@ def build_parser():
     r.add_argument("--from-treatment", metavar="TREATMENT_JSON",
                    help="the director's treatment drives the render: each section's world, camera move, the freeze "
                         "and the receipt-look sections (only those inside the rendered range apply)")
+    r.add_argument("--word-times", metavar="WORDS_JSON",
+                   help="each lyric word's sung time (scripts/align_lyrics.py, aligned to this treatment): lyrics and "
+                        "lyric moments land on the vocal instead of the beat grid")
     r.add_argument("--moves-from", metavar="TREATMENT_JSON",
                    help="take the camera moves from a director treatment (each section's `move`); sections outside "
                         "the rendered range are skipped")

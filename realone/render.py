@@ -154,6 +154,8 @@ def apply_treatment(a):
     for after the analysis (only the ones inside the rendered range apply; see _treatment_specs)."""
     path = getattr(a, "from_treatment", None)
     if not path:
+        if getattr(a, "word_times", None):
+            raise Refuse("--word-times needs --from-treatment: the times belong to the treatment's lyric lines")
         return
     p = Path(path)
     if not p.exists():
@@ -179,6 +181,13 @@ def apply_treatment(a):
     a._treatment_lyrics = {s["index"]: list(s.get("lyric") or []) for s in t["sections"]}
     a._treatment_moments = ({s["index"]: list(s.get("moments") or []) for s in t["sections"]}
                             if any("moments" in s for s in t["sections"]) else None)
+    if getattr(a, "word_times", None):
+        from realone import lyrictext as LT
+        try:
+            a._word_times = LT.load_word_times(a.word_times, a._treatment_lyrics)
+        except LT.LyricError as e:
+            raise Refuse(str(e)) from None
+        a._word_source = json.loads(Path(a.word_times).read_text()).get("source", "word times")
 
 
 def lyrics_mode(a):
@@ -470,7 +479,9 @@ def render(a):
         from realone import lyrictext as LT
         try:
             lyric_lines, lyr_arr, plan["lyrics_in_world"] = LT.for_render(getattr(a, "_treatment_lyrics", None),
-                                                                          tl, s0, n, FPS)
+                                                                          tl, s0, n, FPS,
+                                                                          getattr(a, "_word_times", None),
+                                                                          getattr(a, "_word_source", None))
         except LT.LyricError as e:
             if mode == "forced":
                 raise Refuse(str(e)) from None
@@ -498,7 +509,9 @@ def render(a):
             mo_lines, mo_line, mo_shown = lyric_lines, arrays["lyr_line"], arrays["lyr_shown"]
         else:  # each word's beat is needed even when the words are not drawn
             try:
-                mo_lines, lyr_arr, _ = LT.for_render(getattr(a, "_treatment_lyrics", None), tl, s0, n, FPS)
+                mo_lines, lyr_arr, _ = LT.for_render(getattr(a, "_treatment_lyrics", None), tl, s0, n, FPS,
+                                                     getattr(a, "_word_times", None),
+                                                     getattr(a, "_word_source", None))
             except LT.LyricError as e:
                 raise Refuse(str(e).replace("--lyrics-in-world", "--moments")) from None
             mo_line, mo_shown = lyr_arr["lyr_line"], lyr_arr["lyr_shown"]

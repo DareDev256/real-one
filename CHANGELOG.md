@@ -1,6 +1,23 @@
 # Changelog
 
 ## Unreleased
+- **Lyrics land on the vocal, word by word (`--word-times`, Nov 4).** The render placed lyric words on the beat grid
+  (its own report said "not aligned to the vocal"). Song B's verse sings about 110 words over 48 beats, so each
+  verse phrase got one beat and the words ran out at bar 20 of 24 while James was still rapping. New
+  `scripts/align_lyrics.py` times every word with two Meta open models: Demucs (htdemucs) separates the vocal, and
+  MMS forced alignment (torchaudio MMS_FA) places the treatment's own lyric lines on it. Nothing is transcribed or
+  guessed: the words are the artist's, only their times are found. It runs in its own environment (`.venv-align`,
+  torch is not a render dependency). A star token between sections absorbs ad-libs that are not on the sheet, and
+  a word never starts in a silent stretch of the vocal stem (the first hook line was placed at 3.82 s, in the gap
+  after the intro; it is sung at 6.86 s, now 7.06 s). The aligner refuses when words land outside their own
+  section or out of order. Its token score is reported but not used as a gate: lines scoring 0.001 to 0.03 (the
+  layered hook vocal) still sat within 40 to 100 ms of whisper, so the score says nothing about timing. Checked
+  against whisper large-v3-turbo word times as an independent instrument: 190 of 214 words matched, median 48 ms,
+  p90 142 ms. With `--word-times` each word lands 0.05 s before it is sung, a phrase holds until the next one
+  starts (at most 1.2 s after its last word), and lyric moments fire on the sung word. The file must be aligned to
+  the same treatment lines (refused otherwise), and needs `--from-treatment`. 6 tests; 8 of 9 mutations red. The
+  survivor is the call inside `render()` that hands the times to the lyric painter, which only a full render
+  reaches: the render's own report (`lyrics_in_world.timing`) proves it.
 - **The artist says where the sections start (`--sections`, Nov 4, on James's first real take).** Song B's hook,
   verse and hook ride one unchanged ElevenLabs beat, so the analyzer heard two sections: a 7 s intro and one 48 s
   "hook". The director would have written one world and one camera move for the whole song. `--sections
