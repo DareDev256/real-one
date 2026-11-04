@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## 0.3.0 (2026-11-04): his take, several takes, and the vocal
 - **Several takes, one edit (`python -m realone.director takes`, Nov 4).** James filmed three run-throughs of song B
   in one phone file and asked: "imagine you're able to give multiple takes and it cuts them together to give you an
   edited video." Each take is synced to the master on its own. Muse Wonder watches all of them in one call (each as
