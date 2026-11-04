@@ -36,3 +36,14 @@ def test_a_part_that_does_not_cover_its_section_is_refused():
         sp.plan(SECS, late, 0.037)
     with pytest.raises(SystemExit, match="no part for section 2"):
         sp.plan(SECS, {k: v for k, v in PARTS.items() if k != 2}, 0.037)
+
+
+
+def test_a_later_start_trims_the_intro_on_the_song_clock():
+    """--start-bar 3 (5.18 s): the intro part is cut from its frame 154, and the joined video is shorter by that."""
+    s0 = 0.037 + round((5.1834 - 0.037) * 30) / 30   # the downbeat, snapped onto the parts' grid (as main() does)
+    segs = sp.plan(SECS, PARTS, s0)
+    assert segs[0][0] == "t3_s0.mp4" and segs[0][1] == round((s0 - 0.037) * 30) and segs[0][2] == 206
+    assert sum(b - a for _, a, b in segs) == 1646 - round((s0 - 0.037) * 30)
+    late = sp.plan(SECS, PARTS, 0.037 + round((8.0 - 0.037) * 30) / 30)  # inside the first hook: no intro
+    assert late[0][0] == "t1_s1.mp4" and len(late) == 3

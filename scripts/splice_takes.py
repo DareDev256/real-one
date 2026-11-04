@@ -43,6 +43,8 @@ def plan(sections, parts, s0):
     out = []
     secs = sorted(sections, key=lambda s: s["start_s"])
     for j, sec in enumerate(secs):
+        if sec["end_s"] <= s0 + 1e-6:
+            continue  # wholly before the video starts (--start-bar)
         if sec["index"] not in parts:
             raise SystemExit(f"splice: REFUSED: no part for section {sec['index']}")
         video, v0, vn = parts[sec["index"]]
@@ -63,6 +65,9 @@ def main(argv=None):
     ap.add_argument("--song", required=True)
     ap.add_argument("--part", action="append", required=True, help="SECTION=video.mp4 (repeat)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--start-bar", type=int, default=0,
+                    help="start the video on this downbeat (bar index) instead of the song's first: the artist on "
+                         "screen from the first frame (gauntlet round 2: the dark entrance still read as 3 s of black)")
     a = ap.parse_args(argv)
     tl = json.loads(Path(a.timeline).read_text())
     parts = {}
@@ -71,6 +76,13 @@ def main(argv=None):
         sh = shots_of(v)
         parts[int(k)] = (v, float(sh["start_s"]), frames_of(v))
     s0 = min(float(p[1]) for p in parts.values())
+    if a.start_bar:
+        db = tl["downbeats"]
+        if not 0 < a.start_bar < len(db):
+            raise SystemExit(f"splice: REFUSED: --start-bar {a.start_bar}: the song has bars 0-{len(db) - 1}")
+        # snapped onto the parts' own frame grid (anchored at the first part's start): a start off that grid rounds
+        # the section boundaries differently and a part comes up a frame short
+        s0 = s0 + round((float(db[a.start_bar]) - s0) * FPS) / FPS
     segs = plan(tl["sections"], parts, s0)
     total = sum(fb - fa for _, fa, fb in segs)
     want = round((max(s["end_s"] for s in tl["sections"]) - s0) * FPS)
@@ -84,7 +96,8 @@ def main(argv=None):
         print(f"splice: section {j}: {Path(video).name} frames {fa}-{fb} ({fb - fa})")
     fc.append("".join(labels) + f"concat=n={len(segs)}:v=1:a=0[v]")
     cmd = ["ffmpeg", "-v", "error", "-y", *ins, "-ss", f"{s0:.4f}", "-i", a.song, "-filter_complex", ";".join(fc),
-           "-map", "[v]", "-map", f"{len(segs)}:a", "-c:v", "libx264", "-preset", "slow", "-crf", "17",
+           "-map", "[v]", "-map", f"{len(segs)}:a", "-af", "afade=t=in:d=0.03" if a.start_bar else "anull",
+           "-c:v", "libx264", "-preset", "slow", "-crf", "17",
            "-pix_fmt", "yuv420p", "-r", str(FPS), "-c:a", "aac", "-b:a", "256k", "-t", f"{total / FPS:.4f}",
            "-movflags", "+faststart", a.out]
     subprocess.run(cmd, check=True)
@@ -94,7 +107,7 @@ def main(argv=None):
         raise SystemExit(f"splice: REFUSED: wrote {got} frames, planned {total}")
     rec = {"parts": [{"section": s["index"], "video": v, "frames": [fa, fb]}
                      for s, (v, fa, fb) in zip(sorted(tl["sections"], key=lambda s: s["start_s"]), segs)],
-           "s0": s0, "frames": got, "out": a.out}
+           "s0": s0, "start_bar": a.start_bar, "frames": got, "out": a.out}
     Path(a.out).with_suffix(".splice.json").write_text(json.dumps(rec, indent=1))
     return 0
 
