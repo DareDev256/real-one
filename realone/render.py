@@ -507,14 +507,16 @@ def render(a):
         from realone import moments as MO
         if lyric_lines is not None:
             mo_lines, mo_line, mo_shown = lyric_lines, arrays["lyr_line"], arrays["lyr_shown"]
+            mo_sec = plan["lyrics_in_world"].get("line_section")
         else:  # each word's beat is needed even when the words are not drawn
             try:
-                mo_lines, lyr_arr, _ = LT.for_render(getattr(a, "_treatment_lyrics", None), tl, s0, n, FPS,
-                                                     getattr(a, "_word_times", None),
-                                                     getattr(a, "_word_source", None))
+                mo_lines, lyr_arr, mo_rep0 = LT.for_render(getattr(a, "_treatment_lyrics", None), tl, s0, n, FPS,
+                                                           getattr(a, "_word_times", None),
+                                                           getattr(a, "_word_source", None))
             except LT.LyricError as e:
                 raise Refuse(str(e).replace("--lyrics-in-world", "--moments")) from None
             mo_line, mo_shown = lyr_arr["lyr_line"], lyr_arr["lyr_shown"]
+            mo_sec = mo_rep0.get("line_section")
         if getattr(a, "moment", None):
             chosen, source = [], "--moment (hand-picked)"
             for spec in a.moment:
@@ -525,12 +527,12 @@ def render(a):
         elif getattr(a, "_treatment_moments", None) is not None:
             t1 = s0 + n / FPS  # only the sections this render covers: a verse pick must not land on a hook word
             inside = [sec["index"] for sec in tl["sections"] if sec["start_s"] < t1 and sec["end_s"] > s0]
-            chosen = [m for i in inside for m in a._treatment_moments.get(i, [])]
+            chosen = [dict(m, section=i) for i in inside for m in a._treatment_moments.get(i, [])]
             source = "the director's pick (treatment `moments`)"
         else:
             chosen, source = None, "no director pick: words about fire ignite"
-        picked = MO.pick(mo_lines, chosen)
-        mo_arr, slam_words, mo_designed, mo_rep = MO.profile(picked, mo_line, mo_shown, n, boxes)
+        picked = MO.pick(mo_lines, chosen, line_section=mo_sec)
+        mo_arr, slam_words, mo_designed, mo_rep = MO.profile(picked, mo_line, mo_shown, n, boxes, line_section=mo_sec)
         arrays.update(mo_arr)
         beat_designed = set(beat_designed) | mo_designed  # a slam or an ignite flash changes the frame on purpose
         plan["moments"] = {"source": source, "moments": mo_rep}

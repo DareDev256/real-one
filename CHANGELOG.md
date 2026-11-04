@@ -1,6 +1,14 @@
 # Changelog
 
 ## Unreleased
+- **Lyric moments are per section on a full-song render (Nov 4).** The first full render of James's take landed its
+  four moments at 3.0, 7.3, 11.9 and 14.1 s: one on the intro's "real one", which the director never picked for the
+  intro, and then the per-render cap of 4 was spent, so the verse's "ignite" and every moment of the last hook were
+  dropped. The cap was written for 20 s hook renders. Now a pick carries its section and lands only on that
+  section's phrases (the hook's "real" no longer fires on the intro or on the verse's "every pixel real"), and
+  `MAX_HITS` counts per section. The 1.5 s spacing still holds across the whole render. The lyric schedule records
+  each phrase's section (`line_section` in its report). 4 tests; 5 mutations red (the spacing guard is caught by
+  the older moments tests).
 - **The stage prep is cached per take (Nov 4).** On James's 1,646-frame take the stage prep ran 43 minutes, under
   memory pressure from other jobs on the Mac, before the first frame rendered, and it re-ran on every render. The
   floor track (`ground_track_cached`) and the foot clean-plate (`refine_masks_cached`) depend only on the take and

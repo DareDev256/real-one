@@ -87,10 +87,11 @@ def _sung_phrases(lines, times):
     return items
 
 
-def schedule(section_lines, timeline, s0, n, fps=30, word_times=None):
+def schedule(section_lines, timeline, s0, n, fps=30, word_times=None, sections_out=None):
     """section_lines: {section index: [lyric line, ...]}; timeline: realone.audio.analyze output (beats, downbeats,
     sections); s0: song time of the render's frame 0; n: frames; word_times: load_word_times() output, or None for
-    the beat grid.
+    the beat grid; sections_out: a list that receives each returned phrase's section index (a lyric moment the
+    director picked for one section must land only there).
     -> (lines: [[word, ...], ...], line_id int16[n] (-1 none), shown int16[n] words visible, age int16[n] frames
     since the newest visible word landed)."""
     beats = np.asarray(timeline.get("beats") or [], float)
@@ -107,6 +108,8 @@ def schedule(section_lines, timeline, s0, n, fps=30, word_times=None):
             return  # this line falls outside the rendered frames
         gid = len(lines)
         lines.append(ws)
+        if sections_out is not None:
+            sections_out.append(sec["index"])
         for i in np.nonzero(inside)[0]:
             k_shown = int(np.searchsorted(lands, t[i] + 1e-6, side="right"))
             if k_shown == 0:
@@ -159,13 +162,14 @@ def for_render(section_lines, timeline, s0, n, fps=30, word_times=None, word_sou
     if not section_lines or not any(section_lines.values()):
         raise LyricError("--lyrics-in-world needs lyric lines: pass --from-treatment (the director's treatment "
                          "carries each section's lyric)")
-    lines, line, shown, age = schedule(section_lines, timeline, s0, n, fps, word_times)
+    line_section = []
+    lines, line, shown, age = schedule(section_lines, timeline, s0, n, fps, word_times, line_section)
     if not (line >= 0).any():
         raise LyricError("--lyrics-in-world: none of the treatment's lyric lines falls inside the rendered range")
     timing = (f"each word when it is sung ({word_source or 'word times'}), {LEAD_S:.2f} s early"
               if word_times else BEAT_TIMING)
     report = {"lines": len(lines), "words": sum(len(x) for x in lines), "frames_with_words": int((line >= 0).sum()),
-              "timing": timing}
+              "timing": timing, "line_section": line_section}
     return lines, {"lyr_line": line, "lyr_shown": shown, "lyr_age": age}, report
 
 
