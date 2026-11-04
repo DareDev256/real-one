@@ -172,7 +172,7 @@
   - **Muse Wonder picks them**: `python -m realone.director moments --treatment T` is one call that reads each
     section's lyric and subtext and returns the words and effects (`picks`). Checked locally before anything is
     kept: the word must be sung in that section, at most 2 a section and 8 a song, never a word on a local
-    violence list (Meta employees judge; Savv's drill verse was flagged for exactly this). On the stand-in song,
+    violence list (Meta employees judge; a real artist's verse was flagged for exactly this). On the stand-in song,
     US$0.024: slam "good" on both hooks ("repeated as refusal rather than belief"), ignite "Lights" ("sleepless
     4 a.m. lights catch as the night's endurance turns visible"), slam "good" on the first verse and "dream" on
     the second. Without a director pick, words about fire ignite on their own; `--moment WORD:EFFECT` hand-picks.

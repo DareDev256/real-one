@@ -40,7 +40,7 @@ EMBERS = 230
 WARM = np.float32([-0.22, 0.06, 0.42])  # BGR gain at full flash: blue down, red up
 
 
-# Words that never go on screen by default (Meta employees judge the hackathon; Savv's drill verse, Nov 2): the
+# Words that never go on screen by default (Meta employees judge the hackathon; a real artist's verse, Nov 2): the
 # director may not pick them as moments, and a lyric carrying any of them keeps lyrics-in-the-world off unless
 # --lyrics-in-world forces it.
 VIOLENCE = frozenset("gun guns glock glocks shoot shooting shot shots kill killed killing murder blood bullet bullets "
