@@ -9,7 +9,7 @@ lands the lyrics on the sung words, and turns "put fire coming off my hands when
 follows your hands.
 
 **Watch it:** https://real-one-watch.vercel.app (the music video from my own takes, with the Real Receipt toggle).
-**The 3 minute demo:** https://youtu.be/oucQkvkhHT0 · **Edit it:** https://real-one-watch.vercel.app/studio/edit/
+**The 3 minute demo:** https://youtu.be/W5Rav64kjrU · **Edit it:** https://real-one-watch.vercel.app/studio/edit/
 
 <p>
 <img src="docs/media/hook_freeze.gif" width="270" align="top" alt="From my own take: me in the brutalist plaza Muse Image built for the hook, around the hook's freeze downbeat">
