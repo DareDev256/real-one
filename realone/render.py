@@ -534,7 +534,8 @@ def render(a):
                         if getattr(a, "stage", "off") == "tracked" else np.zeros(n, bool))
             arrays["lyr_card"] = LT.card_places(
                 lyr_arr["lyr_line"], len(lyric_lines),
-                lambda i: "close" if (ent_g is not None and ent_g[i] < 1) or dolly_on[i] else framing[int(shot_of[i])],
+                lambda i: "close" if (getattr(a, "lyric_cards", "auto") == "all" or (ent_g is not None and ent_g[i] < 1)
+                                      or dolly_on[i]) else framing[int(shot_of[i])],
                 lambda i: None if np.isnan(boxes[i, 0]) else MO.box_out(boxes[i], crops[i]))
             plan["lyrics_in_world"]["cards"] = sorted({int(g) for g in lyr_arr["lyr_line"][arrays["lyr_card"] > 0]})
             # a front card appearing, changing line or leaving changes a band of the frame on purpose: the cut

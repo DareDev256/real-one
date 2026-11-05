@@ -112,6 +112,10 @@ def build_parser():
     r.add_argument("--still-world", action="store_true",
                    help="keep the world a still image (by default its lamps flicker, swell on the kick and haze "
                         "drifts through their light: realone/livingworld.py)")
+    r.add_argument("--lyric-cards", choices=("auto", "all"), default="auto",
+                   help="auto (default): a line is a front card on close and medium shots and a sign in the world on "
+                        "wide ones; all: every line is a front card (in-world signs on wide shots can hide behind the "
+                        "artist or the world's buildings; James, Nov 4)")
     r.add_argument("--no-lyrics", action="store_true",
                    help="keep the lyric out of the world (it is on by default when the treatment carries lyrics)")
     r.add_argument("--lyrics-in-world", action="store_true",
