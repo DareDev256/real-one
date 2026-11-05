@@ -166,6 +166,7 @@ class Ctx:
         self.lyric_colors = d.get("lyric_colors")
         # tracked effects (realone/fx.py): frames since it started, which effect, the tracked part's box (source px)
         self.fx = (arr["fx_age"], arr["fx_id"], arr["fx_box"]) if "fx_age" in arr.files else None
+        self.fx_int = arr["fx_int"] if "fx_int" in arr.files else None  # the editor's fire intensity, per effect
         self.fx_bursts = {}
         self.bursts, self.slam_painter = {}, None
         bg = d.get("beat_grid")  # the living world (realone/livingworld.py): None = a still world
@@ -289,7 +290,8 @@ def render_unit(u):
                 from realone import moments as MO
                 j = int(c.fx[1][i])
                 from realone import fx as FX
-                burst = c.fx_bursts.setdefault(j, FX.burst(j))
+                gain = float(c.fx_int[j]) if getattr(c, "fx_int", None) is not None and j < len(c.fx_int) else 1.0
+                burst = c.fx_bursts.setdefault(j, FX.burst(j, gain))
                 bo = MO.box_out(c.fx[2][i], crop)
                 world, front = MO.ignite(world, front, int(c.fx[0][i]), bo, burst)
                 world = FX.part_glow(world, bo, int(c.fx[0][i]))

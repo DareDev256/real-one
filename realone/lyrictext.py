@@ -15,7 +15,11 @@ runs ahead of a fast verse (song B's verse ran out at bar 20 of 24, Nov 4); the 
 
 The world layer's freeze key is taken before the words are blended in (realone/units.py), so the Hook Freeze still
 proves the world itself stood still while the lyrics carry on with the vocal."""
+import re
+
 import numpy as np
+
+from realone.common import Refuse
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 DEFAULT_FONT = ("/Library/Fonts/Anton-Regular.ttf", 0)  # Anton (SIL OFL): a tall condensed display face; James
@@ -309,6 +313,50 @@ def card_places(line_id, n_lines, framing_at, box_at):
         y = MO.slam_y(box_at(int(idx[0])), row_h)
         out[idx] = 1 if y == int(MO.SLAM_Y[0] * _H) else 2
     return out
+
+
+PLACE_CODE = {"world": 0, "bottom": 1, "top": 2}
+
+
+def _norm_words(x):
+    ws = x.split() if isinstance(x, str) else list(x)
+    return [re.sub(r"[^a-z0-9']", "", str(w).lower().replace("\u2019", "'")) for w in ws]
+
+
+def global_lines(section_lines):
+    """The treatment's lyric lines in order, sections by index: [(section, line), ...]. An editor card placement's
+    "line" indexes this list."""
+    return [(int(s), ln) for s in sorted(section_lines, key=int) for ln in section_lines[s]]
+
+
+def apply_card_places(card, line_id, lines, line_section, section_lines, overrides):
+    """The editor's placements (fx.load_cards) applied over card_places' per-frame codes. Each rendered phrase
+    takes the place of the treatment line it came from (a phrase is a run of that line's words, found in order
+    within its section). -> (card int8[n], report [{"phrase", "line", "place"}]). Refuses a line index the treatment
+    does not have."""
+    gl = global_lines(section_lines or {})
+    want = {}
+    for o in overrides:
+        if not 0 <= o["line"] < len(gl):
+            raise Refuse(f"--edits: cards line {o['line']}: the treatment has {len(gl)} lyric lines (0 to {len(gl) - 1})")
+        want[o["line"]] = o["place"]
+    card = np.array(card, dtype=np.int8, copy=True)
+    line_id = np.asarray(line_id)
+    cursor, report = {}, []
+    for i, ws in enumerate(lines):
+        sec = int(line_section[i]) if i < len(line_section) and line_section[i] is not None else None
+        pw = _norm_words(ws)
+        cands = [g for g, (s, _) in enumerate(gl) if s == sec]
+        for j in range(cursor.get(sec, 0), len(cands)):
+            lw = _norm_words(gl[cands[j]][1])
+            if pw and any(lw[k:k + len(pw)] == pw for k in range(len(lw) - len(pw) + 1)):
+                cursor[sec] = j
+                g = cands[j]
+                if g in want:
+                    card[line_id == i] = PLACE_CODE[want[g]]
+                    report.append({"phrase": i, "line": g, "place": want[g]})
+                break
+    return card, report
 
 
 def card_changes(line_id, card):
