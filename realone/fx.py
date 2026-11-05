@@ -23,6 +23,7 @@ FIRE_SIZE = 1.7        # ... and bigger (the first render read as faint sparks a
 GLOW = np.float32([40, 150, 255])  # BGR: the warm light on and around the part
 MIN_FOUND = 0.6        # SAM must find the part on this share of the effect's frames
 SECONDS = (0.3, 4.0)   # an effect's length on screen
+INTENSITY = (0.25, 2.0)  # the editor's fire slider: ember count and size scale by it (1 = the default fire)
 
 
 def load_edits(path):
@@ -32,6 +33,9 @@ def load_edits(path):
     except (OSError, ValueError) as e:
         raise Refuse(f"--edits {path}: cannot read it ({e})") from None
     fx = rec.get("fx")
+    cards = load_cards(path, rec)
+    if (fx is None or fx == []) and cards:
+        return []  # an edit file that only places lyric lines (the editor's text placement)
     if not isinstance(fx, list) or not fx:
         raise Refuse(f"--edits {path}: no 'fx' list")
     out = []
@@ -47,7 +51,42 @@ def load_edits(path):
             raise Refuse(f"--edits {path}: fx {k} effect {eff!r}; one of {', '.join(EFFECTS)}")
         if not SECONDS[0] <= secs <= SECONDS[1]:
             raise Refuse(f"--edits {path}: fx {k} lasts {secs} s; {SECONDS[0]} to {SECONDS[1]} s")
-        out.append({"track": track, "at_s": at, "effect": eff, "seconds": secs})
+        try:
+            gain = float(e.get("intensity", 1.0))
+        except (TypeError, ValueError):
+            raise Refuse(f"--edits {path}: fx {k} intensity must be a number") from None
+        if not INTENSITY[0] <= gain <= INTENSITY[1]:
+            raise Refuse(f"--edits {path}: fx {k} intensity {gain}; {INTENSITY[0]} to {INTENSITY[1]}")
+        out.append({"track": track, "at_s": at, "effect": eff, "seconds": secs, "intensity": gain})
+    return out
+
+
+CARD_PLACES = ("world", "bottom", "top")  # lyrictext.card_places' codes 0, 1, 2
+
+
+def load_cards(path, rec=None):
+    """The edit file's lyric placements -> [{"line": g, "place": "world"|"bottom"|"top"}] ([] when it has none).
+    g indexes the treatment's lyric lines in order (lyrictext.global_lines). The Real One editor writes them: James,
+    Nov 4, "move the text while keeping it still tracked in 3D space" ("world" is a sign on the floor's track).
+    Refuses a malformed entry instead of guessing."""
+    if rec is None:
+        try:
+            rec = json.loads(Path(path).read_text())
+        except (OSError, ValueError) as e:
+            raise Refuse(f"--edits {path}: cannot read it ({e})") from None
+    cards = rec.get("cards", [])
+    if not isinstance(cards, list):
+        raise Refuse(f"--edits {path}: 'cards' must be a list")
+    out = []
+    for k, c in enumerate(cards):
+        if not isinstance(c, dict) or set(c) - {"line", "place", "text"}:
+            raise Refuse(f"--edits {path}: cards {k} takes only line, place (and text, a note)")
+        line, place = c.get("line"), c.get("place")
+        if not isinstance(line, int) or isinstance(line, bool) or line < 0:
+            raise Refuse(f"--edits {path}: cards {k} needs line, the lyric line's index (0 or more)")
+        if place not in CARD_PLACES:
+            raise Refuse(f"--edits {path}: cards {k} place {place!r}; one of {', '.join(CARD_PLACES)}")
+        out.append({"line": line, "place": place})
     return out
 
 
@@ -89,13 +128,16 @@ def plan(fx_list, s0, n, boxes_for, fps=30):
         fbox[f0:f1] = b
         designed.update(range(f0, min(n, f0 + 2)))   # the warm flash changes the whole frame on purpose
         report.append({**e, "placed": True, "frames": [f0, f1 - 1], "found": round(found, 3)})
-    return {"fx_age": age, "fx_id": fid, "fx_box": fbox}, designed, report
+    gains = np.float32([float(e.get("intensity", 1.0)) for e in fx_list])  # per effect, indexed by fx_id
+    return {"fx_age": age, "fx_id": fid, "fx_box": fbox, "fx_int": gains}, designed, report
 
 
-def burst(j):
-    """The ember burst for fx j (deterministic: the same edit renders the same fire)."""
+def burst(j, intensity=1.0):
+    """The ember burst for fx j (deterministic: the same edit renders the same fire). intensity (the editor's fire
+    slider, INTENSITY) scales the ember count and their size."""
     from realone.moments import EmberBurst
-    return EmberBurst(500 + j, n=FIRE_EMBERS, size_mult=FIRE_SIZE)
+    g = min(INTENSITY[1], max(INTENSITY[0], float(intensity)))
+    return EmberBurst(500 + j, n=max(1, int(round(FIRE_EMBERS * g))), size_mult=FIRE_SIZE * g)
 
 
 def part_glow(world, box, age, fps=30):

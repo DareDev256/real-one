@@ -351,7 +351,8 @@ def render(a):
     if getattr(a, "edits", None):  # tracked effects (realone/fx.py): one SAM 3.1 call per part named, cached
         from realone import fx as FX
         fx_list = FX.load_edits(a.edits)
-        if local:
+        a._card_places = FX.load_cards(a.edits)
+        if local and fx_list:
             raise Refuse("--edits: tracked effects need SAM 3.1 (a keyed render); the local test masks have no parts")
         usd += sam_cost(n) * len(sam_uncached(mtag, sorted({e["track"] for e in fx_list})))
     if usd:
@@ -536,6 +537,12 @@ def render(a):
                 lyr_arr["lyr_line"], len(lyric_lines),
                 lambda i: "close" if (ent_g is not None and ent_g[i] < 1) or dolly_on[i] else framing[int(shot_of[i])],
                 lambda i: None if np.isnan(boxes[i, 0]) else MO.box_out(boxes[i], crops[i]))
+            if getattr(a, "_card_places", None):  # the editor's text placement (fx.load_cards): world, bottom or top
+                arrays["lyr_card"], placed = LT.apply_card_places(
+                    arrays["lyr_card"], lyr_arr["lyr_line"], lyric_lines, plan["lyrics_in_world"].get("line_section") or [],
+                    getattr(a, "_treatment_lyrics", None) or {}, a._card_places)
+                plan["lyrics_in_world"]["card_overrides"] = placed
+                print(f"lyric places from the editor: {len(placed)} phrase(s) placed")
             plan["lyrics_in_world"]["cards"] = sorted({int(g) for g in lyr_arr["lyr_line"][arrays["lyr_card"] > 0]})
             # a front card appearing, changing line or leaving changes a band of the frame on purpose: the cut
             # check must not read it as a cut (Nov 4: the intro's card leaving at frame 149 did)

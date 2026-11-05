@@ -18,7 +18,7 @@ def _edits(tmp_path, fx):
 
 def test_the_edit_file_is_checked_before_anything_is_called(tmp_path):
     ok = FX.load_edits(_edits(tmp_path, [{"track": "his hands", "at_s": 26.7, "effect": "fire"}]))
-    assert ok == [{"track": "his hands", "at_s": 26.7, "effect": "fire", "seconds": 1.4}]
+    assert ok == [{"track": "his hands", "at_s": 26.7, "effect": "fire", "seconds": 1.4, "intensity": 1.0}]
     for bad, says in ([{"at_s": 26.7}], "names nothing"), ([{"track": "x", "effect": "fire"}], "needs at_s"), \
             ([{"track": "x", "at_s": 1, "effect": "laser"}], "one of fire"), \
             ([{"track": "x", "at_s": 1, "seconds": 9}], "lasts 9"), ([], "no 'fx'"):
