@@ -3,6 +3,18 @@
 ## Unreleased
 
 ## 0.4.0 (2026-11-04): the final cut, the studio, the site
+- **Every lyric readable (final6).** James: "some of the words just get blocked off completely". On wide shots a
+  line became an in-world sign, and the signs hid behind him or the world's buildings. `render --lyric-cards all`
+  makes every line a front card; both hooks were re-rendered with it (final5). In the verse's one wide shot
+  (29.87 to 32.77 s of the cut) three lines were still signs, so they were drawn as front cards in the renderer's
+  own style (Anton, 0.085 of the frame, 2 words a row, newest word in the verse accent, on the word times) and laid
+  over the cut (final6); two small sign fragments remain near the top left. The cards never draw on the Real
+  Receipt, so the last hook plays without words.
+- **The editor, CapCut style (`web/studio/edit/`).** A phone preview, a timeline of the song's sections and lyric
+  lines, and five tools (Text, Effects, Colour, World, Export). Text placement per line: in the world (a sign on the
+  floor's 3D track), top card or bottom card, written as `"cards"` in the edits file, which the renderer now reads
+  (`fx.load_cards`, `lyrictext.apply_card_places`). Fire intensity, 0.25x to 2x, scales the ember count and size
+  (`"intensity"` in each fx entry). Tests: test_card_place.py, test_fx_intensity.py; each guard mutation-checked.
 - **The final cut (final4), from my three takes.** Intro and verse from take 3, both hooks from take 2 (Muse Wonder
   picked take 1 for the first hook; a blind critic saw my head out of frame there, so it was overridden). Each part
   rendered on its own and joined frame-exact on the song clock (`splice_takes.py --start-bar 3`): 1,492 frames,

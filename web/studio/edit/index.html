@@ -4,83 +4,116 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Real One Editor</title>
-<meta name="description" content="Make it yours: pick each section's lyric colour, the particles, a tracked effect on a sung word and a world, and get the exact files and command the renderer reads.">
+<meta name="description" content="Edit your music video like a reel: tap a lyric to move it into the world or onto a card, colour it, set it on fire on a sung word, and get the exact files the renderer reads.">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="edit.css">
 </head>
 <body>
-<header class="top">
-  <a class="brand" href="/" aria-label="Real One, back to the video">Real One</a>
-  <a class="back" href="../#step-6">How it's made</a>
-  <p class="honest">Rendering runs on a Mac from the command line today; the editor writes the files it reads.</p>
-</header>
+<main class="stage">
+  <aside class="side side-l">
+    <h1 class="big">Edit it like a <span class="accent">reel.</span></h1>
+    <p class="say">Tap a lyric. Move it into the world, put it on a card, colour it, set it on fire on the word.</p>
+    <p class="honest">The editor writes the files the render reads; rendering runs on a Mac today.</p>
+  </aside>
 
-<main class="ed">
-  <section class="controls" aria-label="Editor">
-    <h1 class="display">Make it <span class="accent">yours.</span></h1>
+  <section class="phone" aria-label="Real One editor">
+    <header class="bar">
+      <a class="x" href="../" aria-label="Back to how it's made">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </a>
+      <span class="name">Real One</span>
+      <button class="export" id="export-top" type="button">Export</button>
+    </header>
 
-    <div class="ctl" role="group" aria-labelledby="l-sec">
-      <p class="lab" id="l-sec">Section</p>
-      <div class="seg" id="secs"></div>
-    </div>
-
-    <div class="ctl" role="group" aria-labelledby="l-col">
-      <p class="lab" id="l-col">Lyric colour <span class="soft" id="col-note"></span></p>
-      <div class="swatches" id="swatches"></div>
-      <p class="fine">Font: Anton with the dark edge, fixed in code today.</p>
-    </div>
-
-    <div class="ctl" role="group" aria-labelledby="l-par">
-      <p class="lab" id="l-par">Particles <span class="soft">the whole video</span></p>
-      <div class="seg" id="parts"></div>
-    </div>
-
-    <div class="ctl" role="group" aria-labelledby="l-fx">
-      <p class="lab" id="l-fx">Tracked effect <span class="soft">tap a sung word</span></p>
-      <div class="line">
-        <button class="arrow" id="line-prev" type="button" aria-label="Previous line">&#8249;</button>
-        <div class="words" id="words"></div>
-        <button class="arrow" id="line-next" type="button" aria-label="Next line">&#8250;</button>
-      </div>
-      <div class="fxrow">
-        <label class="trk"><span class="soft">Track</span><input id="track" type="text" value="his hands" maxlength="40" spellcheck="false"></label>
-        <div class="chips" id="chips"></div>
-        <label class="secs"><span class="soft">Fire</span><input id="seconds" type="range" min="0.3" max="4" step="0.1" value="1.4"><output id="sec-out">1.4 s</output></label>
-        <button class="add" id="add" type="button" disabled>Add fire</button>
-      </div>
-      <ul class="fxlist" id="fxlist" aria-live="polite"></ul>
-    </div>
-
-    <div class="ctl" role="group" aria-labelledby="l-world">
-      <p class="lab" id="l-world">World <span class="soft" id="world-note">the director's prompt; change it for a new Muse Image world</span></p>
-      <input id="world" type="text" spellcheck="false" aria-labelledby="l-world">
-    </div>
-
-    <div class="out">
-      <pre id="cmd" aria-label="The command"></pre>
-      <div class="outbtns">
-        <button class="go" id="copy" type="button">Copy the command</button>
-        <button class="go" id="dl-edits" type="button">Download edits.json</button>
-        <button class="go" id="dl-treat" type="button">Download treatment.json</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="preview" aria-label="Preview">
-    <figure class="phone">
-      <img id="frame" alt="A frame of the final cut in the chosen section">
+    <div class="view" id="view">
+      <img id="frame" alt="A frame of the final cut for the chosen section">
+      <video id="clip" muted loop playsinline preload="auto" hidden aria-label="The verse at the word heat, without the fire"></video>
+      <canvas id="fire-canvas" aria-hidden="true"></canvas>
       <canvas id="parts-canvas" aria-hidden="true"></canvas>
-      <div class="card" id="card" aria-hidden="true"></div>
-      <figcaption class="tag">Preview. The render makes the real thing.</figcaption>
-      <p class="fxtag" id="fxtag"></p>
-    </figure>
-  </section>
-</main>
+      <div class="card" id="card" role="button" tabindex="0" aria-label="The lyric card: tap to edit it"></div>
+      <span class="pv">Preview</span>
+      <span class="trk" id="trk" hidden>Tracked to the floor</span>
+      <span class="fxtag" id="fxtag"></span>
+    </div>
 
+    <div class="time"><span id="t-now">0:00</span><span class="hint" id="hint">Tap a lyric to edit it</span><span id="t-sec">Verse</span></div>
+
+    <div class="tl" aria-label="Timeline">
+      <div class="trk-row secs" id="secs"></div>
+      <div class="trk-row lines" id="lines"></div>
+      <div class="trk-row fxrow" id="fxrow"></div>
+      <div class="head" id="playhead" aria-hidden="true"></div>
+    </div>
+
+    <div class="sheet" id="sheet" hidden>
+      <div class="grab" aria-hidden="true"></div>
+      <div class="pane" id="pane-text" hidden>
+        <p class="ptitle">Text</p>
+        <p class="line-big" id="line-big"></p>
+        <p class="lab">Where it sits</p>
+        <div class="tiles" id="places"></div>
+        <p class="note" id="place-note"></p>
+      </div>
+      <div class="pane" id="pane-fx" hidden>
+        <p class="ptitle">Effects</p>
+        <div class="heat" id="heat">
+          <div class="row2"><label class="lab" for="intensity">Fire intensity</label>
+            <input id="intensity" type="range" min="0.25" max="2" step="0.05" value="1"><span class="val" id="int-out">1.0x</span></div>
+        </div>
+        <ul class="fxlist" id="fxlist"></ul>
+        <p class="lab">Fire on a word: tap the word</p>
+        <div class="chips one" id="words"></div>
+        <div class="chips one" id="tracks"></div>
+        <div class="row2"><label class="lab" for="seconds">Length <span id="sec-out">1.4 s</span></label>
+          <input id="seconds" type="range" min="0.3" max="4" step="0.1" value="1.4"></div>
+        <button class="go" id="add" type="button" disabled>Add fire</button>
+
+        <p class="lab">Particles over the whole video</p>
+        <div class="tiles four" id="parts"></div>
+      </div>
+      <div class="pane" id="pane-col" hidden>
+        <p class="ptitle">Colour</p>
+        <p class="lab">The sung word's colour in this section</p>
+        <div class="swatches" id="swatches"></div>
+        <p class="note" id="col-note"></p>
+        <p class="note">Font: Anton with the dark edge, the video's own lettering.</p>
+      </div>
+      <div class="pane" id="pane-world" hidden>
+        <p class="ptitle">World</p>
+        <p class="lab">The director's prompt for this section's world</p>
+        <textarea id="world" rows="5" aria-label="World prompt"></textarea>
+        <p class="note" id="world-note"></p>
+      </div>
+      <div class="pane" id="pane-out" hidden>
+        <p class="ptitle">Export</p>
+        <pre class="cmd" id="cmd"></pre>
+        <div class="outs">
+          <button class="go" id="copy" type="button">Copy the command</button>
+          <button class="ghost" id="dl-edits" type="button">edits.json</button>
+          <button class="ghost" id="dl-treat" type="button">treatment.json</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="tools" aria-label="Tools">
+      <button type="button" data-tool="text"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg>Text</button>
+      <button type="button" data-tool="fx"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 3 4 4.5 4 8.5A4 4 0 0 1 8 11.5C8 9 9.5 8 10 6c.8 1.5 2 2 2 2s0-3 0-5z"/><path d="M10 15.5a2 2 0 0 0 4 0c0-1.5-1-2-2-3.5-1 1.5-2 2-2 3.5z"/></svg>Effects</button>
+      <button type="button" data-tool="col"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 0 0 4-4c0-4.5-4-8-9-8z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>Colour</button>
+      <button type="button" data-tool="world"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20l6-9 4 5 3-4 5 8z"/><circle cx="16" cy="6" r="2"/></svg>World</button>
+      <button type="button" data-tool="out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Export</button>
+    </nav>
+  </section>
+
+  <aside class="side side-r">
+    <p class="lab">It writes</p>
+    <p class="status" id="status">Nothing changed yet: the director's cut.</p>
+    <pre class="mini" id="mini"></pre>
+  </aside>
+</main>
 <script src="edit.js"></script>
 </body>
 </html>
