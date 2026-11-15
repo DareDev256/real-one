@@ -1,4 +1,33 @@
-# Real One
+# Real One: AI music video generator
+
+Real One is an AI music video generator for independent artists that never generates the artist: film your song on your phone, and it makes a vertical music video for Reels, TikTok and Shorts where every pixel of you is filmed and only the world around you is made by Meta's models.
+
+[Watch the video](https://real-one-watch.vercel.app) · [The 3 minute demo](https://youtu.be/W5Rav64kjrU)
+
+<p>
+<img src="docs/media/hook_freeze.gif" width="270" align="top" alt="From my own take: me in the brutalist plaza Muse Image built for the hook, around the hook's freeze downbeat">
+<img src="docs/media/receipt.jpg" width="405" align="top" alt="Real Receipt: the same frame finished, and with every generated pixel grey; the counter reads 21.9% filmed on this frame">
+</p>
+
+*My own takes (an iPhone on a tripod, three run-throughs in one file), performing "Real One", a song made for the
+demo: lyrics by Muse Wonder, music and vocal by ElevenLabs Music. SAM 3.1 cut me out of every frame, Muse Image built
+each section's world from Muse Wonder's prompt, and the tracked stage filmed it through the phone's camera. The voice
+is not mine; I perform to it. Images regenerated from the final cut with `scripts/readme_media.py`.*
+
+## Quick start
+
+macOS, Python 3.12+ and ffmpeg. This is the no-key TEST render (Apple Vision masks, code-drawn worlds, no Meta model):
+
+```bash
+git clone https://github.com/DareDev256/real-one.git
+cd real-one
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m realone render --clip <your take> --song <your master> --section hook --mask local --local-plate --tag try
+```
+
+A keyed run swaps in SAM 3.1, Muse Image and the Muse Wonder director (`MODEL_API_KEY`); see [Run it](#run-it). License: MIT, except `realone/samcodec.py` under the SAM License, see [Licenses](#licenses).
+
+---
 
 **On the hook, the world freezes and only you keep moving.**
 
@@ -11,15 +40,6 @@ follows your hands.
 **Watch it:** https://real-one-watch.vercel.app (the music video from my own takes, with the Real Receipt toggle).
 **The 3 minute demo:** https://youtu.be/W5Rav64kjrU · **Edit it:** https://real-one-watch.vercel.app/studio/edit/
 
-<p>
-<img src="docs/media/hook_freeze.gif" width="270" align="top" alt="From my own take: me in the brutalist plaza Muse Image built for the hook, around the hook's freeze downbeat">
-<img src="docs/media/receipt.jpg" width="405" align="top" alt="Real Receipt: the same frame finished, and with every generated pixel grey; the counter reads 21.9% filmed on this frame">
-</p>
-
-*My own takes (an iPhone on a tripod, three run-throughs in one file), performing "Real One", a song made for the
-demo: lyrics by Muse Wonder, music and vocal by ElevenLabs Music. SAM 3.1 cut me out of every frame, Muse Image built
-each section's world from Muse Wonder's prompt, and the tracked stage filmed it through the phone's camera. The voice
-is not mine; I perform to it. Images regenerated from the final cut with `scripts/readme_media.py`.*
 
 [How the director works](docs/director.md) · [Implementation notes](docs/implementation-notes.md) ·
 [Watch page](web/) · [Build status](docs/status.md) · [Changelog](CHANGELOG.md)
